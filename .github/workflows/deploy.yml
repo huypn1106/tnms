@@ -17,6 +17,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Generate Viewer Files and Update Index
+        run: python scripts/build_docs.py
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:

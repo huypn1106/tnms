@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CSS design tokens — all available custom properties for tnms theming">
+    <title>CSS Design Tokens — tnms</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/style.css">
+    <script src="../assets/main.js"></script>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <a href="/" class="logo"><span>&gt;</span> tnms</a>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
+    </header>
+
+    <main class="doc-container">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a href="/">tnms</a> <span class="sep">/</span> <a href="./">references</a> <span class="sep">/</span>
+            <span>css-tokens</span>
+        </nav>
+
+        <h1>CSS Design Tokens</h1>
+        <p>All CSS custom properties available in <code>style.css</code>. These tokens switch automatically between
+            light and dark themes.</p>
+
+        <hr>
+
+        <h2>Colours</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Token</th>
+                    <th>Light</th>
+                    <th>Dark</th>
+                    <th>Usage</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--bg</code></td>
+                    <td><code>#fafafa</code></td>
+                    <td><code>#0f0f17</code></td>
+                    <td>Page background</td>
+                </tr>
+                <tr>
+                    <td><code>--bg-surface</code></td>
+                    <td><code>#ffffff</code></td>
+                    <td><code>#1a1a28</code></td>
+                    <td>Card / surface background</td>
+                </tr>
+                <tr>
+                    <td><code>--bg-code</code></td>
+                    <td><code>#f0f2f5</code></td>
+                    <td><code>#1e1e2e</code></td>
+                    <td>Code block background</td>
+                </tr>
+                <tr>
+                    <td><code>--text</code></td>
+                    <td><code>#1a1a2e</code></td>
+                    <td><code>#e4e4ef</code></td>
+                    <td>Primary text</td>
+                </tr>
+                <tr>
+                    <td><code>--text-secondary</code></td>
+                    <td><code>#5a5a72</code></td>
+                    <td><code>#a0a0b8</code></td>
+                    <td>Body text</td>
+                </tr>
+                <tr>
+                    <td><code>--text-muted</code></td>
+                    <td><code>#8e8ea0</code></td>
+                    <td><code>#6c6c82</code></td>
+                    <td>Captions, hints</td>
+                </tr>
+                <tr>
+                    <td><code>--accent</code></td>
+                    <td><code>#4361ee</code></td>
+                    <td><code>#7b8cff</code></td>
+                    <td>Accent / brand colour</td>
+                </tr>
+                <tr>
+                    <td><code>--border</code></td>
+                    <td><code>#e2e2ea</code></td>
+                    <td><code>#2a2a3c</code></td>
+                    <td>Borders, dividers</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Typography</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Token</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--font-sans</code></td>
+                    <td>Inter, system-ui fallbacks</td>
+                </tr>
+                <tr>
+                    <td><code>--font-mono</code></td>
+                    <td>JetBrains Mono, monospace fallbacks</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Usage</h2>
+        <pre><code>.my-element {
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+}</code></pre>
+
+        <hr>
+
+        <p><a href="./">&larr; Back to References</a></p>
+    </main>
+
+    <footer class="site-footer">
+        tnms
+    </footer>
+
+</body>
+
+</html>

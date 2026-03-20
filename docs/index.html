@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="tnms — a collection of technical documents and notes">
+  <title>tnms</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/main.js"></script>
+</head>
+
+<body>
+
+  <header class="site-header">
+    <a href="/" class="logo"><span>&gt;</span> tnms</a>
+    <button class="theme-toggle" aria-label="Toggle theme"></button>
+  </header>
+
+  <main class="doc-container">
+    <h1>Documents</h1>
+    <p>Technical notes, references, and documentation.</p>
+
+    <ul class="doc-list">
+      <!--
+        To add a new category:
+        1. Create a folder: docs/<category>/
+        2. Copy templates/category-index.html to docs/<category>/index.html
+        3. Add a link entry below:
+
+        <li>
+          <a href="<category>/">
+            <span class="doc-icon">📁</span>
+            <div>
+              <div class="doc-title">Category Name</div>
+              <div class="doc-desc">Brief description of the category.</div>
+            </div>
+            <span class="doc-count">N docs</span>
+          </a>
+        </li>
+      -->
+
+      <li>
+        <a href="guides/">
+          <span class="doc-icon">📗</span>
+          <div>
+            <div class="doc-title">Guides</div>
+            <div class="doc-desc">How-to guides and step-by-step walkthroughs.</div>
+          </div>
+          <span class="doc-count">1 doc</span>
+        </a>
+      </li>
+
+      <li>
+        <a href="references/">
+          <span class="doc-icon">📕</span>
+          <div>
+            <div class="doc-title">References</div>
+            <div class="doc-desc">API references, specifications, and lookup tables.</div>
+          </div>
+          <span class="doc-count">1 doc</span>
+        </a>
+      </li>
+    </ul>
+  </main>
+
+  <footer class="site-footer">
+    tnms
+  </footer>
+
+</body>
+
+</html>

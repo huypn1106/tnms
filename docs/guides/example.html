@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Example document — a reference page showing all available styles">
+    <title>Example Document — tnms</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../assets/style.css">
+    <script src="../assets/main.js"></script>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <a href="/" class="logo"><span>&gt;</span> tnms</a>
+        <button class="theme-toggle" aria-label="Toggle theme"></button>
+    </header>
+
+    <main class="doc-container">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a href="/">tnms</a> <span class="sep">/</span> <a href="./">guides</a> <span class="sep">/</span>
+            <span>example</span>
+        </nav>
+
+        <h1>Example Document</h1>
+        <p>This page demonstrates all of the styled elements available for your documents. Use it as a reference when
+            writing new pages.</p>
+
+        <hr>
+
+        <h2>Typography</h2>
+        <p>Body text uses <strong>Inter</strong> for readability. Code elements use <strong>JetBrains Mono</strong> for
+            that dev feel. You can use <code>inline code</code> anywhere within paragraphs.</p>
+
+        <h3>Third-level heading</h3>
+        <p>Use headings to structure your document. The stylesheet provides clean spacing and subtle bottom borders on
+            <code>&lt;h2&gt;</code> elements to act as section dividers.
+        </p>
+
+        <h4>Fourth-level heading</h4>
+        <p>Rendered in a slightly muted colour to create visual hierarchy without over-competing with higher headings.
+        </p>
+
+        <h2>Code Blocks</h2>
+        <pre><code>// Example: a simple function
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+
+console.log(greet('world'));</code></pre>
+
+        <h2>Lists</h2>
+        <h3>Unordered</h3>
+        <ul>
+            <li>First item in the list</li>
+            <li>Second item with some <code>inline code</code></li>
+            <li>Third item — lists keep comfortable spacing</li>
+        </ul>
+
+        <h3>Ordered</h3>
+        <ol>
+            <li>Clone the repository</li>
+            <li>Add your HTML file to <code>docs/</code></li>
+            <li>Push to <code>main</code> — it's live</li>
+        </ol>
+
+        <h2>Blockquotes</h2>
+        <blockquote>
+            <p>Blockquotes are useful for call-outs, notes, or quoting external sources. They feature a coloured left
+                border tied to the accent colour.</p>
+        </blockquote>
+
+        <h2>Tables</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Light</th>
+                    <th>Dark</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Background</td>
+                    <td><code>#fafafa</code></td>
+                    <td><code>#0f0f17</code></td>
+                </tr>
+                <tr>
+                    <td>Text</td>
+                    <td><code>#1a1a2e</code></td>
+                    <td><code>#e4e4ef</code></td>
+                </tr>
+                <tr>
+                    <td>Accent</td>
+                    <td><code>#4361ee</code></td>
+                    <td><code>#7b8cff</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Links</h2>
+        <p>Standard links like <a href="/">back to home</a> use the accent colour with a smooth hover transition.</p>
+
+        <h2>Tags</h2>
+        <p><span class="tag">html</span> <span class="tag">css</span> <span class="tag">static</span></p>
+
+        <hr>
+
+        <p><a href="./">&larr; Back to Guides</a></p>
+    </main>
+
+    <footer class="site-footer">
+        tnms
+    </footer>
+
+</body>
+
+</html>

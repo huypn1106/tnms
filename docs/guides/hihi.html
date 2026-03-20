@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Fantastic Universe</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: radial-gradient(circle at top, #0f2027, #203a43, #2c5364);
+            color: white;
+            overflow: hidden;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 50px;
+            font-size: 3em;
+            animation: glow 2s infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 10px #00f, 0 0 20px #0ff;
+            }
+
+            to {
+                text-shadow: 0 0 20px #f0f, 0 0 40px #0ff;
+            }
+        }
+
+        .stars {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            animation: twinkle 2s infinite alternate;
+        }
+
+        @keyframes twinkle {
+            from {
+                opacity: 0.2;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .card {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(45deg, #ff00cc, #3333ff);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px #fff;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="stars" id="stars"></div>
+
+    <h1>✨ Welcome to the Fantastic Universe ✨</h1>
+
+    <div class="card">
+        <p>Click the button to generate some magic!</p>
+        <button onclick="magic()">Create Magic</button>
+        <p id="output"></p>
+    </div>
+
+    <script>
+        // Generate stars
+        const starsContainer = document.getElementById("stars");
+        for (let i = 0; i < 150; i++) {
+            let star = document.createElement("div");
+            star.className = "star";
+            star.style.top = Math.random() * 100 + "%";
+            star.style.left = Math.random() * 100 + "%";
+            star.style.animationDuration = (Math.random() * 2 + 1) + "s";
+            starsContainer.appendChild(star);
+        }
+
+        // Magic button
+        function magic() {
+            const messages = [
+                "🌟 You unlocked a hidden galaxy!",
+                "🚀 A spaceship just launched!",
+                "💫 Stardust is everywhere!",
+                "🪐 A new planet appeared!",
+                "✨ Pure magic activated!"
+            ];
+            const random = messages[Math.floor(Math.random() * messages.length)];
+            document.getElementById("output").innerText = random;
+        }
+    </script>
+
+</body>
+
+</html>

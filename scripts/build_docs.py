@@ -136,14 +136,14 @@ def clean_title(title):
 def get_rel_path(depth):
     return "../" * depth
 
-def build_breadcrumb(parts):
+def build_breadcrumb(parts, extra_level=False):
     html = ""
     for i, part in enumerate(parts):
         html += '<span class="sep">/</span> '
-        if i == len(parts) - 1:
+        if i == len(parts) - 1 and not extra_level:
             html += f'<span>{clean_title(part)}</span> '
         else:
-            up = "../" * (len(parts) - 1 - i)
+            up = "../" * (len(parts) - 1 - i) if not extra_level else "./" if i == len(parts) - 1 else "../" * (len(parts) - 1 - i)
             html += f'<a href="{up}">{clean_title(part)}</a> '
     return html.strip()
 
@@ -219,7 +219,7 @@ def process_directory(current_dir):
                 basename_no_ext=raw_basename,
                 raw_html_file=filename,
                 assets_rel=get_rel_path(depth) + 'assets/',
-                breadcrumb_html=build_breadcrumb(parts)
+                breadcrumb_html=build_breadcrumb(parts, extra_level=True)
             )
             with open(viewer_path, 'w', encoding='utf-8') as f:
                 f.write(viewer_html)

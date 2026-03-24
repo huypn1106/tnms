@@ -232,6 +232,37 @@ def process_directory(current_dir):
             index_html = index_html.replace('</ul>', f'{link_html}        </ul>', 1)
             added_links += 1
 
+        # Update doc-count for this subdir
+        subdir_path = os.path.join(current_dir, subdir)
+        count = 0
+        for r, ds, fs in os.walk(subdir_path):
+            if 'assets' in r.replace('\\', '/').split('/'):
+                continue
+            for f in fs:
+                if f.endswith('.html') and f != 'index.html' and not f.endswith('-viewer.html'):
+                    count += 1
+                    
+        count_text = f"{count} doc" if count == 1 else f"{count} docs"
+        
+        pattern = re.compile(r'(<a[^>]*href=["\']' + re.escape(href) + r'["\'][^>]*>)(.*?)(</a>)', re.DOTALL)
+        def repl(match):
+            start_tag = match.group(1)
+            content = match.group(2)
+            end_tag = match.group(3)
+            if 'class="doc-count"' in content:
+                content = re.sub(r'<span class="doc-count">.*?</span>', f'<span class="doc-count">{count_text}</span>', content)
+            else:
+                content_stripped = content.rstrip()
+                ws = content[len(content_stripped):]
+                content = content_stripped + f'\n                    <span class="doc-count">{count_text}</span>' + ws
+            return start_tag + content + end_tag
+        
+        new_index_html = pattern.sub(repl, index_html)
+        if new_index_html != index_html:
+            index_html = new_index_html
+            # We consider this an update worth saving
+            added_links += 1
+
     # Process HTML files
     files = [f for f in os.listdir(current_dir) if os.path.isfile(os.path.join(current_dir, f))]
     for filename in files:
@@ -297,6 +328,36 @@ def process_root():
             subdir_title = clean_title(subdir)
             link_html = LINK_TEMPLATE.format(href=href, icon="📁", title=subdir_title, desc=f"Category: {subdir_title}")
             index_html = index_html.replace('</ul>', f'{link_html}        </ul>', 1)
+            added_links += 1
+
+        # Update doc-count for this subdir
+        subdir_path = os.path.join(DOCS_DIR, subdir)
+        count = 0
+        for r, ds, fs in os.walk(subdir_path):
+            if 'assets' in r.replace('\\', '/').split('/'):
+                continue
+            for f in fs:
+                if f.endswith('.html') and f != 'index.html' and not f.endswith('-viewer.html'):
+                    count += 1
+                    
+        count_text = f"{count} doc" if count == 1 else f"{count} docs"
+        
+        pattern = re.compile(r'(<a[^>]*href=["\']' + re.escape(href) + r'["\'][^>]*>)(.*?)(</a>)', re.DOTALL)
+        def repl(match):
+            start_tag = match.group(1)
+            content = match.group(2)
+            end_tag = match.group(3)
+            if 'class="doc-count"' in content:
+                content = re.sub(r'<span class="doc-count">.*?</span>', f'<span class="doc-count">{count_text}</span>', content)
+            else:
+                content_stripped = content.rstrip()
+                ws = content[len(content_stripped):]
+                content = content_stripped + f'\n                    <span class="doc-count">{count_text}</span>' + ws
+            return start_tag + content + end_tag
+        
+        new_index_html = pattern.sub(repl, index_html)
+        if new_index_html != index_html:
+            index_html = new_index_html
             added_links += 1
 
     if added_links > 0:

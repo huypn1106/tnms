@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dbt — The Complete Guide for Big Data Platforms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef3fa;
+    --border: #e0e9f5;
+    --text-primary: #1a2233;
+    --text-secondary: #4a5568;
+    --text-muted: #8a96a8;
+
+    --blue: #3a7bd5;
+    --blue-light: #e8f0fd;
+    --blue-mid: #c2d8f8;
+    --orange: #e8842a;
+    --orange-light: #fdf0e5;
+    --orange-mid: #f7d3ae;
+    --purple: #7c5cbf;
+    --purple-light: #f0ebfa;
+    --purple-mid: #d5c6f0;
+    --green: #2ea87e;
+    --green-light: #e5f7f1;
+    --green-mid: #b5e8d6;
+    --red: #e05454;
+    --red-light: #fdeaea;
+
+    --shadow-sm: 0 1px 4px rgba(60,80,120,0.06), 0 2px 8px rgba(60,80,120,0.04);
+    --shadow-md: 0 4px 16px rgba(60,80,120,0.09), 0 1px 4px rgba(60,80,120,0.05);
+    --shadow-lg: 0 8px 32px rgba(60,80,120,0.13), 0 2px 8px rgba(60,80,120,0.06);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --radius-lg: 20px;
+
+    --font-ui: 'Inter', sans-serif;
+    --font-code: 'JetBrains Mono', monospace;
+    --font-display: 'Sora', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 17px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1a2a4a 0%, #1e3a6a 40%, #2a4a8a 100%);
+    color: white;
+    padding: 80px 40px 64px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 60% at 80% 50%, rgba(100,160,255,0.12) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 50% at 10% 80%, rgba(120,80,255,0.08) 0%, transparent 60%);
+  }
+  .hero-inner { max-width: 1100px; margin: 0 auto; position: relative; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 100px; padding: 6px 16px; font-size: 13px; font-weight: 600;
+    letter-spacing: 0.05em; text-transform: uppercase; color: #a8ccff;
+    margin-bottom: 24px;
+  }
+  .hero-badge span { width: 7px; height: 7px; background: #5adb9a; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    letter-spacing: -0.02em;
+  }
+  .hero h1 em { font-style: normal; color: #72b4ff; }
+  .hero-sub {
+    font-size: 18px; color: rgba(255,255,255,0.72); max-width: 640px;
+    line-height: 1.65; margin-bottom: 40px;
+  }
+  .hero-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+  .hero-tag {
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 100px; padding: 6px 16px; font-size: 13.5px; color: rgba(255,255,255,0.8);
+    font-weight: 500;
+  }
+
+  /* ── NAV / TOC ── */
+  .toc-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .toc-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; gap: 0; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .toc-inner::-webkit-scrollbar { display: none; }
+  .toc-link {
+    display: flex; align-items: center; gap: 7px;
+    padding: 16px 18px; font-size: 13.5px; font-weight: 600;
+    color: var(--text-secondary); text-decoration: none; white-space: nowrap;
+    border-bottom: 2.5px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-link:hover { color: var(--blue); border-bottom-color: var(--blue); }
+  .toc-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── MAIN LAYOUT ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 56px 40px; }
+
+  /* ── SECTION TITLES ── */
+  .section { margin-bottom: 72px; }
+  .section-header { margin-bottom: 36px; }
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); max-width: 80px; }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 800; line-height: 1.2;
+    letter-spacing: -0.02em; color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+  .section-desc { font-size: 16px; color: var(--text-secondary); max-width: 640px; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px 32px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+  .card-grid { display: grid; gap: 20px; }
+  .card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card-grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .card-icon {
+    width: 46px; height: 46px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .card p { font-size: 15px; color: var(--text-secondary); line-height: 1.65; }
+
+  /* Color variants */
+  .c-blue .card-icon { background: var(--blue-light); }
+  .c-orange .card-icon { background: var(--orange-light); }
+  .c-purple .card-icon { background: var(--purple-light); }
+  .c-green .card-icon { background: var(--green-light); }
+
+  .c-blue { border-top: 3px solid var(--blue); }
+  .c-orange { border-top: 3px solid var(--orange); }
+  .c-purple { border-top: 3px solid var(--purple); }
+  .c-green { border-top: 3px solid var(--green); }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight {
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .highlight-blue { background: var(--blue-light); border-left: 4px solid var(--blue); }
+  .highlight-orange { background: var(--orange-light); border-left: 4px solid var(--orange); }
+  .highlight-purple { background: var(--purple-light); border-left: 4px solid var(--purple); }
+  .highlight-green { background: var(--green-light); border-left: 4px solid var(--green); }
+  .highlight h4 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .highlight p, .highlight li { font-size: 15px; line-height: 1.7; color: var(--text-secondary); }
+  .highlight ul { padding-left: 20px; }
+  .highlight li { margin-bottom: 4px; }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: #1a2233; border-radius: var(--radius);
+    padding: 24px 28px; overflow-x: auto;
+    margin: 16px 0; position: relative;
+  }
+  .code-block::before {
+    content: attr(data-lang);
+    position: absolute; top: 12px; right: 16px;
+    font-family: var(--font-code); font-size: 11px; font-weight: 600;
+    color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .code-block pre {
+    font-family: var(--font-code); font-size: 14px; line-height: 1.7;
+    color: #c9d8f0; white-space: pre;
+  }
+  .kw { color: #79b8ff; }
+  .fn { color: #b392f0; }
+  .str { color: #9ecbff; }
+  .cm { color: #6a7a9a; font-style: italic; }
+  .var { color: #ffab70; }
+  .op { color: #e8c07a; }
+  .tag { color: #85e89d; }
+  .num { color: #f8c555; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 32px 28px;
+    box-shadow: var(--shadow-sm);
+  }
+  .flow-node {
+    flex: 1; min-width: 130px; text-align: center; padding: 18px 12px;
+    border-radius: var(--radius); position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .flow-node:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .flow-node-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+  .flow-node-label { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .flow-node-sub { font-size: 11.5px; color: var(--text-muted); }
+  .flow-arrow {
+    font-size: 22px; color: var(--blue-mid); padding: 0 4px;
+    flex-shrink: 0; font-weight: 300;
+  }
+
+  .fn-blue { background: var(--blue-light); border: 1.5px solid var(--blue-mid); }
+  .fn-orange { background: var(--orange-light); border: 1.5px solid var(--orange-mid); }
+  .fn-purple { background: var(--purple-light); border: 1.5px solid var(--purple-mid); }
+  .fn-green { background: var(--green-light); border: 1.5px solid var(--green-mid); }
+
+  /* ── TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .data-table th {
+    background: var(--surface-2); padding: 14px 18px; text-align: left;
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+  .data-table td {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    color: var(--text-secondary); line-height: 1.5;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--surface-2); }
+  .table-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 100px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-orange { background: var(--orange-light); color: var(--orange); }
+  .badge-purple { background: var(--purple-light); color: var(--purple); }
+  .badge-green { background: var(--green-light); color: var(--green); }
+
+  /* ── STEP LIST ── */
+  .step-list { list-style: none; }
+  .step-item {
+    display: flex; gap: 20px; padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-num {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; font-family: var(--font-display);
+  }
+  .step-body h4 { font-size: 15.5px; font-weight: 700; margin-bottom: 5px; }
+  .step-body p { font-size: 15px; color: var(--text-secondary); line-height: 1.65; }
+
+  /* ── TWO-COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── STAT BOXES ── */
+  .stat-row { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 32px; }
+  .stat-box {
+    flex: 1; min-width: 160px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px 24px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s, transform 0.2s;
+  }
+  .stat-box:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .stat-num { font-family: var(--font-display); font-size: 2rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+  .stat-label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+
+  /* ── ARCH DIAGRAM ── */
+  .arch-diagram {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 36px 32px;
+    box-shadow: var(--shadow-sm);
+  }
+  .arch-layer {
+    border-radius: var(--radius); padding: 18px 24px;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 16px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .arch-layer:hover { transform: translateX(4px); box-shadow: var(--shadow-sm); }
+  .arch-layer:last-child { margin-bottom: 0; }
+  .arch-layer-icon { font-size: 24px; flex-shrink: 0; }
+  .arch-layer-label { font-weight: 700; font-size: 15px; }
+  .arch-layer-desc { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+  .arch-arrow { text-align: center; color: var(--text-muted); font-size: 18px; margin: 4px 0; }
+
+  /* ── INLINE CODE ── */
+  code {
+    font-family: var(--font-code); font-size: 13.5px;
+    background: var(--blue-light); color: var(--blue);
+    padding: 2px 8px; border-radius: 5px;
+  }
+
+  /* ── CHECKLIST ── */
+  .checklist { list-style: none; }
+  .checklist li {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 9px 0; font-size: 15px; color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .check-icon { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .hero { padding: 48px 20px 40px; }
+    .main { padding: 36px 20px; }
+    .toc-bar { padding: 0 16px; }
+    .flow { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+
+  /* ── SCROLL FADE ── */
+  .fade-in {
+    opacity: 0; transform: translateY(18px);
+    animation: fadeUp 0.5s ease forwards;
+  }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+  .delay-4 { animation-delay: 0.4s; }
+
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 0 0 56px; }
+</style>
+</head>
+<body>
+
+<!-- ══════ HERO ══════ -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge"><span></span> Big Data Platform Design Guide</div>
+    <h1>Everything about<br><em>dbt</em> — Data Build Tool</h1>
+    <p class="hero-sub">
+      A comprehensive guide covering what dbt is, how it works, why it matters in modern data stacks, its internal architecture, and how to deploy it at petabyte scale in production.
+    </p>
+    <div class="hero-tags">
+      <span class="hero-tag">🔧 dbt Core & Cloud</span>
+      <span class="hero-tag">📦 Models & Materializations</span>
+      <span class="hero-tag">🧪 Testing & Docs</span>
+      <span class="hero-tag">🏗️ Architecture</span>
+      <span class="hero-tag">🚀 Production at PB Scale</span>
+    </div>
+  </div>
+</header>
+
+<!-- ══════ TOC ══════ -->
+<nav class="toc-bar">
+  <div class="toc-inner">
+    <a class="toc-link" href="#what"><span class="toc-dot" style="background:var(--blue)"></span>What is dbt</a>
+    <a class="toc-link" href="#how"><span class="toc-dot" style="background:var(--orange)"></span>How it Works</a>
+    <a class="toc-link" href="#why"><span class="toc-dot" style="background:var(--green)"></span>Why dbt</a>
+    <a class="toc-link" href="#arch"><span class="toc-dot" style="background:var(--purple)"></span>Architecture</a>
+    <a class="toc-link" href="#build"><span class="toc-dot" style="background:var(--blue)"></span>How dbt Builds</a>
+    <a class="toc-link" href="#prod"><span class="toc-dot" style="background:var(--orange)"></span>Production Setup</a>
+    <a class="toc-link" href="#pb"><span class="toc-dot" style="background:var(--green)"></span>PB Scale</a>
+  </div>
+</nav>
+
+<!-- ══════ MAIN ══════ -->
+<main class="main">
+
+  <!-- ══ SECTION 1: WHAT IS DBT ══ -->
+  <section class="section fade-in" id="what">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--blue)">01 — Introduction</div>
+      <h2 class="section-title">What is dbt?</h2>
+      <p class="section-desc">dbt (data build tool) is an open-source command-line tool that enables data analysts and engineers to transform raw data in their warehouses using SQL.</p>
+    </div>
+
+    <div class="highlight highlight-blue" style="margin-bottom:28px">
+      <h4>🎯 Core Definition</h4>
+      <p>dbt is the <strong>T in ELT</strong> (Extract, Load, Transform). It operates directly inside your data warehouse, letting you write modular SQL <code>SELECT</code> statements that dbt compiles and executes, creating tables and views for your analytics layer. Think of it as <strong>software engineering applied to data transformation</strong>.</p>
+    </div>
+
+    <div class="stat-row fade-in delay-1">
+      <div class="stat-box">
+        <div class="stat-num" style="color:var(--blue)">30K+</div>
+        <div class="stat-label">Companies using dbt</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" style="color:var(--orange)">ELT</div>
+        <div class="stat-label">Paradigm (not ETL)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" style="color:var(--green)">SQL</div>
+        <div class="stat-label">Primary language</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" style="color:var(--purple)">Jinja2</div>
+        <div class="stat-label">Templating engine</div>
+      </div>
+    </div>
+
+    <div class="card-grid card-grid-2 fade-in delay-2">
+      <div class="card c-blue">
+        <div class="card-icon">📦</div>
+        <h3>dbt Core (Open Source)</h3>
+        <p>The free, open-source CLI version. Run dbt locally or on your infrastructure. Full control over scheduling, orchestration, and compute. Works with BigQuery, Snowflake, Redshift, Databricks, Spark, DuckDB, and more.</p>
+      </div>
+      <div class="card c-orange">
+        <div class="card-icon">☁️</div>
+        <h3>dbt Cloud (Managed SaaS)</h3>
+        <p>A managed platform with a web IDE, job scheduling, CI/CD, documentation hosting, observability, and team collaboration features — built on top of dbt Core. Includes a Semantic Layer for metric definitions.</p>
+      </div>
+      <div class="card c-purple">
+        <div class="card-icon">🧠</div>
+        <h3>The ELT Revolution</h3>
+        <p>Traditional ETL transformed data before loading (expensive pipelines). dbt enables ELT: load raw data first into cloud warehouses, then transform in place using SQL. The warehouse is the engine — not a middleware layer.</p>
+      </div>
+      <div class="card c-green">
+        <div class="card-icon">🔄</div>
+        <h3>Analytics Engineering</h3>
+        <p>dbt created the <em>Analytics Engineer</em> role — bridging data engineering and analytics. Analysts own and maintain transformation pipelines using software engineering best practices like version control and testing.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 2: HOW IT WORKS ══ -->
+  <section class="section fade-in" id="how">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--orange)">02 — Mechanics</div>
+      <h2 class="section-title">How dbt Works</h2>
+      <p class="section-desc">dbt orchestrates SQL transformations across a directed acyclic graph (DAG) of models. Here's the full execution lifecycle.</p>
+    </div>
+
+    <div class="flow fade-in delay-1" style="margin-bottom:32px">
+      <div class="flow-node fn-blue">
+        <span class="flow-node-icon">📝</span>
+        <div class="flow-node-label">SQL Models</div>
+        <div class="flow-node-sub">Write SELECT statements</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">
+        <span class="flow-node-icon">🔧</span>
+        <div class="flow-node-label">Jinja Compile</div>
+        <div class="flow-node-sub">Macros + refs resolved</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">
+        <span class="flow-node-icon">🔗</span>
+        <div class="flow-node-label">DAG Resolution</div>
+        <div class="flow-node-sub">Dependency ordering</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">
+        <span class="flow-node-icon">⚙️</span>
+        <div class="flow-node-label">Warehouse Execution</div>
+        <div class="flow-node-sub">DDL/DML runs in-warehouse</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">
+        <span class="flow-node-icon">✅</span>
+        <div class="flow-node-label">Tests + Docs</div>
+        <div class="flow-node-sub">Auto-validation & catalog</div>
+      </div>
+    </div>
+
+    <div class="two-col fade-in delay-2">
+      <div>
+        <h3 style="font-size:17px; font-weight:700; margin-bottom:16px; color:var(--text-primary)">📄 A dbt Model (SQL file)</h3>
+        <div class="code-block" data-lang="SQL">
+<pre><span class="cm">-- models/marts/orders_daily.sql</span>
+<span class="cm">-- Reference other models with ref()</span>
+
+<span class="kw">WITH</span> orders <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">{{ ref('stg_orders') }}</span>
+),
+
+customers <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">{{ ref('stg_customers') }}</span>
+),
+
+daily_agg <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    <span class="fn">DATE_TRUNC</span>(<span class="str">'day'</span>, o.created_at) <span class="kw">AS</span> order_date,
+    c.country,
+    <span class="fn">COUNT</span>(o.order_id)           <span class="kw">AS</span> total_orders,
+    <span class="fn">SUM</span>(o.revenue)             <span class="kw">AS</span> total_revenue,
+    <span class="fn">AVG</span>(o.revenue)             <span class="kw">AS</span> avg_order_value
+  <span class="kw">FROM</span> orders o
+  <span class="kw">JOIN</span> customers c <span class="kw">USING</span> (customer_id)
+  <span class="kw">GROUP BY</span> <span class="num">1</span>, <span class="num">2</span>
+)
+
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> daily_agg</pre>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:17px; font-weight:700; margin-bottom:16px; color:var(--text-primary)">⚙️ Model Config (YAML)</h3>
+        <div class="code-block" data-lang="YAML">
+<pre><span class="cm"># models/marts/schema.yml</span>
+<span class="tag">version</span>: <span class="num">2</span>
+
+<span class="tag">models</span>:
+  - <span class="tag">name</span>: <span class="str">orders_daily</span>
+    <span class="tag">description</span>: <span class="str">"Daily order aggregation by country"</span>
+    <span class="tag">config</span>:
+      <span class="tag">materialized</span>: <span class="str">incremental</span>
+      <span class="tag">unique_key</span>: [<span class="str">order_date</span>, <span class="str">country</span>]
+      <span class="tag">partition_by</span>:
+        <span class="tag">field</span>: <span class="str">order_date</span>
+        <span class="tag">data_type</span>: <span class="str">date</span>
+        <span class="tag">granularity</span>: <span class="str">day</span>
+
+    <span class="tag">columns</span>:
+      - <span class="tag">name</span>: <span class="str">order_date</span>
+        <span class="tag">tests</span>:
+          - <span class="str">not_null</span>
+          - <span class="str">unique</span>  <span class="cm"># per country partition</span>
+      - <span class="tag">name</span>: <span class="str">total_revenue</span>
+        <span class="tag">tests</span>:
+          - <span class="str">not_null</span>
+          - <span class="tag">dbt_expectations.expect_column_values_to_be_between</span>:
+              <span class="tag">min_value</span>: <span class="num">0</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:32px">
+      <h3 style="font-size:17px; font-weight:700; margin-bottom:20px">🔧 Key dbt CLI Commands</h3>
+      <div class="code-block" data-lang="BASH">
+<pre><span class="cm"># Initialize a new project</span>
+<span class="tag">dbt init</span> my_project
+
+<span class="cm"># Compile SQL without executing (shows rendered SQL)</span>
+<span class="tag">dbt compile</span>
+
+<span class="cm"># Run all models (creates tables/views in warehouse)</span>
+<span class="tag">dbt run</span>
+
+<span class="cm"># Run only changed models + downstream (smart CI)</span>
+<span class="tag">dbt run</span> <span class="op">--select</span> <span class="str">state:modified+</span>
+
+<span class="cm"># Run specific model and all upstream dependencies</span>
+<span class="tag">dbt run</span> <span class="op">--select</span> <span class="str">+orders_daily</span>
+
+<span class="cm"># Execute all data quality tests</span>
+<span class="tag">dbt test</span>
+
+<span class="cm"># Generate and serve documentation site</span>
+<span class="tag">dbt docs generate</span> <span class="op">&&</span> <span class="tag">dbt docs serve</span>
+
+<span class="cm"># Run incremental models only</span>
+<span class="tag">dbt run</span> <span class="op">--select</span> <span class="str">config.materialized:incremental</span>
+
+<span class="cm"># Snapshot slow-changing dimensions (SCD Type 2)</span>
+<span class="tag">dbt snapshot</span></pre>
+      </div>
+    </div>
+
+    <div style="margin-top:32px">
+      <h3 style="font-size:17px; font-weight:700; margin-bottom:16px">📋 Materializations Explained</h3>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>What dbt Creates</th>
+              <th>When to Use</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-blue">view</span></td>
+              <td>Virtual SQL view (no data stored)</td>
+              <td>Staging models, lightweight transforms</td>
+              <td>Query-time compute only</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-green">table</span></td>
+              <td>Full physical table (drop + rebuild)</td>
+              <td>Final mart tables, aggregations</td>
+              <td>Full rebuild on every run</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-orange">incremental</span></td>
+              <td>Appends/merges only new rows</td>
+              <td>Large event tables, fact tables</td>
+              <td>Low — processes only delta</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-purple">ephemeral</span></td>
+              <td>CTE injected into referencing models</td>
+              <td>Intermediate logic, no object created</td>
+              <td>Zero storage cost</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">snapshot</span></td>
+              <td>SCD Type 2 history table</td>
+              <td>Track row changes over time</td>
+              <td>Grows with history</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-green">dynamic table</span></td>
+              <td>Warehouse-managed refresh (Snowflake)</td>
+              <td>Near-real-time refresh without Airflow</td>
+              <td>Auto-refreshed by warehouse</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 3: WHY DBT ══ -->
+  <section class="section fade-in" id="why">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--green)">03 — Value Proposition</div>
+      <h2 class="section-title">Why dbt? What Makes it Great?</h2>
+      <p class="section-desc">dbt brings software engineering discipline — version control, testing, documentation, modularity — to the data transformation layer.</p>
+    </div>
+
+    <div class="card-grid card-grid-3 fade-in delay-1">
+      <div class="card c-blue">
+        <div class="card-icon">🔗</div>
+        <h3>Dependency Management via DAG</h3>
+        <p>Using <code>ref()</code> and <code>source()</code> functions, dbt auto-resolves all model dependencies and builds a Directed Acyclic Graph — no manual pipeline wiring needed.</p>
+      </div>
+      <div class="card c-orange">
+        <div class="card-icon">🧪</div>
+        <h3>Built-in Data Testing</h3>
+        <p>Define schema tests (<code>not_null</code>, <code>unique</code>, <code>accepted_values</code>, <code>relationships</code>) and custom SQL tests. Tests run against your warehouse — no separate testing framework needed.</p>
+      </div>
+      <div class="card c-green">
+        <div class="card-icon">📚</div>
+        <h3>Auto-generated Documentation</h3>
+        <p>Every model, column, test, and source is auto-documented into a browsable data catalog with lineage graphs. No more stale wikis — docs live alongside code.</p>
+      </div>
+      <div class="card c-purple">
+        <div class="card-icon">♻️</div>
+        <h3>DRY Code with Macros</h3>
+        <p>Jinja2 templating + macros let you write reusable SQL logic. The dbt-utils and dbt-expectations packages add hundreds of pre-built macros and tests to your project.</p>
+      </div>
+      <div class="card c-blue">
+        <div class="card-icon">🔀</div>
+        <h3>Git-based Version Control</h3>
+        <p>All models are plain <code>.sql</code> files — they live in Git. Teams can PR, review, branch, rollback, and audit transformations exactly like application code.</p>
+      </div>
+      <div class="card c-orange">
+        <div class="card-icon">⚡</div>
+        <h3>Warehouse-native Compute</h3>
+        <p>dbt doesn't run compute itself — it pushes all execution to your data warehouse (BigQuery, Snowflake, Spark, etc.), leveraging its MPP engine and auto-scaling at zero extra cost.</p>
+      </div>
+      <div class="card c-purple">
+        <div class="card-icon">🏗️</div>
+        <h3>Modular Layered Architecture</h3>
+        <p>dbt enforces staging → intermediate → mart layers. Each layer has a clear responsibility, making pipelines understandable, testable, and maintainable at scale.</p>
+      </div>
+      <div class="card c-green">
+        <div class="card-icon">📊</div>
+        <h3>Semantic Layer (MetricFlow)</h3>
+        <p>Define business metrics once in YAML (<em>revenue</em>, <em>DAU</em>, <em>churn rate</em>). All BI tools and queries consume a single consistent definition — no more metric disagreements.</p>
+      </div>
+      <div class="card c-blue">
+        <div class="card-icon">🔌</div>
+        <h3>Huge Ecosystem (Packages)</h3>
+        <p>dbt Hub has 200+ open-source packages: <code>dbt-utils</code>, <code>dbt-expectations</code>, <code>dbt-audit-helper</code>, <code>elementary</code>, <code>re_data</code>, and adapters for every major warehouse.</p>
+      </div>
+    </div>
+
+    <div class="highlight highlight-green" style="margin-top:28px">
+      <h4>🏆 What dbt is Particularly Good At</h4>
+      <ul>
+        <li><strong>Complex multi-hop transformations</strong> — staging → intermediate → aggregation → mart layers with full lineage</li>
+        <li><strong>Incremental processing</strong> — handling petabyte-scale fact tables by only processing new/changed data</li>
+        <li><strong>Slow-changing dimension tracking</strong> — SCD Type 2 via dbt Snapshots with zero custom code</li>
+        <li><strong>Cross-team data contracts</strong> — schema tests enforce SLAs between producers and consumers</li>
+        <li><strong>CI/CD for data pipelines</strong> — slim CI runs only affected models on PRs, saving hours of runtime</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 4: ARCHITECTURE ══ -->
+  <section class="section fade-in" id="arch">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--purple)">04 — Internal Architecture</div>
+      <h2 class="section-title">How dbt is Built Internally</h2>
+      <p class="section-desc">dbt Core is a Python application composed of several key subsystems that work together to compile, plan, and execute your transformation pipeline.</p>
+    </div>
+
+    <div class="arch-diagram fade-in delay-1" style="margin-bottom:32px">
+      <h3 style="font-size:15px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:24px">dbt Core Internal Subsystems</h3>
+
+      <div class="arch-layer" style="background:var(--blue-light); border:1.5px solid var(--blue-mid)">
+        <div class="arch-layer-icon">🖥️</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--blue)">CLI / Programmatic Interface</div>
+          <div class="arch-layer-desc">Entry point. Parses user commands (<code>dbt run</code>, <code>dbt test</code>), loads profiles and project config from <code>dbt_project.yml</code> and <code>profiles.yml</code></div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--orange-light); border:1.5px solid var(--orange-mid)">
+        <div class="arch-layer-icon">📂</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--orange)">Manifest Builder (Parser)</div>
+          <div class="arch-layer-desc">Reads all <code>.sql</code>, <code>.yml</code>, <code>.py</code> files. Parses Jinja, resolves <code>ref()</code> and <code>source()</code> calls. Outputs a <code>manifest.json</code> — the complete project graph</div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--purple-light); border:1.5px solid var(--purple-mid)">
+        <div class="arch-layer-icon">🔗</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--purple)">DAG Engine (Graph Module)</div>
+          <div class="arch-layer-desc">Builds and validates the Directed Acyclic Graph using NetworkX. Performs topological sort for execution order. Detects cycles. Applies node selectors (<code>--select</code>, <code>--exclude</code>)</div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--green-light); border:1.5px solid var(--green-mid)">
+        <div class="arch-layer-icon">⚡</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--green)">Jinja2 Compilation Engine</div>
+          <div class="arch-layer-desc">Renders Jinja templates with context: model configs, macros, variables. Produces raw SQL. Supports custom macro libraries. Injects adapter-specific SQL via the dispatch system</div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--blue-light); border:1.5px solid var(--blue-mid)">
+        <div class="arch-layer-icon">🔀</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--blue)">Adapter Layer (Plugin Interface)</div>
+          <div class="arch-layer-desc">Abstract interface to each warehouse (BigQuery, Snowflake, Redshift, Spark, DuckDB…). Each adapter implements: connection pool, DDL generation, column type mapping, incremental merge strategies</div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--orange-light); border:1.5px solid var(--orange-mid)">
+        <div class="arch-layer-icon">🏃</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--orange)">Runner (Execution Engine)</div>
+          <div class="arch-layer-desc">Thread-pool based parallel executor. Respects DAG order. Sends compiled SQL to adapter. Captures results, timing, and row counts into <code>run_results.json</code>. Manages retries and partial failures</div>
+        </div>
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:var(--purple-light); border:1.5px solid var(--purple-mid)">
+        <div class="arch-layer-icon">🗄️</div>
+        <div>
+          <div class="arch-layer-label" style="color:var(--purple)">Artifacts Store</div>
+          <div class="arch-layer-desc">Writes <code>manifest.json</code> (project graph), <code>run_results.json</code> (execution results), <code>catalog.json</code> (schema introspection), <code>sources.json</code>. Used for state-based selection in CI/CD</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col fade-in delay-2">
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">📁 Project File Structure</h3>
+        <div class="code-block" data-lang="TREE">
+<pre><span class="tag">my_dbt_project/</span>
+├── <span class="var">dbt_project.yml</span>       <span class="cm"># Project config</span>
+├── <span class="var">profiles.yml</span>          <span class="cm"># DB connections</span>
+├── <span class="var">packages.yml</span>          <span class="cm"># Package deps</span>
+├── <span class="tag">models/</span>
+│   ├── <span class="tag">staging/</span>          <span class="cm"># Raw → clean</span>
+│   │   ├── <span class="fn">stg_orders.sql</span>
+│   │   └── <span class="fn">schema.yml</span>
+│   ├── <span class="tag">intermediate/</span>     <span class="cm"># Business logic</span>
+│   │   └── <span class="fn">int_orders_with_customers.sql</span>
+│   └── <span class="tag">marts/</span>            <span class="cm"># Analytics-ready</span>
+│       ├── <span class="fn">orders_daily.sql</span>
+│       └── <span class="fn">schema.yml</span>
+├── <span class="tag">macros/</span>               <span class="cm"># Jinja macros</span>
+├── <span class="tag">tests/</span>                <span class="cm"># Custom SQL tests</span>
+├── <span class="tag">snapshots/</span>            <span class="cm"># SCD Type 2</span>
+├── <span class="tag">seeds/</span>                <span class="cm"># Static CSV data</span>
+├── <span class="tag">analyses/</span>             <span class="cm"># Ad-hoc SQL</span>
+└── <span class="tag">target/</span>               <span class="cm"># Compiled output</span>
+    ├── <span class="fn">manifest.json</span>
+    ├── <span class="fn">run_results.json</span>
+    └── <span class="fn">catalog.json</span></pre>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">🔄 Incremental Strategy Logic</h3>
+        <div class="code-block" data-lang="SQL">
+<pre><span class="cm">-- models/fact/fact_events.sql</span>
+<span class="fn">{{
+  config(
+    materialized = 'incremental',
+    unique_key   = 'event_id',
+    incremental_strategy = 'merge',
+    partition_by = {
+      'field': 'event_date',
+      'data_type': 'date',
+      'granularity': 'day'
+    },
+    cluster_by = ['user_id', 'event_type']
+  )
+}}</span>
+
+<span class="kw">SELECT</span>
+  event_id,
+  user_id,
+  event_type,
+  <span class="fn">DATE</span>(event_timestamp) <span class="kw">AS</span> event_date,
+  event_timestamp,
+  properties
+<span class="kw">FROM</span> <span class="fn">{{ source('raw', 'events') }}</span>
+
+<span class="cm">-- Only new records on incremental runs</span>
+<span class="fn">{% if is_incremental() %}</span>
+  <span class="kw">WHERE</span> event_timestamp <span class="op">></span>
+    (<span class="kw">SELECT</span> <span class="fn">MAX</span>(event_timestamp)
+     <span class="kw">FROM</span> <span class="fn">{{ this }}</span>)
+<span class="fn">{% endif %}</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 5: HOW DBT BUILDS ══ -->
+  <section class="section fade-in" id="build">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--blue)">05 — Execution Model</div>
+      <h2 class="section-title">How dbt Builds Your Pipeline</h2>
+      <p class="section-desc">When you run <code>dbt run</code>, a precise sequence of steps transforms your SQL files into warehouse tables and views.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:28px">
+      <ul class="step-list">
+        <li class="step-item">
+          <span class="step-num" style="background:var(--blue-light);color:var(--blue)">1</span>
+          <div class="step-body">
+            <h4>Project & Profile Loading</h4>
+            <p>Reads <code>dbt_project.yml</code> (model configs, variables, hooks) and <code>profiles.yml</code> (warehouse credentials + connection params). Validates adapter version compatibility.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--orange-light);color:var(--orange)">2</span>
+          <div class="step-body">
+            <h4>File Parsing & Manifest Generation</h4>
+            <p>Every <code>.sql</code> and <code>.yml</code> file is parsed. Jinja is partially rendered to detect <code>ref()</code>, <code>source()</code>, and <code>config()</code> calls. A full <code>manifest.json</code> is written to <code>target/</code>.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--purple-light);color:var(--purple)">3</span>
+          <div class="step-body">
+            <h4>DAG Construction & Topological Sort</h4>
+            <p>All dependencies form a DAG. dbt uses topological sort (Kahn's algorithm) to determine the correct execution order. Models with no dependencies run first; downstream models follow. Cycles cause an error.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--green-light);color:var(--green)">4</span>
+          <div class="step-body">
+            <h4>Node Selection & Filtering</h4>
+            <p>Applies <code>--select</code>, <code>--exclude</code>, and <code>--selector</code> flags. Supports graph operators: <code>+model</code> (upstream), <code>model+</code> (downstream), <code>state:modified</code> (changed since last run), and tag/config selectors.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--blue-light);color:var(--blue)">5</span>
+          <div class="step-body">
+            <h4>Jinja Compilation (Full Render)</h4>
+            <p>Each model's SQL is fully rendered: all macros expanded, <code>ref()</code> replaced with actual schema-qualified table names, config blocks resolved. Compiled SQL is saved to <code>target/compiled/</code> for debugging.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--orange-light);color:var(--orange)">6</span>
+          <div class="step-body">
+            <h4>Parallel Execution via Thread Pool</h4>
+            <p>Models whose dependencies have all succeeded are eligible to run in parallel. dbt uses a configurable thread count (default 4). Each thread opens a warehouse connection and submits the DDL/DML. Threads respect DAG ordering automatically.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--purple-light);color:var(--purple)">7</span>
+          <div class="step-body">
+            <h4>Pre-hooks, Run, Post-hooks</h4>
+            <p>For each model: run <code>pre-hook</code> SQL → execute model DDL/DML → run <code>post-hook</code> SQL. Hooks enable grant permissions, update audit tables, or run custom SQL around each model execution.</p>
+          </div>
+        </li>
+        <li class="step-item">
+          <span class="step-num" style="background:var(--green-light);color:var(--green)">8</span>
+          <div class="step-body">
+            <h4>Result Collection & Artifact Write</h4>
+            <p>dbt collects row counts, timing, and success/error status for every node. Writes <code>run_results.json</code>. Failed models are reported; their downstream dependents are automatically skipped to prevent data corruption.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <div class="highlight highlight-purple">
+      <h4>🧵 Parallelism Model</h4>
+      <p>dbt's parallelism is bounded by the DAG structure. Independent branches run concurrently; dependent models wait. With <code>--threads 8</code>, up to 8 models execute simultaneously. For very wide pipelines, this dramatically cuts total run time. On dbt Cloud, threads can reach 32+.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 6: PRODUCTION SETUP ══ -->
+  <section class="section fade-in" id="prod">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--orange)">06 — Production Setup</div>
+      <h2 class="section-title">Setting Up dbt in Production</h2>
+      <p class="section-desc">A production dbt deployment requires orchestration, CI/CD, environment separation, observability, and security. Here's the complete setup.</p>
+    </div>
+
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;color:var(--text-primary)">🏗️ Production Stack Architecture</h3>
+    <div class="flow fade-in delay-1" style="margin-bottom:32px">
+      <div class="flow-node fn-blue">
+        <span class="flow-node-icon">📁</span>
+        <div class="flow-node-label">Git Repo</div>
+        <div class="flow-node-sub">GitHub / GitLab</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">
+        <span class="flow-node-icon">🔄</span>
+        <div class="flow-node-label">CI/CD</div>
+        <div class="flow-node-sub">GitHub Actions / GitLab CI</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">
+        <span class="flow-node-icon">🎯</span>
+        <div class="flow-node-label">Orchestrator</div>
+        <div class="flow-node-sub">Airflow / Prefect / dbt Cloud</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">
+        <span class="flow-node-icon">⚡</span>
+        <div class="flow-node-label">Warehouse</div>
+        <div class="flow-node-sub">BigQuery / Snowflake / Databricks</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">
+        <span class="flow-node-icon">📊</span>
+        <div class="flow-node-label">Observability</div>
+        <div class="flow-node-sub">Elementary / re_data / Monte Carlo</div>
+      </div>
+    </div>
+
+    <div class="two-col fade-in delay-2">
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:14px">🔐 profiles.yml (Production)</h3>
+        <div class="code-block" data-lang="YAML">
+<pre><span class="tag">my_project</span>:
+  <span class="tag">outputs</span>:
+
+    <span class="tag">dev</span>:
+      <span class="tag">type</span>: <span class="str">bigquery</span>
+      <span class="tag">method</span>: <span class="str">oauth</span>
+      <span class="tag">project</span>: <span class="str">my-company-dev</span>
+      <span class="tag">dataset</span>: <span class="fn">dbt_{{ env_var('DBT_USER') }}</span>
+      <span class="tag">threads</span>: <span class="num">4</span>
+      <span class="tag">timeout_seconds</span>: <span class="num">300</span>
+
+    <span class="tag">prod</span>:
+      <span class="tag">type</span>: <span class="str">bigquery</span>
+      <span class="tag">method</span>: <span class="str">service-account</span>
+      <span class="tag">project</span>: <span class="str">my-company-prod</span>
+      <span class="tag">dataset</span>: <span class="str">dbt_production</span>
+      <span class="tag">keyfile</span>: <span class="fn">{{ env_var('BQ_KEYFILE_PATH') }}</span>
+      <span class="tag">threads</span>: <span class="num">16</span>
+      <span class="tag">timeout_seconds</span>: <span class="num">3600</span>
+      <span class="tag">location</span>: <span class="str">US</span>
+      <span class="tag">maximum_bytes_billed</span>: <span class="num">10000000000000</span>
+
+  <span class="tag">target</span>: <span class="str">dev</span></pre>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:14px">⚙️ Airflow DAG for dbt</h3>
+        <div class="code-block" data-lang="PYTHON">
+<pre><span class="kw">from</span> airflow <span class="kw">import</span> DAG
+<span class="kw">from</span> airflow.operators.bash <span class="kw">import</span> BashOperator
+<span class="kw">from</span> cosmos <span class="kw">import</span> DbtDag, ProjectConfig, ProfileConfig
+
+<span class="cm"># Option A: Using Astronomer Cosmos (recommended)</span>
+dbt_dag = <span class="fn">DbtDag</span>(
+    dag_id=<span class="str">"dbt_production_daily"</span>,
+    project_config=<span class="fn">ProjectConfig</span>(
+        dbt_project_path=<span class="str">"/usr/local/airflow/dbt"</span>,
+    ),
+    profile_config=<span class="fn">ProfileConfig</span>(
+        profile_name=<span class="str">"my_project"</span>,
+        target_name=<span class="str">"prod"</span>,
+    ),
+    schedule_interval=<span class="str">"0 4 * * *"</span>, <span class="cm"># 4 AM UTC</span>
+    operator_args={
+        <span class="str">"vars"</span>: {<span class="str">"run_date"</span>: <span class="str">"{{ ds }}"</span>},
+        <span class="str">"dbt_cmd_flags"</span>: [<span class="str">"--threads"</span>, <span class="str">"16"</span>],
+    },
+)
+
+<span class="cm"># Option B: BashOperator (simpler)</span>
+run_dbt = <span class="fn">BashOperator</span>(
+    task_id=<span class="str">"dbt_run"</span>,
+    bash_command=<span class="str">"""
+      dbt run --target prod \
+               --select tag:daily \
+               --threads 16
+    """</span>
+)</pre>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:28px">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:14px">🔄 GitHub Actions CI/CD Pipeline</h3>
+      <div class="code-block" data-lang="YAML">
+<pre><span class="cm"># .github/workflows/dbt_ci.yml</span>
+<span class="tag">name</span>: <span class="str">dbt CI/CD Pipeline</span>
+
+<span class="tag">on</span>:
+  <span class="tag">pull_request</span>:
+    <span class="tag">branches</span>: [<span class="str">main</span>]
+  <span class="tag">push</span>:
+    <span class="tag">branches</span>: [<span class="str">main</span>]
+
+<span class="tag">jobs</span>:
+  <span class="tag">dbt_ci</span>:
+    <span class="tag">runs-on</span>: <span class="str">ubuntu-latest</span>
+    <span class="tag">steps</span>:
+      - <span class="tag">uses</span>: <span class="str">actions/checkout@v3</span>
+
+      - <span class="tag">name</span>: <span class="str">Set up Python</span>
+        <span class="tag">uses</span>: <span class="str">actions/setup-python@v4</span>
+        <span class="kw">with</span>:
+          <span class="tag">python-version</span>: <span class="str">'3.11'</span>
+
+      - <span class="tag">name</span>: <span class="str">Install dbt</span>
+        <span class="tag">run</span>: <span class="str">pip install dbt-bigquery==1.8.0</span>
+
+      - <span class="tag">name</span>: <span class="str">dbt deps</span>
+        <span class="tag">run</span>: <span class="str">dbt deps</span>
+
+      - <span class="tag">name</span>: <span class="str">dbt compile (syntax check)</span>
+        <span class="tag">run</span>: <span class="str">dbt compile --target prod</span>
+
+      - <span class="tag">name</span>: <span class="str">Slim CI - run only changed models</span>
+        <span class="cm">        # Uses dbt state to only run modified models + downstream</span>
+        <span class="tag">run</span>: |
+          dbt run --target prod \
+                  --select <span class="str">state:modified+</span> \
+                  --defer \
+                  --state ./prod-artifacts/
+
+      - <span class="tag">name</span>: <span class="str">dbt test (only on changed models)</span>
+        <span class="tag">run</span>: |
+          dbt test --target prod \
+                   --select <span class="str">state:modified+</span> \
+                   --defer --state ./prod-artifacts/
+
+  <span class="tag">dbt_prod_deploy</span>:
+    <span class="tag">needs</span>: <span class="str">dbt_ci</span>
+    <span class="tag">if</span>: <span class="str">github.ref == 'refs/heads/main'</span>
+    <span class="tag">runs-on</span>: <span class="str">ubuntu-latest</span>
+    <span class="tag">steps</span>:
+      - <span class="tag">name</span>: <span class="str">Full production run</span>
+        <span class="tag">run</span>: <span class="str">dbt run --target prod --threads 16</span>
+      - <span class="tag">name</span>: <span class="str">Run all tests in production</span>
+        <span class="tag">run</span>: <span class="str">dbt test --target prod --threads 8</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ══ SECTION 7: PB SCALE ══ -->
+  <section class="section fade-in" id="pb">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--green)">07 — Petabyte Scale</div>
+      <h2 class="section-title">dbt at Petabyte (PB) Data Volume</h2>
+      <p class="section-desc">Running dbt against petabyte-scale datasets demands careful materialization strategies, partitioning, incremental patterns, and warehouse-specific tuning.</p>
+    </div>
+
+    <div class="highlight highlight-orange" style="margin-bottom:28px">
+      <h4>⚠️ The Core Challenge at PB Scale</h4>
+      <p>At petabyte volumes, a full <code>table</code> materialization means scanning and rewriting terabytes on every run — costing hours and thousands of dollars. The solution: <strong>aggressive incremental processing</strong>, <strong>partition pruning</strong>, and <strong>warehouse-native optimizations</strong>.</p>
+    </div>
+
+    <div class="card-grid card-grid-2 fade-in delay-1" style="margin-bottom:28px">
+      <div class="card c-blue">
+        <div class="card-icon">📅</div>
+        <h3>Strategy 1: Partition-First Design</h3>
+        <p>Partition all large fact tables by date. Every query and incremental merge scans only the relevant partitions, reducing compute by 100x–1000x. Combine with clustering on high-cardinality filter columns (<code>user_id</code>, <code>event_type</code>).</p>
+      </div>
+      <div class="card c-orange">
+        <div class="card-icon">⚡</div>
+        <h3>Strategy 2: Micro-batch Incremental</h3>
+        <p>Instead of daily full refreshes, run incrementals every 15–60 minutes processing only new records. Use <code>insert_overwrite</code> strategy to replace entire date partitions atomically — faster than row-level MERGE on huge tables.</p>
+      </div>
+      <div class="card c-green">
+        <div class="card-icon">🔀</div>
+        <h3>Strategy 3: Model Decomposition</h3>
+        <p>Break one massive model into partitioned sub-models. Process each partition in parallel using dbt's thread pool or Airflow parallelism. Recombine downstream. This converts one 6-hour job into many 15-minute jobs running in parallel.</p>
+      </div>
+      <div class="card c-purple">
+        <div class="card-icon">💾</div>
+        <h3>Strategy 4: Intermediate Caching</h3>
+        <p>Materialize expensive intermediate aggregations as <code>table</code> or <code>incremental</code> models rather than <code>ephemeral</code> or <code>view</code>. Avoids recomputing the same expensive joins/aggregations multiple times across dependent models.</p>
+      </div>
+    </div>
+
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">🔧 PB-Scale BigQuery Configuration</h3>
+    <div class="code-block" data-lang="SQL">
+<pre><span class="cm">-- models/fact/fact_events_pb.sql  (handles petabyte-scale event logs)</span>
+<span class="fn">{{
+  config(
+    materialized          = 'incremental',
+    incremental_strategy  = 'insert_overwrite',   -- replaces whole partitions atomically
+    unique_key            = 'event_id',
+    partition_by = {
+      'field'       : 'event_date',
+      'data_type'   : 'date',
+      'granularity' : 'day'
+    },
+    cluster_by            = ['user_id', 'event_type', 'platform'],
+    require_partition_filter = true,              -- NEVER allow full table scans!
+    on_schema_change      = 'append_new_columns',
+    hours_to_expiration   = None,                 -- production data never expires
+    labels                = {'pipeline': 'dbt', 'team': 'data_engineering'},
+  )
+}}</span>
+
+<span class="kw">WITH</span> raw_events <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    event_id,
+    user_id,
+    <span class="fn">LOWER</span>(event_type)                     <span class="kw">AS</span> event_type,
+    platform,
+    <span class="fn">DATE</span>(event_timestamp, <span class="str">'UTC'</span>)           <span class="kw">AS</span> event_date,
+    event_timestamp,
+    <span class="fn">JSON_VALUE</span>(properties, <span class="str">'$.session_id'</span>) <span class="kw">AS</span> session_id,
+    properties
+  <span class="kw">FROM</span> <span class="fn">{{ source('raw_events', 'events') }}</span>
+  <span class="kw">WHERE</span> event_id <span class="kw">IS NOT NULL</span>
+    <span class="kw">AND</span> event_timestamp <span class="kw">IS NOT NULL</span>
+
+  <span class="cm">-- Incremental filter: only process the last N days on each run</span>
+  <span class="fn">{% if is_incremental() %}</span>
+    <span class="kw">AND</span> <span class="fn">DATE</span>(event_timestamp) <span class="op">>=</span>
+        <span class="fn">DATE_SUB</span>(<span class="fn">CURRENT_DATE</span>(), <span class="kw">INTERVAL</span> <span class="num">3</span> <span class="kw">DAY</span>)  <span class="cm">-- 3-day lookback window</span>
+  <span class="fn">{% else %}</span>
+    <span class="cm">-- First full build: last 90 days only (bootstrap gradually)</span>
+    <span class="kw">AND</span> <span class="fn">DATE</span>(event_timestamp) <span class="op">>=</span>
+        <span class="fn">DATE_SUB</span>(<span class="fn">CURRENT_DATE</span>(), <span class="kw">INTERVAL</span> <span class="num">90</span> <span class="kw">DAY</span>)
+  <span class="fn">{% endif %}</span>
+)
+
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> raw_events</pre>
+    </div>
+
+    <h3 style="font-size:17px;font-weight:700;margin:28px 0 16px">⚙️ dbt_project.yml — Production Tuning</h3>
+    <div class="code-block" data-lang="YAML">
+<pre><span class="tag">name</span>: <span class="str">my_project</span>
+<span class="tag">version</span>: <span class="str">'1.0.0'</span>
+<span class="tag">config-version</span>: <span class="num">2</span>
+
+<span class="tag">vars</span>:
+  <span class="tag">lookback_days</span>: <span class="num">3</span>                     <span class="cm"># global incremental window</span>
+  <span class="tag">max_bytes_billed</span>: <span class="num">10000000000000</span>      <span class="cm"># 10TB query cost guard</span>
+
+<span class="tag">models</span>:
+  <span class="tag">my_project</span>:
+    <span class="tag">staging</span>:
+      <span class="tag">+materialized</span>: <span class="str">view</span>              <span class="cm"># always views in staging</span>
+      <span class="tag">+schema</span>: <span class="str">staging</span>
+
+    <span class="tag">intermediate</span>:
+      <span class="tag">+materialized</span>: <span class="str">ephemeral</span>         <span class="cm"># no storage for intermediate</span>
+
+    <span class="tag">marts</span>:
+      <span class="tag">+materialized</span>: <span class="str">table</span>             <span class="cm"># final marts are full tables</span>
+      <span class="tag">+schema</span>: <span class="str">marts</span>
+      <span class="tag">+grants</span>:
+        <span class="tag">select</span>: [<span class="str">"group:bi-analysts@company.com"</span>]
+
+    <span class="tag">fact</span>:
+      <span class="tag">+materialized</span>: <span class="str">incremental</span>       <span class="cm"># all facts are incremental</span>
+      <span class="tag">+schema</span>: <span class="str">fact</span>
+      <span class="tag">+tags</span>: [<span class="str">"fact"</span>, <span class="str">"incremental"</span>]
+
+<span class="tag">on-run-start</span>:
+  - <span class="str">"CALL my_project.pre_run_checks()"</span>  <span class="cm"># custom pre-run validation</span>
+
+<span class="tag">on-run-end</span>:
+  - <span class="str">"{{ log_run_metadata() }}"</span>          <span class="cm"># write run stats to audit table</span>
+  - <span class="fn">{{ elementary.upload_dbt_artifacts() }}</span></pre>
+    </div>
+
+    <div style="margin-top:28px">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:20px">📋 PB Scale Best Practices Checklist</h3>
+      <div class="card">
+        <ul class="checklist">
+          <li><span class="check-icon">✅</span><div><strong>Always partition large tables</strong> — date-based partitioning is mandatory for fact tables over 10GB. Enable <code>require_partition_filter</code> to prevent accidental full scans.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Use <code>insert_overwrite</code> strategy</strong> — for BigQuery and Spark, replacing full date partitions is faster than row-level MERGE/UPSERT at PB scale. MERGE causes full partition scans.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Lookback window incremental logic</strong> — process last N days (not just latest timestamp) to handle late-arriving events. Tune N based on your data SLA.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Cluster by high-selectivity columns</strong> — Snowflake micro-partitions and BigQuery clustering reduce bytes scanned by 10x–100x for filtered queries.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Avoid SELECT * from huge tables</strong> — always project only needed columns. Use staging models as a projection + filtering layer before joins.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Set query cost guards</strong> — BigQuery's <code>maximum_bytes_billed</code> and Snowflake's <code>statement_timeout_in_seconds</code> prevent runaway queries from costing thousands.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Increase thread count for production</strong> — default 4 threads is too low. Use 16–32 threads in production to parallelize independent model branches.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Use dbt Slim CI in PRs</strong> — <code>state:modified+</code> selection means PRs only run changed models, not the full pipeline. Saves 95%+ of CI runtime and cost.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Bootstrap large tables in batches</strong> — on first build, use a custom macro to process historical data in monthly or weekly chunks instead of one massive query.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Monitor with Elementary or Monte Carlo</strong> — attach data observability to detect schema changes, volume anomalies, and freshness violations before they impact dashboards.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Materialize expensive intermediates</strong> — if an intermediate CTE is referenced by 3+ downstream models, materialize it as a table to avoid recomputing it multiple times.</div></li>
+          <li><span class="check-icon">✅</span><div><strong>Separate dev / CI / prod environments</strong> — dev uses personal schemas (<code>dbt_username</code>), CI uses isolated schemas, prod writes to blessed schemas. Never let dev run overwrite production data.</div></li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:28px">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px">📊 Environment Strategy Summary</h3>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Environment</th><th>Target</th><th>Schema</th><th>Threads</th><th>Trigger</th><th>Data Scope</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-blue">Development</span></td>
+              <td><code>dev</code></td>
+              <td><code>dbt_username</code></td>
+              <td>4</td>
+              <td>Manual / dbt CLI</td>
+              <td>Last 7–30 days</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-orange">CI / PR</span></td>
+              <td><code>ci</code></td>
+              <td><code>dbt_ci_prXXX</code></td>
+              <td>8</td>
+              <td>Pull Request</td>
+              <td>Modified models + 3 days data</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-purple">Staging</span></td>
+              <td><code>staging</code></td>
+              <td><code>dbt_staging</code></td>
+              <td>16</td>
+              <td>Merge to main</td>
+              <td>Last 90 days</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-green">Production</span></td>
+              <td><code>prod</code></td>
+              <td><code>dbt_production</code></td>
+              <td>32</td>
+              <td>Scheduled (Airflow/dbt Cloud)</td>
+              <td>Full historical data</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="highlight highlight-green" style="margin-top:28px">
+      <h4>🚀 Key Numbers at PB Scale (Reference)</h4>
+      <ul>
+        <li><strong>BigQuery</strong>: Process 10TB/min. With partitioning, reduce scans to ~10–50GB per incremental run.</li>
+        <li><strong>Snowflake</strong>: X-Large warehouse (16 nodes) handles most dbt workloads. Use multi-cluster warehouses for concurrent runs.</li>
+        <li><strong>Databricks</strong>: Use dbt-spark or dbt-databricks. Enable Delta Lake for MERGE support and time travel. Optimize for Photon engine.</li>
+        <li><strong>Incremental runs at PB scale</strong>: Should complete in &lt;30 min with proper partitioning. Full rebuilds reserved for schema migrations only.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="margin-top:40px; padding:32px 0; border-top:1px solid var(--border); text-align:center; color:var(--text-muted); font-size:14px;">
+    <div style="margin-bottom:10px; font-weight:600; color:var(--text-secondary)">dbt — Data Build Tool Complete Reference</div>
+    <div>Core v1.8+ · BigQuery · Snowflake · Databricks · Spark · DuckDB · Redshift</div>
+    <div style="margin-top:8px; font-size:12.5px">
+      📖 <a href="https://docs.getdbt.com" style="color:var(--blue); text-decoration:none">docs.getdbt.com</a> &nbsp;·&nbsp;
+      📦 <a href="https://hub.getdbt.com" style="color:var(--blue); text-decoration:none">hub.getdbt.com</a> &nbsp;·&nbsp;
+      💬 <a href="https://community.getdbt.com" style="color:var(--blue); text-decoration:none">community.getdbt.com</a>
+    </div>
+  </footer>
+
+</main>
+
+<script>
+  // Smooth scroll for nav links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const el = document.querySelector(a.getAttribute('href'));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  // Fade-in on scroll
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.section').forEach(s => {
+    s.style.opacity = '0';
+    s.style.transform = 'translateY(20px)';
+    s.style.transition = 'opacity 0.55s ease, transform 0.55s ease';
+    observer.observe(s);
+  });
+
+  // Active TOC highlight
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('.toc-link');
+  window.addEventListener('scroll', () => {
+    let curr = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) curr = s.id;
+    });
+    links.forEach(l => {
+      l.style.color = l.getAttribute('href') === '#' + curr
+        ? 'var(--blue)' : '';
+      l.style.borderBottomColor = l.getAttribute('href') === '#' + curr
+        ? 'var(--blue)' : 'transparent';
+    });
+  });
+</script>
+</body>
+</html>

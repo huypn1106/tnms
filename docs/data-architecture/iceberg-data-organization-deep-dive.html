@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iceberg — Data Organization, Bucketing & Indexing</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,wght@0,300;0,600;1,300;1,600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #030e16;
+  --bg2:      #071e2b;
+  --bg3:      #0d3a52;
+  --cyan:     #00d4ff;
+  --cyan-dim: rgba(0,212,255,0.12);
+  --teal:     #00b8a0;
+  --amber:    #f5a623;
+  --coral:    #ff6b6b;
+  --violet:   #a78bfa;
+  --green:    #4ade80;
+  --txt1:     #e8f4f8;
+  --txt2:     #7ebfd8;
+  --txt3:     #3d7a96;
+  --border:   rgba(0,212,255,0.13);
+  --glass:    rgba(0,212,255,0.04);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'IBM Plex Mono',monospace;
+  background:var(--bg);
+  color:var(--txt1);
+  line-height:1.7;
+  overflow-x:hidden;
+}
+
+/* ── GRAIN ── */
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity:.025;pointer-events:none;z-index:9999;
+}
+
+/* ── MESH BG ── */
+.mesh{
+  position:fixed;inset:0;z-index:-1;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 20%, rgba(0,180,220,.09) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 70% at 85% 75%, rgba(0,100,160,.11) 0%, transparent 55%),
+    radial-gradient(ellipse 30% 30% at 50% 50%, rgba(0,212,255,.03) 0%, transparent 65%),
+    linear-gradient(175deg,#030e16 0%,#071e2b 60%,#030e16 100%);
+}
+
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  padding:.9rem 3rem;
+  display:flex;align-items:center;justify-content:space-between;
+  backdrop-filter:blur(24px);
+  background:rgba(3,14,22,.85);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;
+  color:var(--cyan);letter-spacing:.1em;text-transform:uppercase;
+}
+.nav-logo span{color:var(--txt2);}
+.nav-pills{display:flex;gap:.6rem;}
+.nav-pill{
+  padding:.3rem .9rem;
+  border:1px solid var(--border);border-radius:100px;
+  font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--txt3);text-decoration:none;
+  transition:all .2s;
+}
+.nav-pill:hover{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-dim);}
+
+/* ── HERO ── */
+.hero{
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  padding:8rem 2rem 5rem;
+  position:relative;overflow:hidden;
+}
+.hero-grid-bg{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size:60px 60px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 80%);
+  opacity:.4;
+}
+.hero-glow{
+  position:absolute;
+  width:600px;height:600px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(0,212,255,.07) 0%, transparent 70%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  animation:pulse-glow 6s ease-in-out infinite;
+}
+@keyframes pulse-glow{
+  0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.7;}
+  50%{transform:translate(-50%,-50%) scale(1.15);opacity:1;}
+}
+.hero-eyebrow{
+  font-size:.65rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--cyan);margin-bottom:2rem;
+  display:flex;align-items:center;gap:1rem;justify-content:center;
+}
+.hero-eyebrow::before,.hero-eyebrow::after{
+  content:'';width:3rem;height:1px;background:var(--cyan);opacity:.5;
+}
+.hero-title{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:clamp(2.8rem,7vw,6.5rem);
+  line-height:.92;letter-spacing:-.02em;
+  color:var(--txt1);margin-bottom:1.5rem;
+}
+.hero-title .accent{color:var(--cyan);}
+.hero-title .italic{
+  font-family:'Fraunces',serif;font-style:italic;font-weight:300;color:var(--txt2);
+}
+.hero-sub{
+  font-family:'Fraunces',serif;font-style:italic;font-weight:300;
+  font-size:clamp(1rem,2vw,1.4rem);
+  color:var(--txt2);max-width:700px;margin:0 auto 3.5rem;
+}
+.hero-chips{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;}
+.chip{
+  padding:.4rem 1rem;
+  border:1px solid var(--border);border-radius:2px;
+  font-size:.68rem;letter-spacing:.1em;color:var(--txt2);
+  background:var(--glass);
+}
+
+/* ── LAYOUT ── */
+.wrap{max-width:1200px;margin:0 auto;padding:5rem 2.5rem;}
+.divider{
+  width:100%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--border),transparent);
+}
+
+/* ── SECTION HEADER ── */
+.sh{margin-bottom:3.5rem;}
+.sh-eye{
+  font-size:.6rem;letter-spacing:.25em;text-transform:uppercase;
+  color:var(--cyan);margin-bottom:.7rem;
+  display:flex;align-items:center;gap:.7rem;
+}
+.sh-eye::before{content:'';width:1.5rem;height:1px;background:var(--cyan);}
+.sh-title{
+  font-family:'Syne',sans-serif;font-weight:700;
+  font-size:clamp(1.8rem,3.5vw,2.8rem);line-height:1.05;
+}
+.sh-title em{font-family:'Fraunces',serif;font-style:italic;font-weight:300;color:var(--txt2);}
+.sh-desc{margin-top:1rem;color:var(--txt2);font-size:.85rem;max-width:680px;line-height:1.8;}
+
+/* ── CARDS ── */
+.card{
+  background:rgba(13,58,82,.4);
+  border:1px solid var(--border);
+  border-radius:3px;padding:2rem;
+  backdrop-filter:blur(8px);
+  transition:border-color .3s,transform .3s,box-shadow .3s;
+  position:relative;overflow:hidden;
+}
+.card::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(0,212,255,.03),transparent 50%);
+  pointer-events:none;
+}
+.card:hover{
+  border-color:rgba(0,212,255,.3);
+  transform:translateY(-3px);
+  box-shadow:0 20px 40px rgba(0,0,0,.4),0 0 30px rgba(0,212,255,.04);
+}
+
+/* ── CODE ── */
+.code{
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(0,212,255,.09);
+  border-radius:3px;
+  padding:1.4rem 1.6rem;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.74rem;line-height:1.85;
+  overflow-x:auto;position:relative;
+  margin:1.2rem 0;
+}
+.code::before{
+  content:attr(data-lang);
+  position:absolute;top:.5rem;right:.9rem;
+  font-size:.55rem;color:var(--txt3);letter-spacing:.12em;text-transform:uppercase;
+}
+.kw{color:var(--cyan);}
+.str{color:#98d4a3;}
+.cmt{color:#2d5e74;font-style:italic;}
+.fn{color:var(--amber);}
+.num{color:#e8c96d;}
+.ty{color:var(--violet);}
+.op{color:var(--txt2);}
+
+/* ── HIGHLIGHT / WARN ── */
+.hl{
+  padding:1.2rem 1.8rem;
+  border-left:3px solid var(--cyan);
+  background:rgba(0,212,255,.05);
+  border-radius:0 3px 3px 0;
+  font-size:.83rem;color:var(--txt2);line-height:1.8;margin:1.2rem 0;
+}
+.hl strong{color:var(--cyan);}
+.hl-amber{border-left-color:var(--amber);background:rgba(245,166,35,.05);}
+.hl-amber strong{color:var(--amber);}
+.hl-teal{border-left-color:var(--teal);background:rgba(0,184,160,.05);}
+.hl-teal strong{color:var(--teal);}
+.hl-violet{border-left-color:var(--violet);background:rgba(167,139,250,.05);}
+.hl-violet strong{color:var(--violet);}
+
+/* ── TAG ── */
+.tag{
+  display:inline-block;padding:.2rem .65rem;
+  border:1px solid;border-radius:2px;
+  font-size:.6rem;letter-spacing:.08em;
+}
+.t-cyan{border-color:rgba(0,212,255,.3);color:var(--cyan);background:rgba(0,212,255,.07);}
+.t-amber{border-color:rgba(245,166,35,.3);color:var(--amber);background:rgba(245,166,35,.07);}
+.t-teal{border-color:rgba(0,184,160,.3);color:var(--teal);background:rgba(0,184,160,.07);}
+.t-violet{border-color:rgba(167,139,250,.3);color:var(--violet);background:rgba(167,139,250,.07);}
+.t-coral{border-color:rgba(255,107,107,.3);color:var(--coral);background:rgba(255,107,107,.07);}
+.t-green{border-color:rgba(74,222,128,.3);color:var(--green);background:rgba(74,222,128,.07);}
+
+/* ── REVEAL ── */
+.rv{opacity:0;transform:translateY(22px);transition:opacity .65s ease,transform .65s ease;}
+.rv.on{opacity:1;transform:translateY(0);}
+
+/* ════════════════════════════════════
+   SECTION-SPECIFIC STYLES
+════════════════════════════════════ */
+
+/* ── FILE TREE DIAGRAM ── */
+.file-tree{
+  background:rgba(0,0,0,.45);
+  border:1px solid var(--border);
+  border-radius:3px;padding:2rem;
+  font-size:.78rem;line-height:2;
+  overflow-x:auto;
+}
+.ft-root{color:var(--amber);font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;}
+.ft-dir{color:var(--cyan);margin-left:1.5rem;}
+.ft-dir-sub{color:var(--teal);margin-left:3rem;}
+.ft-file{color:var(--txt2);margin-left:4.5rem;}
+.ft-file-sub{color:var(--txt2);margin-left:6rem;}
+.ft-note{color:var(--txt3);font-style:italic;margin-left:.5rem;font-size:.7rem;}
+.ft-conn{color:var(--txt3);}
+
+/* ── METADATA JSON VIEWER ── */
+.json-viewer{
+  background:rgba(0,0,0,.5);
+  border:1px solid rgba(167,139,250,.2);
+  border-radius:3px;padding:1.6rem;
+  font-size:.73rem;line-height:1.9;
+  overflow-x:auto;
+}
+.jk{color:var(--violet);}
+.jv{color:var(--green);}
+.jn{color:var(--amber);}
+.js{color:#98d4a3;}
+.jb{color:var(--coral);}
+.jo{color:var(--txt3);}
+
+/* ── PARTITION TRANSFORMS GRID ── */
+.pt-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:1.2rem;margin:2rem 0;
+}
+.pt-card{
+  padding:1.6rem;
+  border:1px solid var(--border);
+  border-radius:3px;
+  background:var(--glass);
+  transition:all .3s;
+}
+.pt-card:hover{border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06);}
+.pt-name{
+  font-family:'Syne',sans-serif;font-weight:700;
+  font-size:.8rem;letter-spacing:.08em;
+  color:var(--cyan);margin-bottom:.5rem;
+}
+.pt-sig{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.68rem;color:var(--amber);
+  background:rgba(0,0,0,.3);padding:.3rem .7rem;border-radius:2px;
+  display:inline-block;margin-bottom:.7rem;
+}
+.pt-desc{font-size:.74rem;color:var(--txt2);line-height:1.7;}
+.pt-example{font-size:.68rem;color:var(--txt3);margin-top:.5rem;font-style:italic;}
+
+/* ── BUCKET VISUAL ── */
+.bucket-row{
+  display:flex;gap:.8rem;align-items:flex-start;
+  overflow-x:auto;padding:1.5rem;
+  background:rgba(0,0,0,.35);
+  border:1px solid var(--border);border-radius:3px;
+  margin:1.5rem 0;
+}
+.bucket{
+  min-width:120px;
+  border:1px solid rgba(0,212,255,.2);
+  border-radius:3px;
+  overflow:hidden;
+  flex-shrink:0;
+}
+.bucket-head{
+  background:rgba(0,212,255,.1);
+  padding:.4rem .7rem;
+  font-family:'Syne',sans-serif;font-size:.65rem;font-weight:700;
+  color:var(--cyan);letter-spacing:.08em;text-align:center;
+  border-bottom:1px solid rgba(0,212,255,.2);
+}
+.bucket-row-item{
+  padding:.3rem .7rem;
+  font-size:.65rem;color:var(--txt2);
+  border-bottom:1px solid rgba(0,212,255,.06);
+}
+.bucket-row-item:last-child{border-bottom:none;}
+.bucket-id{color:var(--txt3);font-size:.58rem;}
+
+/* ── SORT ORDER DIAGRAM ── */
+.sort-table{
+  width:100%;border-collapse:collapse;
+  font-size:.78rem;margin:1.5rem 0;
+}
+.sort-table th{
+  font-family:'Syne',sans-serif;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
+  padding:.9rem 1.2rem;text-align:left;
+  border-bottom:1px solid var(--border);color:var(--txt3);
+}
+.sort-table td{
+  padding:.8rem 1.2rem;border-bottom:1px solid rgba(0,212,255,.05);
+  color:var(--txt2);vertical-align:middle;
+}
+.sort-table td:first-child{color:var(--txt1);}
+.sort-table tr:hover td{background:rgba(0,212,255,.025);}
+.sort-key{color:var(--amber);font-weight:500;}
+.sort-dir{
+  padding:.15rem .5rem;border-radius:2px;font-size:.62rem;
+}
+.asc{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.25);}
+.desc{background:rgba(255,107,107,.1);color:var(--coral);border:1px solid rgba(255,107,107,.25);}
+.nulls{background:rgba(167,139,250,.1);color:var(--violet);border:1px solid rgba(167,139,250,.25);font-size:.6rem;}
+
+/* ── MANIFEST ANATOMY ── */
+.manifest-anatomy{
+  display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin:2rem 0;
+}
+.ma-panel{
+  border:1px solid var(--border);border-radius:3px;
+  overflow:hidden;
+}
+.ma-head{
+  padding:.8rem 1.2rem;
+  font-family:'Syne',sans-serif;font-size:.7rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+.ma-head-list{background:rgba(167,139,250,.08);color:var(--violet);}
+.ma-head-file{background:rgba(0,184,160,.08);color:var(--teal);}
+.ma-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.6rem 1.2rem;
+  border-bottom:1px solid rgba(0,212,255,.04);
+  font-size:.72rem;
+}
+.ma-key{color:var(--txt2);}
+.ma-val{color:var(--txt1);font-size:.68rem;text-align:right;max-width:55%;}
+.ma-val.cyan{color:var(--cyan);}
+.ma-val.amber{color:var(--amber);}
+.ma-val.teal{color:var(--teal);}
+.ma-val.violet{color:var(--violet);}
+
+/* ── PRUNING FLOW ── */
+.prune-steps{
+  display:flex;flex-direction:column;gap:.4rem;margin:2rem 0;
+}
+.prune-step{
+  display:flex;align-items:flex-start;gap:1.5rem;
+  padding:1.2rem 1.5rem;
+  border:1px solid var(--border);border-radius:3px;
+  background:var(--glass);
+  transition:all .3s;position:relative;overflow:hidden;
+}
+.prune-step:hover{border-color:rgba(0,212,255,.25);background:rgba(0,212,255,.05);}
+.prune-step::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+}
+.ps-1::before{background:var(--violet);}
+.ps-2::before{background:var(--cyan);}
+.ps-3::before{background:var(--teal);}
+.ps-4::before{background:var(--amber);}
+.ps-5::before{background:var(--green);}
+.ps-6::before{background:var(--coral);}
+.prune-num{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;
+  opacity:.25;flex-shrink:0;line-height:1;margin-top:.1rem;
+}
+.prune-content{}
+.prune-title{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.82rem;
+  margin-bottom:.4rem;
+}
+.ps-1 .prune-title{color:var(--violet);}
+.ps-2 .prune-title{color:var(--cyan);}
+.ps-3 .prune-title{color:var(--teal);}
+.ps-4 .prune-title{color:var(--amber);}
+.ps-5 .prune-title{color:var(--green);}
+.ps-6 .prune-title{color:var(--coral);}
+.prune-body{font-size:.76rem;color:var(--txt2);line-height:1.75;}
+.prune-badge{
+  margin-left:auto;flex-shrink:0;align-self:center;
+  font-family:'Syne',sans-serif;font-size:.65rem;font-weight:700;
+  padding:.3rem .7rem;border-radius:2px;
+}
+
+/* ── INDEX TYPES GRID ── */
+.idx-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:2rem 0;
+}
+.idx-card{
+  border:1px solid var(--border);border-radius:3px;
+  background:rgba(13,58,82,.4);
+  overflow:hidden;
+  transition:all .3s;
+}
+.idx-card:hover{border-color:rgba(0,212,255,.3);transform:translateY(-2px);}
+.idx-head{
+  padding:1rem 1.4rem;
+  font-family:'Syne',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.06em;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:.7rem;
+}
+.idx-body{padding:1.2rem 1.4rem;}
+.idx-body p{font-size:.78rem;color:var(--txt2);line-height:1.8;margin-bottom:.8rem;}
+.idx-body p:last-child{margin-bottom:0;}
+.idx-body strong{color:var(--txt1);}
+
+/* ── PUFFIN STATS ── */
+.puffin-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem;
+  margin:2rem 0;
+}
+.puffin-card{
+  padding:1.4rem;
+  border:1px solid var(--border);border-radius:3px;
+  background:var(--glass);
+  transition:all .3s;
+}
+.puffin-card:hover{border-color:rgba(167,139,250,.3);}
+.puffin-name{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.75rem;
+  color:var(--violet);margin-bottom:.5rem;letter-spacing:.06em;
+}
+.puffin-desc{font-size:.73rem;color:var(--txt2);line-height:1.7;}
+.puffin-usage{
+  margin-top:.7rem;font-size:.65rem;color:var(--txt3);
+  padding:.3rem .6rem;
+  background:rgba(167,139,250,.06);
+  border-left:2px solid rgba(167,139,250,.3);
+}
+
+/* ── Z-ORDER VISUAL ── */
+.zorder-visual{
+  display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin:2rem 0;
+}
+.zo-panel{
+  padding:1.5rem;border:1px solid var(--border);border-radius:3px;
+}
+.zo-title{
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.72rem;
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:1rem;
+}
+.zo-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
+  margin-bottom:1rem;
+}
+.zo-cell{
+  aspect-ratio:1;border-radius:1px;display:flex;align-items:center;justify-content:center;
+  font-size:.55rem;font-weight:600;color:rgba(0,0,0,.7);
+  transition:all .3s;cursor:default;
+}
+.zo-cell:hover{transform:scale(1.1);z-index:10;position:relative;}
+.zo-note{font-size:.68rem;color:var(--txt3);line-height:1.6;}
+
+/* ── COMPACTION DIAGRAM ── */
+.compact-flow{
+  display:flex;align-items:center;gap:1rem;
+  overflow-x:auto;padding:1.5rem;
+  background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:3px;
+  margin:1.5rem 0;
+}
+.cf-group{display:flex;flex-direction:column;gap:.4rem;min-width:fit-content;}
+.cf-label{
+  font-family:'Syne',sans-serif;font-size:.6rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;
+}
+.cf-file{
+  padding:.35rem .8rem;border-radius:2px;
+  font-size:.62rem;border:1px solid;white-space:nowrap;
+}
+.cf-arrow{
+  font-size:1.5rem;color:var(--txt3);flex-shrink:0;
+  font-family:'Syne',sans-serif;
+}
+.cf-small{border-color:rgba(255,107,107,.3);color:var(--coral);background:rgba(255,107,107,.05);}
+.cf-big{border-color:rgba(74,222,128,.3);color:var(--green);background:rgba(74,222,128,.05);}
+
+/* ── SPEC V1 V2 V3 TABLE ── */
+.spec-table{
+  width:100%;border-collapse:collapse;font-size:.78rem;margin:2rem 0;
+}
+.spec-table th{
+  font-family:'Syne',sans-serif;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
+  padding:1rem 1.2rem;text-align:left;border-bottom:1px solid var(--border);
+}
+.spec-table th:nth-child(2){color:var(--txt3);}
+.spec-table th:nth-child(3){color:var(--amber);}
+.spec-table th:nth-child(4){color:var(--cyan);}
+.spec-table td{
+  padding:.8rem 1.2rem;border-bottom:1px solid rgba(0,212,255,.05);color:var(--txt2);
+}
+.spec-table td:first-child{color:var(--txt1);}
+.spec-table tr:hover td{background:rgba(0,212,255,.025);}
+.y{color:var(--teal);}
+.n{color:var(--coral);opacity:.6;}
+.p{color:var(--amber);font-size:.7rem;}
+
+/* ── BIG STATS ── */
+.big-stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin:2.5rem 0;
+}
+.bs{
+  padding:1.4rem;text-align:center;
+  border:1px solid var(--border);border-radius:3px;background:var(--glass);
+  transition:all .3s;
+}
+.bs:hover{border-color:rgba(0,212,255,.3);transform:translateY(-2px);}
+.bs-val{
+  font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:var(--cyan);
+}
+.bs-lbl{font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--txt3);margin-top:.3rem;}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .pt-grid{grid-template-columns:1fr;}
+  .manifest-anatomy{grid-template-columns:1fr;}
+  .idx-grid{grid-template-columns:1fr;}
+  .puffin-grid{grid-template-columns:1fr;}
+  .zorder-visual{grid-template-columns:1fr;}
+  .big-stats{grid-template-columns:repeat(2,1fr);}
+  nav{padding:.9rem 1.2rem;}
+  .nav-pills{display:none;}
+  .wrap{padding:4rem 1.5rem;}
+}
+
+/* scrollbar */
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="mesh"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Iceberg <span>Internals</span></div>
+  <div class="nav-pills">
+    <a class="nav-pill" href="#filesystem">File Layout</a>
+    <a class="nav-pill" href="#partition">Partitioning</a>
+    <a class="nav-pill" href="#bucketing">Bucketing</a>
+    <a class="nav-pill" href="#sorting">Sorting</a>
+    <a class="nav-pill" href="#metadata">Metadata</a>
+    <a class="nav-pill" href="#indexing">Indexing</a>
+    <a class="nav-pill" href="#pruning">Pruning</a>
+    <a class="nav-pill" href="#compaction">Compaction</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid-bg"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-eyebrow">Deep Dive · Data Organization · Spec v1–v3</div>
+  <h1 class="hero-title">
+    How Iceberg<br>
+    <span class="italic">organizes</span> <span class="accent">data</span>
+  </h1>
+  <p class="hero-sub">A complete technical reference to file layout, partitioning, bucketing, sorting, metadata architecture, indexing strategies, and query pruning mechanics</p>
+  <div class="hero-chips">
+    <span class="chip">File System Layout</span>
+    <span class="chip">Partition Transforms</span>
+    <span class="chip">Bucket Partitioning</span>
+    <span class="chip">Sort Orders</span>
+    <span class="chip">Manifest Architecture</span>
+    <span class="chip">Column Statistics</span>
+    <span class="chip">Bloom Filters (Puffin)</span>
+    <span class="chip">Z-Order Clustering</span>
+    <span class="chip">File Pruning</span>
+    <span class="chip">Compaction</span>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 1. FILE SYSTEM LAYOUT ════════════════ -->
+<section id="filesystem" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 01 — Physical Layout</div>
+    <h2 class="sh-title">How Iceberg <em>organizes files</em> on disk</h2>
+    <p class="sh-desc">Every Iceberg table is a directory on object storage with a strict, well-defined layout. Understanding this layout is the foundation for everything else — partitioning, metadata, pruning.</p>
+  </div>
+
+  <div class="file-tree rv">
+    <div class="ft-root">s3://warehouse/database/table_name/</div>
+    <div class="ft-dir">├── metadata/ <span class="ft-note">← ALL metadata lives here</span></div>
+    <div class="ft-dir-sub">├── v1.metadata.json <span class="ft-note">← table creation snapshot</span></div>
+    <div class="ft-dir-sub">├── v2.metadata.json <span class="ft-note">← after first write</span></div>
+    <div class="ft-dir-sub">├── v3.metadata.json <span class="ft-note">← current (pointed by catalog)</span></div>
+    <div class="ft-dir-sub">├── snap-8120-1-abc123.avro <span class="ft-note">← manifest list (old snapshot)</span></div>
+    <div class="ft-dir-sub">├── snap-9012-1-def456.avro <span class="ft-note">← manifest list (current snapshot)</span></div>
+    <div class="ft-dir-sub">├── a1b2c3d4-m0.avro <span class="ft-note">← manifest file (data file list + stats)</span></div>
+    <div class="ft-dir-sub">├── e5f6a7b8-m0.avro <span class="ft-note">← manifest file</span></div>
+    <div class="ft-dir-sub">└── stats/ <span class="ft-note">← Puffin statistics blobs (v2+)</span></div>
+    <div class="ft-file-sub">└── 00001-stats.puffin <span class="ft-note">← Bloom filters, NDV sketches</span></div>
+    <div class="ft-dir">└── data/ <span class="ft-note">← ALL actual data files live here</span></div>
+    <div class="ft-dir-sub">├── region=APAC/ <span class="ft-note">← partition directory (optional, hidden to queries)</span></div>
+    <div class="ft-file">├── 00001-0-abcd-00000.parquet <span class="ft-note">← data file</span></div>
+    <div class="ft-file">└── 00001-0-abcd-00001.parquet</div>
+    <div class="ft-dir-sub">├── region=EMEA/</div>
+    <div class="ft-file">└── 00002-0-efgh-00000.parquet</div>
+    <div class="ft-dir-sub">└── region=AMER/</div>
+    <div class="ft-file">└── 00003-0-ijkl-00000.parquet</div>
+  </div>
+
+  <div class="hl rv">
+    <strong>Key insight:</strong> The directory structure under <code>data/</code> is an implementation detail — Iceberg never scans directories. It reads file paths from manifest files. The partition directories exist for compatibility but are completely irrelevant to query planning. This is why partition evolution works: paths don't encode the partition scheme.
+  </div>
+
+  <div class="big-stats rv">
+    <div class="bs"><div class="bs-val">3</div><div class="bs-lbl">file types in metadata/</div></div>
+    <div class="bs"><div class="bs-val">Avro</div><div class="bs-lbl">manifest format</div></div>
+    <div class="bs"><div class="bs-val">JSON</div><div class="bs-lbl">table metadata format</div></div>
+    <div class="bs"><div class="bs-val">Puffin</div><div class="bs-lbl">stats blob format</div></div>
+  </div>
+
+  <!-- Data file naming -->
+  <div class="sh rv" style="margin-top:2rem">
+    <div class="sh-eye">File Naming Convention</div>
+    <h3 class="sh-title" style="font-size:1.4rem">Data file <em>naming anatomy</em></h3>
+  </div>
+
+  <div class="card rv" style="font-size:.78rem;line-height:2.2;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:.85rem;color:var(--amber);margin-bottom:1rem;">
+      00001 - 0 - a4b8c2d1e5f6a7b8c9d0e1f2a3b4c5d6 - 00000 .parquet
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;font-size:.72rem;">
+      <div>
+        <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;">Task ID</div>
+        <div style="color:var(--txt2);">Writer task number within the job (00001). Used for deduplication detection.</div>
+      </div>
+      <div>
+        <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;">Attempt</div>
+        <div style="color:var(--txt2);">Task attempt number (0). If the task retries, produces 1, 2... Iceberg uses this to deduplicate partial retries.</div>
+      </div>
+      <div>
+        <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;">UUID</div>
+        <div style="color:var(--txt2);">Random UUID for global uniqueness. Prevents collisions even across multiple concurrent jobs writing to the same table.</div>
+      </div>
+      <div>
+        <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;">File Number</div>
+        <div style="color:var(--txt2);">Sequential within a single task. One task may produce multiple files if it exceeds target size.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 2. PARTITION TRANSFORMS ════════════════ -->
+<section id="partition" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 02 — Partitioning</div>
+    <h2 class="sh-title">Partition <em>transforms</em> — the full spec</h2>
+    <p class="sh-desc">Iceberg doesn't store raw column values as partition keys. It applies <strong>transform functions</strong> that produce derived partition values. This is what enables hidden partitioning and safe evolution.</p>
+  </div>
+
+  <div class="pt-grid rv">
+    <div class="pt-card">
+      <div class="pt-name">IDENTITY</div>
+      <div class="pt-sig">identity(col)</div>
+      <div class="pt-desc">Uses the raw column value as the partition value. Equivalent to Hive-style partitioning. Best for low-cardinality columns like <code>region</code>, <code>status</code>, <code>country</code>.</div>
+      <div class="pt-example">identity(region) → "APAC", "EMEA", "AMER"</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">BUCKET</div>
+      <div class="pt-sig">bucket(N, col)</div>
+      <div class="pt-desc">Hashes column value using Murmur3 hash, then MOD N to produce bucket 0..N-1. Best for high-cardinality IDs (user_id, order_id). Ensures even distribution. Joins on bucketed columns can be co-located.</div>
+      <div class="pt-example">bucket(16, user_id) → 0..15</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">TRUNCATE</div>
+      <div class="pt-sig">truncate(W, col)</div>
+      <div class="pt-desc">Truncates a string or integer to width W. Strings: takes first W characters. Integers: rounds down to nearest multiple of W. Good for prefix-based partitioning.</div>
+      <div class="pt-example">truncate(3, "abcdef") → "abc"<br>truncate(100, 1234) → 1200</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">YEAR</div>
+      <div class="pt-sig">year(ts_col)</div>
+      <div class="pt-desc">Extracts the year from a timestamp or date column. Returns an integer representing years since 1970. Ideal for long-term archival data rarely queried at fine granularity.</div>
+      <div class="pt-example">year(2024-03-15) → 54 (years since epoch)</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">MONTH</div>
+      <div class="pt-sig">month(ts_col)</div>
+      <div class="pt-desc">Extracts year+month as an integer (months since epoch). Most common temporal partitioning choice — balances partition count with granularity for daily/hourly data.</div>
+      <div class="pt-example">month(2024-03-15) → 2024-03 partition</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">DAY / HOUR</div>
+      <div class="pt-sig">days(ts) / hours(ts)</div>
+      <div class="pt-desc"><code>days()</code> for daily partitions. <code>hours()</code> for hourly — used in near-real-time streaming pipelines where data arrives and is queried at hour granularity.</div>
+      <div class="pt-example">hours(2024-03-15T14:30Z) → 2024-03-15-14</div>
+    </div>
+    <div class="pt-card">
+      <div class="pt-name">VOID</div>
+      <div class="pt-sig">void(col)</div>
+      <div class="pt-desc">Always produces NULL. Used during partition evolution to "deactivate" a partition field without removing it from the spec. Old writes retain old partition values; new writes go to NULL partition.</div>
+      <div class="pt-example">Used in partition evolution transitions only</div>
+    </div>
+  </div>
+
+  <!-- Multi-dimensional partitioning -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Multi-dimensional Partitioning</div>
+    <h3 class="sh-title" style="font-size:1.4rem">Combining multiple <em>transforms</em></h3>
+  </div>
+
+  <div class="code rv" data-lang="SQL — Partition Spec">
+<span class="cmt">-- E-commerce events table: partition by time + region + user bucket</span>
+<span class="kw">CREATE TABLE</span> prod.events.user_actions (
+  event_id    <span class="ty">BIGINT</span>,
+  user_id     <span class="ty">BIGINT</span>,
+  session_id  <span class="ty">STRING</span>,
+  event_ts    <span class="ty">TIMESTAMP</span>,
+  event_type  <span class="ty">STRING</span>,
+  region      <span class="ty">STRING</span>,
+  amount      <span class="ty">DOUBLE</span>
+) <span class="kw">USING</span> iceberg
+<span class="kw">PARTITIONED BY</span> (
+  <span class="fn">hours</span>(event_ts),    <span class="cmt">-- time dimension: ~24 partitions/day</span>
+  identity(region),    <span class="cmt">-- region dimension: ~5 partitions</span>
+  <span class="fn">bucket</span>(<span class="num">32</span>, user_id) <span class="cmt">-- user dimension: 32 buckets, enables join pruning</span>
+);
+<span class="cmt">-- Total partitions: 24 * 5 * 32 = 3,840 partitions/day</span>
+<span class="cmt">-- Query: WHERE event_ts='2024-01-15 14:xx' AND region='APAC' AND user_id=12345</span>
+<span class="cmt">-- Iceberg prunes to exactly 1 partition out of 3,840 — without user specifying partition cols</span>
+  </div>
+
+  <!-- Partition evolution example -->
+  <div class="hl hl-amber rv">
+    <strong>Partition Evolution in action:</strong> Your table starts partitioned by <code>months(event_ts)</code>. Traffic grows 10x and monthly partitions become too large. You run <code>ALTER TABLE REPLACE PARTITION FIELD months(event_ts) WITH hours(event_ts)</code>. Iceberg assigns new files to the new hourly spec. Old Parquet files stay untouched under the old monthly spec. Queries work across both — Iceberg knows which spec each file belongs to via the manifest file's <code>spec-id</code> field.
+  </div>
+
+  <div class="json-viewer rv">
+    <span class="jo">{</span><br>
+    &nbsp;&nbsp;<span class="jk">"partition-specs"</span><span class="jo">: [</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jo">{</span> <span class="jk">"spec-id"</span><span class="jo">:</span> <span class="jn">0</span><span class="jo">,</span> <span class="jk">"fields"</span><span class="jo">: [</span> <span class="jo">{</span><span class="jk">"name"</span><span class="jo">:</span><span class="js">"event_ts_month"</span><span class="jo">,</span> <span class="jk">"transform"</span><span class="jo">:</span><span class="js">"month"</span><span class="jo">,</span> <span class="jk">"source-id"</span><span class="jo">:</span><span class="jn">4</span><span class="jo">}]}</span><span class="cmt"> ← OLD spec</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jo">{</span> <span class="jk">"spec-id"</span><span class="jo">:</span> <span class="jn">1</span><span class="jo">,</span> <span class="jk">"fields"</span><span class="jo">: [</span> <span class="jo">{</span><span class="jk">"name"</span><span class="jo">:</span><span class="js">"event_ts_hour"</span><span class="jo">,</span> <span class="jk">"transform"</span><span class="jo">:</span><span class="js">"hour"</span><span class="jo">,</span> <span class="jk">"source-id"</span><span class="jo">:</span><span class="jn">4</span><span class="jo">}]}</span><span class="cmt"> ← NEW spec (current)</span><br>
+    &nbsp;&nbsp;<span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"default-spec-id"</span><span class="jo">:</span> <span class="jn">1</span><span class="cmt"> ← new writes use spec-id 1</span><br>
+    <span class="jo">}</span>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 3. BUCKETING DEEP DIVE ════════════════ -->
+<section id="bucketing" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 03 — Bucketing</div>
+    <h2 class="sh-title">Bucket partitioning — <em>the deep mechanics</em></h2>
+    <p class="sh-desc">Buckets are the most powerful and misunderstood feature of Iceberg partitioning. They enable even data distribution, eliminate data skew, and unlock co-located joins — all based on deterministic Murmur3 hashing.</p>
+  </div>
+
+  <!-- Hash Algorithm -->
+  <div class="sh rv" style="margin-top:0">
+    <div class="sh-eye">Hash Algorithm</div>
+    <h3 class="sh-title" style="font-size:1.3rem">Murmur3 <em>hash function</em></h3>
+  </div>
+
+  <div class="card rv">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+      <div>
+        <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:.08em;margin-bottom:.8rem;">HASH ALGORITHM</div>
+        <p style="font-size:.78rem;color:var(--txt2);line-height:1.8;">Iceberg uses <strong style="color:var(--txt1)">Murmur3 hash (32-bit)</strong> applied to the column's canonical binary representation. The result is taken modulo N to assign a bucket number 0..N-1.</p>
+        <p style="font-size:.78rem;color:var(--txt2);line-height:1.8;margin-top:.6rem;">The hash is computed on the <strong style="color:var(--txt1)">type-specific binary encoding</strong> — not the string representation — ensuring consistent bucket assignment across all engines (Spark, Trino, Flink all produce the same bucket for the same value).</p>
+      </div>
+      <div>
+        <div style="color:var(--amber);font-family:'Syne',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:.08em;margin-bottom:.8rem;">TYPE ENCODINGS</div>
+        <div style="font-size:.72rem;color:var(--txt2);line-height:2;">
+          <div><span style="color:var(--cyan)">INT / LONG</span> → little-endian 4/8 bytes</div>
+          <div><span style="color:var(--cyan)">FLOAT / DOUBLE</span> → IEEE 754 binary representation</div>
+          <div><span style="color:var(--cyan)">STRING</span> → UTF-8 bytes</div>
+          <div><span style="color:var(--cyan)">UUID</span> → 16 bytes, big-endian</div>
+          <div><span style="color:var(--cyan)">DATE</span> → days since 1970-01-01 as INT32</div>
+          <div><span style="color:var(--cyan)">TIMESTAMP</span> → microseconds since epoch as INT64</div>
+          <div><span style="color:var(--cyan)">DECIMAL</span> → unscaled value as big-endian bytes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code rv" data-lang="Bucket Computation — Pseudocode">
+<span class="cmt">// Iceberg bucket assignment — exact spec implementation</span>
+<span class="kw">function</span> <span class="fn">assign_bucket</span>(value, n_buckets, column_type):
+  bytes = <span class="fn">to_canonical_bytes</span>(value, column_type)  <span class="cmt">// type-specific encoding</span>
+  hash  = <span class="fn">murmur3_x86_32</span>(bytes, seed=<span class="num">0</span>)           <span class="cmt">// Murmur3 with seed=0</span>
+
+  <span class="cmt">// CRITICAL: use unsigned modulo, then take absolute value</span>
+  <span class="cmt">// This prevents negative bucket numbers from negative hash values</span>
+  bucket = (hash <span class="kw">and</span> Integer.MAX_VALUE) % n_buckets   <span class="cmt">// always 0..N-1</span>
+  <span class="kw">return</span> bucket
+
+<span class="cmt">// Example: bucket(16, user_id) for user_id=12345</span>
+bytes  = <span class="fn">little_endian_8</span>(<span class="num">12345</span>)   <span class="cmt">// → b'\x39\x30\x00\x00\x00\x00\x00\x00'</span>
+hash   = <span class="fn">murmur3_x86_32</span>(bytes)     <span class="cmt">// → 1277776311 (example)</span>
+bucket = <span class="num">1277776311</span> % <span class="num">16</span>           <span class="cmt">// → 7</span>
+<span class="cmt">// user_id=12345 always lands in bucket 7 (deterministic, engine-independent)</span>
+  </div>
+
+  <!-- Bucket distribution visual -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Distribution</div>
+    <h3 class="sh-title" style="font-size:1.3rem"><code>bucket(8, user_id)</code> — <em>data distribution</em></h3>
+  </div>
+
+  <div class="bucket-row rv">
+    <div class="bucket">
+      <div class="bucket-head">Bucket 0</div>
+      <div class="bucket-row-item">user_id=1001 <span class="bucket-id">h→2931</span></div>
+      <div class="bucket-row-item">user_id=2345 <span class="bucket-id">h→9847</span></div>
+      <div class="bucket-row-item">user_id=8812 <span class="bucket-id">h→4123</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 1</div>
+      <div class="bucket-row-item">user_id=5533 <span class="bucket-id">h→6531</span></div>
+      <div class="bucket-row-item">user_id=9901 <span class="bucket-id">h→1111</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 2</div>
+      <div class="bucket-row-item">user_id=7720 <span class="bucket-id">h→8823</span></div>
+      <div class="bucket-row-item">user_id=3341 <span class="bucket-id">h→5551</span></div>
+      <div class="bucket-row-item">user_id=4412 <span class="bucket-id">h→2200</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 3</div>
+      <div class="bucket-row-item">user_id=6612 <span class="bucket-id">h→7734</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 4</div>
+      <div class="bucket-row-item">user_id=1220 <span class="bucket-id">h→3345</span></div>
+      <div class="bucket-row-item">user_id=8001 <span class="bucket-id">h→9009</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 5</div>
+      <div class="bucket-row-item">user_id=2210 <span class="bucket-id">h→6643</span></div>
+      <div class="bucket-row-item">user_id=9923 <span class="bucket-id">h→4412</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 6</div>
+      <div class="bucket-row-item">user_id=4400 <span class="bucket-id">h→2211</span></div>
+      <div class="bucket-row-item">user_id=5521 <span class="bucket-id">h→8871</span></div>
+      <div class="bucket-row-item">user_id=7731 <span class="bucket-id">h→1098</span></div>
+    </div>
+    <div class="bucket">
+      <div class="bucket-head">Bucket 7</div>
+      <div class="bucket-row-item">user_id=12345 <span class="bucket-id">h→1277</span></div>
+      <div class="bucket-row-item">user_id=9001 <span class="bucket-id">h→5532</span></div>
+    </div>
+  </div>
+
+  <!-- Bucket join optimization -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Join Optimization</div>
+    <h3 class="sh-title" style="font-size:1.3rem">Bucket joins — <em>co-location magic</em></h3>
+  </div>
+
+  <div class="hl hl-teal rv">
+    <strong>Bucket join optimization:</strong> When two tables are both bucketed by the same column with the same N, or one is a multiple of the other, Spark/Trino can perform a <strong>bucket join</strong> — matching bucket 3 of table A with bucket 3 of table B, eliminating the full shuffle. This is one of the biggest performance wins in Iceberg for repeated large joins.
+  </div>
+
+  <div class="code rv" data-lang="SQL — Bucket Join">
+<span class="cmt">-- Both tables bucketed by user_id with same N=32</span>
+<span class="cmt">-- Iceberg + Spark can perform co-located join (no shuffle!)</span>
+<span class="kw">CREATE TABLE</span> events  <span class="kw">PARTITIONED BY</span> (<span class="fn">bucket</span>(<span class="num">32</span>, user_id));
+<span class="kw">CREATE TABLE</span> users   <span class="kw">PARTITIONED BY</span> (<span class="fn">bucket</span>(<span class="num">32</span>, user_id));
+
+<span class="cmt">-- This join reads bucket_0_of_events JOIN bucket_0_of_users locally,</span>
+<span class="cmt">-- bucket_1_of_events JOIN bucket_1_of_users locally, etc.</span>
+<span class="cmt">-- No cross-machine data movement needed (full shuffle avoided)</span>
+<span class="kw">SELECT</span> e.*, u.name, u.tier
+<span class="kw">FROM</span> events e
+<span class="kw">JOIN</span> users u <span class="kw">ON</span> e.user_id = u.user_id
+<span class="kw">WHERE</span> e.event_ts >= <span class="str">'2024-01-01'</span>;
+<span class="cmt">-- Execution: 32 local joins in parallel, zero network bytes for join keys</span>
+  </div>
+
+  <!-- How many buckets? -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Sizing Guide</div>
+    <h3 class="sh-title" style="font-size:1.3rem">Choosing <em>bucket count N</em></h3>
+  </div>
+
+  <div class="card rv">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;font-size:.78rem;">
+      <div>
+        <div style="color:var(--coral);font-family:'Syne',sans-serif;font-weight:700;font-size:.72rem;letter-spacing:.08em;margin-bottom:.6rem;">TOO FEW BUCKETS</div>
+        <div style="color:var(--txt2);line-height:1.8;">Files grow too large per bucket. Slows down queries that must read a full bucket. Risk of hot partitions if load is uneven. Good range: ≥ total data size / target file size.</div>
+      </div>
+      <div>
+        <div style="color:var(--green);font-family:'Syne',sans-serif;font-weight:700;font-size:.72rem;letter-spacing:.08em;margin-bottom:.6rem;">SWEET SPOT</div>
+        <div style="color:var(--txt2);line-height:1.8;">Rule of thumb: <code style="color:var(--amber)">N = ceil(total_GB / 128)</code>. For a 10TB table: ~80 buckets. For 1TB: ~8 buckets. Align to powers of 2 for join co-location (2, 4, 8, 16, 32, 64...).</div>
+      </div>
+      <div>
+        <div style="color:var(--coral);font-family:'Syne',sans-serif;font-weight:700;font-size:.72rem;letter-spacing:.08em;margin-bottom:.6rem;">TOO MANY BUCKETS</div>
+        <div style="color:var(--txt2);line-height:1.8;">Creates tiny files that are expensive to list and open. Each file has Parquet footer overhead (~8KB). Compaction cost increases. Don't exceed 1 bucket per ~100MB of data.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 4. SORT ORDER ════════════════ -->
+<section id="sorting" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 04 — Sort Orders</div>
+    <h2 class="sh-title">Sort orders & <em>clustering</em></h2>
+    <p class="sh-desc">Iceberg maintains a <strong>sort order specification</strong> separate from the partition spec. Sorting determines how rows are physically ordered within each data file — which directly impacts column statistics quality and scan efficiency.</p>
+  </div>
+
+  <div class="code rv" data-lang="SQL — Sort Order Definition">
+<span class="cmt">-- Define table with explicit sort order</span>
+<span class="kw">CREATE TABLE</span> prod.events (
+  event_id  <span class="ty">BIGINT</span>,
+  user_id   <span class="ty">BIGINT</span>,
+  event_ts  <span class="ty">TIMESTAMP</span>,
+  region    <span class="ty">STRING</span>,
+  amount    <span class="ty">DOUBLE</span>
+) <span class="kw">USING</span> iceberg
+<span class="kw">PARTITIONED BY</span> (<span class="fn">months</span>(event_ts), identity(region))
+<span class="kw">TBLPROPERTIES</span> (
+  <span class="cmt">-- Sort within each partition by event_ts ASC, then user_id ASC</span>
+  <span class="str">'sort-order'</span> = <span class="str">'event_ts ASC NULLS LAST, user_id ASC NULLS LAST'</span>,
+  <span class="str">'write.distribution-mode'</span> = <span class="str">'hash'</span>,  <span class="cmt">-- hash-distribute then sort</span>
+  <span class="str">'write.wap.enabled'</span> = <span class="str">'true'</span>
+);
+
+<span class="cmt">-- Alternatively: define sort order explicitly (Spark)</span>
+<span class="kw">ALTER TABLE</span> prod.events <span class="kw">WRITE ORDERED BY</span> event_ts <span class="kw">ASC NULLS LAST</span>;
+  </div>
+
+  <table class="sort-table rv">
+    <thead>
+      <tr>
+        <th>Sort Key</th>
+        <th>Direction</th>
+        <th>NULLs</th>
+        <th>Transform</th>
+        <th>Benefit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="sort-key">event_ts</span></td>
+        <td><span class="sort-dir asc">ASC</span></td>
+        <td><span class="sort-dir nulls">LAST</span></td>
+        <td><span class="tag t-teal">identity</span></td>
+        <td>Time-range queries skip entire files via min/max stats</td>
+      </tr>
+      <tr>
+        <td><span class="sort-key">user_id</span></td>
+        <td><span class="sort-dir asc">ASC</span></td>
+        <td><span class="sort-dir nulls">LAST</span></td>
+        <td><span class="tag t-teal">identity</span></td>
+        <td>User-specific queries (after time filter) are contiguous in file</td>
+      </tr>
+      <tr>
+        <td><span class="sort-key">bucket(16, user_id)</span></td>
+        <td><span class="sort-dir asc">ASC</span></td>
+        <td><span class="sort-dir nulls">LAST</span></td>
+        <td><span class="tag t-amber">bucket</span></td>
+        <td>Co-locates same-bucket rows — combine with bucket partitioning</td>
+      </tr>
+      <tr>
+        <td><span class="sort-key">truncate(2, category)</span></td>
+        <td><span class="sort-dir asc">ASC</span></td>
+        <td><span class="sort-dir nulls">FIRST</span></td>
+        <td><span class="tag t-violet">truncate</span></td>
+        <td>Groups similar category strings, improves string column stats</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Why sort order improves pruning -->
+  <div class="hl rv">
+    <strong>Why sort order is critical for pruning:</strong> Iceberg tracks min/max per column per file. If a file contains rows from all time ranges (random order), min/max spans the entire range — useless for pruning. If sorted by <code>event_ts</code>, each file's min/max covers a tight time window — 99% of files can be skipped for time-bounded queries. The sort order is stored in table metadata so engines can be aware of clustering and plan optimally.
+  </div>
+
+  <!-- Z-order -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Multi-dimensional Sort</div>
+    <h3 class="sh-title" style="font-size:1.3rem">Z-Order clustering — <em>2D locality</em></h3>
+  </div>
+
+  <div class="zorder-visual rv">
+    <div class="zo-panel">
+      <div class="zo-title" style="color:var(--coral);">❌ Sorted by user_id only</div>
+      <div class="zo-grid" id="linear-grid"></div>
+      <div class="zo-note">Files are sorted by user_id. Query on (user_id=X AND event_ts between A and B) finds user rows contiguous, but event_ts values are scattered across all files — can't prune on time.</div>
+    </div>
+    <div class="zo-panel">
+      <div class="zo-title" style="color:var(--green);">✓ Z-Order by (user_id, event_ts)</div>
+      <div class="zo-grid" id="zorder-grid"></div>
+      <div class="zo-note">Z-Order interleaves bits of both dimensions. Row locality for both user_id AND event_ts within the same file — queries on either dimension (or both) benefit from file pruning.</div>
+    </div>
+  </div>
+
+  <div class="code rv" data-lang="Spark — Z-Order Compaction">
+<span class="kw">import</span> org.apache.iceberg.spark.actions.SparkActions
+
+<span class="cmt">// Z-order compaction: rewrite files with Z-order clustering</span>
+SparkActions.<span class="fn">get</span>(spark)
+  .<span class="fn">rewriteDataFiles</span>(table)
+  .<span class="fn">strategy</span>(
+    SparkActions.<span class="fn">get</span>(spark)
+      .<span class="fn">rewriteDataFiles</span>(table)
+      .<span class="fn">zOrder</span>(<span class="str">"user_id"</span>, <span class="str">"event_ts"</span>)  <span class="cmt">// Z-order on 2 columns</span>
+  )
+  .<span class="fn">option</span>(<span class="str">"target-file-size-bytes"</span>, <span class="str">"536870912"</span>) <span class="cmt">// 512MB target</span>
+  .<span class="fn">option</span>(<span class="str">"min-file-size-bytes"</span>,    <span class="str">"268435456"</span>) <span class="cmt">// skip files >256MB</span>
+  .<span class="fn">execute</span>()
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 5. METADATA ARCHITECTURE ════════════════ -->
+<section id="metadata" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 05 — Metadata Architecture</div>
+    <h2 class="sh-title">The complete <em>metadata stack</em></h2>
+    <p class="sh-desc">Iceberg metadata is a 4-level hierarchy. Each level serves a specific purpose. Understanding each file type is essential for debugging, performance tuning, and building tooling on top of Iceberg.</p>
+  </div>
+
+  <!-- metadata.json anatomy -->
+  <div class="sh rv" style="margin-top:0">
+    <div class="sh-eye">Level 1</div>
+    <h3 class="sh-title" style="font-size:1.35rem">metadata.json — <em>the table definition</em></h3>
+  </div>
+
+  <div class="json-viewer rv">
+    <span class="jo">{</span><br>
+    &nbsp;&nbsp;<span class="jk">"format-version"</span><span class="jo">:</span> <span class="jn">2</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"table-uuid"</span><span class="jo">:</span> <span class="js">"9c12102f-7e93-4b71-aa35-b2123fe12cd4"</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"location"</span><span class="jo">:</span> <span class="js">"s3://warehouse/db/events"</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"last-sequence-number"</span><span class="jo">:</span> <span class="jn">412</span><span class="jo">,</span> <span class="cmt">// monotonically increasing, tracks operation order</span><br>
+    &nbsp;&nbsp;<span class="jk">"last-column-id"</span><span class="jo">:</span> <span class="jn">8</span><span class="jo">,</span> <span class="cmt">// max column ID assigned (IDs never reused!)</span><br>
+    &nbsp;&nbsp;<span class="jk">"current-schema-id"</span><span class="jo">:</span> <span class="jn">2</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"schemas"</span><span class="jo">: [</span> <span class="cmt">/* all historical schemas kept */</span> <span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"default-spec-id"</span><span class="jo">:</span> <span class="jn">1</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"partition-specs"</span><span class="jo">: [</span> <span class="cmt">/* all partition specs — never deleted */</span> <span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"default-sort-order-id"</span><span class="jo">:</span> <span class="jn">1</span><span class="jo">,</span><br>
+    &nbsp;&nbsp;<span class="jk">"sort-orders"</span><span class="jo">: [</span> <span class="cmt">/* sort order definitions */</span> <span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"current-snapshot-id"</span><span class="jo">:</span> <span class="jn">9012345678901234</span><span class="jo">,</span> <span class="cmt">// ← THIS is what makes a table "current"</span><br>
+    &nbsp;&nbsp;<span class="jk">"snapshots"</span><span class="jo">: [</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jo">{</span> <span class="jk">"snapshot-id"</span><span class="jo">:</span><span class="jn">8120..</span><span class="jo">,</span> <span class="jk">"manifest-list"</span><span class="jo">:</span><span class="js">"s3://.../snap-8120.avro"</span><span class="jo">,</span> <span class="jk">"parent-id"</span><span class="jo">:</span><span class="jn">7341..</span> <span class="jo">},</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jo">{</span> <span class="jk">"snapshot-id"</span><span class="jo">:</span><span class="jn">9012..</span><span class="jo">,</span> <span class="jk">"manifest-list"</span><span class="jo">:</span><span class="js">"s3://.../snap-9012.avro"</span><span class="jo">,</span> <span class="jk">"parent-id"</span><span class="jo">:</span><span class="jn">8120..</span> <span class="jo">}</span><br>
+    &nbsp;&nbsp;<span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"refs"</span><span class="jo">: {</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"main"</span><span class="jo">:</span> <span class="jo">{</span><span class="jk">"type"</span><span class="jo">:</span><span class="js">"branch"</span><span class="jo">,</span> <span class="jk">"snapshot-id"</span><span class="jo">:</span><span class="jn">9012..</span><span class="jo">},</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"ml_v3"</span><span class="jo">:</span> <span class="jo">{</span><span class="jk">"type"</span><span class="jo">:</span><span class="js">"tag"</span><span class="jo">,</span> <span class="jk">"snapshot-id"</span><span class="jo">:</span><span class="jn">8120..</span><span class="jo">}</span> <span class="cmt">// named tag</span><br>
+    &nbsp;&nbsp;<span class="jo">},</span><br>
+    &nbsp;&nbsp;<span class="jk">"statistics"</span><span class="jo">: [</span> <span class="cmt">/* Puffin file references */</span> <span class="jo">],</span><br>
+    &nbsp;&nbsp;<span class="jk">"properties"</span><span class="jo">: {</span> <span class="jk">"write.target-file-size-bytes"</span><span class="jo">:</span><span class="js">"536870912"</span> <span class="jo">}</span><br>
+    <span class="jo">}</span>
+  </div>
+
+  <!-- Manifest List vs Manifest File -->
+  <div class="sh rv" style="margin-top:1.5rem">
+    <div class="sh-eye">Levels 2 & 3</div>
+    <h3 class="sh-title" style="font-size:1.35rem">Manifest list & <em>manifest files</em></h3>
+  </div>
+
+  <div class="manifest-anatomy rv">
+    <div class="ma-panel">
+      <div class="ma-head ma-head-list">Manifest List (snap-9012.avro)</div>
+      <div class="ma-row"><div class="ma-key">manifest_path</div><div class="ma-val violet">s3://…/a1b2-m0.avro</div></div>
+      <div class="ma-row"><div class="ma-key">manifest_length</div><div class="ma-val amber">18291</div></div>
+      <div class="ma-row"><div class="ma-key">partition_spec_id</div><div class="ma-val cyan">1</div></div>
+      <div class="ma-row"><div class="ma-key">content</div><div class="ma-val teal">DATA (0)</div></div>
+      <div class="ma-row"><div class="ma-key">sequence_number</div><div class="ma-val">412</div></div>
+      <div class="ma-row"><div class="ma-key">added_snapshot_id</div><div class="ma-val">9012345…</div></div>
+      <div class="ma-row"><div class="ma-key">added_data_files_count</div><div class="ma-val cyan">24</div></div>
+      <div class="ma-row"><div class="ma-key">existing_data_files_count</div><div class="ma-val">3,841</div></div>
+      <div class="ma-row"><div class="ma-key">deleted_data_files_count</div><div class="ma-val">0</div></div>
+      <div class="ma-row"><div class="ma-key">partitions (summary)</div><div class="ma-val teal">region IN (APAC, EMEA)</div></div>
+      <div class="ma-row"><div class="ma-key">lower_bounds</div><div class="ma-val">event_ts ≥ 2024-01-15</div></div>
+      <div class="ma-row"><div class="ma-key">upper_bounds</div><div class="ma-val">event_ts ≤ 2024-01-15</div></div>
+    </div>
+    <div class="ma-panel">
+      <div class="ma-head ma-head-file">Manifest File (a1b2-m0.avro) — 1 row per data file</div>
+      <div class="ma-row"><div class="ma-key">status</div><div class="ma-val teal">ADDED (1)</div></div>
+      <div class="ma-row"><div class="ma-key">snapshot_id</div><div class="ma-val">9012345…</div></div>
+      <div class="ma-row"><div class="ma-key">data_sequence_number</div><div class="ma-val cyan">412</div></div>
+      <div class="ma-row"><div class="ma-key">file_path</div><div class="ma-val violet">s3://…/data/…/00001.parquet</div></div>
+      <div class="ma-row"><div class="ma-key">file_format</div><div class="ma-val amber">PARQUET</div></div>
+      <div class="ma-row"><div class="ma-key">partition</div><div class="ma-val">{month:2024-01, region:APAC}</div></div>
+      <div class="ma-row"><div class="ma-key">record_count</div><div class="ma-val cyan">2,412,881</div></div>
+      <div class="ma-row"><div class="ma-key">file_size_in_bytes</div><div class="ma-val amber">524,288,000</div></div>
+      <div class="ma-row"><div class="ma-key">column_sizes</div><div class="ma-val">{1:4MB, 2:8MB, 3:12MB…}</div></div>
+      <div class="ma-row"><div class="ma-key">value_counts</div><div class="ma-val">{1:2412881, 2:2412881…}</div></div>
+      <div class="ma-row"><div class="ma-key">null_value_counts</div><div class="ma-val">{1:0, 7:12}</div></div>
+      <div class="ma-row"><div class="ma-key">lower_bounds</div><div class="ma-val teal">{3: 2024-01-01 00:00:00}</div></div>
+      <div class="ma-row"><div class="ma-key">upper_bounds</div><div class="ma-val coral">{3: 2024-01-31 23:59:59}</div></div>
+    </div>
+  </div>
+
+  <div class="hl hl-violet rv">
+    <strong>The manifest list is the key to fast planning:</strong> It contains partition-level summaries per manifest. A planner reading the manifest list never needs to open manifest files for partitions that don't match. For a query on 1 day out of 3 years, Iceberg skips 99.9% of manifests by reading only the manifest list (a few KB), then reads only the matching manifest files for fine-grained file pruning.
+  </div>
+
+  <!-- Spec versions -->
+  <div class="sh rv" style="margin-top:1.5rem">
+    <div class="sh-eye">Format Versions</div>
+    <h3 class="sh-title" style="font-size:1.35rem">Spec v1 vs v2 vs <em>v3</em></h3>
+  </div>
+
+  <table class="spec-table rv">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th>Spec v1 (2018)</th>
+        <th>Spec v2 (2021)</th>
+        <th>Spec v3 (2024)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>ACID Transactions</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td><span class="y">✓</span></td></tr>
+      <tr><td>Row-level Deletes</td><td><span class="n">✗</span></td><td><span class="y">✓ Position + Equality</span></td><td><span class="y">✓ + DVs</span></td></tr>
+      <tr><td>Deletion Vectors (DVs)</td><td><span class="n">✗</span></td><td><span class="n">✗</span></td><td><span class="y">✓ (bitmap-based)</span></td></tr>
+      <tr><td>Row Lineage (sequence numbers)</td><td><span class="n">✗</span></td><td><span class="y">✓</span></td><td><span class="y">✓</span></td></tr>
+      <tr><td>Branches & Tags</td><td><span class="n">✗</span></td><td><span class="y">✓</span></td><td><span class="y">✓</span></td></tr>
+      <tr><td>Puffin Statistics</td><td><span class="n">✗</span></td><td><span class="p">⚠ Partial</span></td><td><span class="y">✓ Full (NDV, Bloom, etc.)</span></td></tr>
+      <tr><td>Multi-table Transactions</td><td><span class="n">✗</span></td><td><span class="n">✗</span></td><td><span class="y">✓ (catalog-level)</span></td></tr>
+      <tr><td>Variant Type (semi-structured)</td><td><span class="n">✗</span></td><td><span class="n">✗</span></td><td><span class="y">✓</span></td></tr>
+      <tr><td>Geometry / Geography types</td><td><span class="n">✗</span></td><td><span class="n">✗</span></td><td><span class="y">✓</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 6. INDEXING STRATEGIES ════════════════ -->
+<section id="indexing" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 06 — Indexing</div>
+    <h2 class="sh-title">Indexing strategies in <em>Iceberg</em></h2>
+    <p class="sh-desc">Iceberg doesn't have traditional database indexes. Instead, it builds a multi-layer system of statistics, bloom filters, and data layout optimizations that collectively act as a distributed index. Each layer adds another level of pruning power.</p>
+  </div>
+
+  <div class="idx-grid rv">
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--violet);">
+        <span style="font-size:1.2rem;">📐</span> Min/Max Column Statistics
+        <span class="tag t-violet" style="margin-left:auto;font-size:.58rem;">LEVEL 3</span>
+      </div>
+      <div class="idx-body">
+        <p>Every manifest entry (one per data file) stores <strong>lower_bounds</strong> and <strong>upper_bounds</strong> per column — the minimum and maximum value in that file for each column.</p>
+        <p>Stored as the column's native binary representation. During query planning, the planner checks: does the query predicate overlap with [min, max]? If not, skip the file — no S3 read required.</p>
+        <p><strong>Best for:</strong> Sorted or time-series columns (event_ts, date). Worst for high-cardinality unordered columns (UUID, random string IDs) where every file's range spans the full domain.</p>
+      </div>
+    </div>
+
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--amber);">
+        <span style="font-size:1.2rem;">🧮</span> Null / Value Counts
+        <span class="tag t-amber" style="margin-left:auto;font-size:.58rem;">LEVEL 3</span>
+      </div>
+      <div class="idx-body">
+        <p>Each manifest entry tracks <strong>value_counts</strong> (non-null rows), <strong>null_value_counts</strong>, and <strong>nan_value_counts</strong> per column per file.</p>
+        <p>Enables fast IS NULL / IS NOT NULL predicate pruning. Also feeds query optimizer cost estimates — knowing a column is 90% NULL in a file lets the planner avoid projecting that column.</p>
+        <p><strong>No extra cost:</strong> These stats are collected during the write path and stored inline in the manifest Avro record — zero additional overhead at read time.</p>
+      </div>
+    </div>
+
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--cyan);">
+        <span style="font-size:1.2rem;">🎯</span> Bloom Filters (Puffin)
+        <span class="tag t-cyan" style="margin-left:auto;font-size:.58rem;">LEVEL 3 — v2+</span>
+      </div>
+      <div class="idx-body">
+        <p>Bloom filters answer "does this file contain value X?" with zero false negatives and a configurable false positive rate (default ~1%). Stored in <strong>Puffin files</strong> — binary blobs referenced from table statistics.</p>
+        <p>Critical for <strong>point lookups and IN-list queries</strong> on high-cardinality columns where min/max is useless (e.g., WHERE user_id = 12345 — every file has user IDs from 1 to 100M, so min/max doesn't help).</p>
+        <p><strong>Storage cost:</strong> ~1.2MB per 10M rows per column at 1% FPR. Worth it for frequently filtered high-cardinality columns like user_id, device_id, session_id.</p>
+      </div>
+    </div>
+
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--teal);">
+        <span style="font-size:1.2rem;">📊</span> NDV Sketches (Puffin)
+        <span class="tag t-teal" style="margin-left:auto;font-size:.58rem;">LEVEL 3 — v3</span>
+      </div>
+      <div class="idx-body">
+        <p>Near-Distinct-Value (NDV) estimates using <strong>Apache DataSketches HLL sketches</strong>. Stored in Puffin blobs. Gives the query optimizer an accurate estimate of how many distinct values a column has — without a full scan.</p>
+        <p>Powers cost-based optimizer decisions: join order selection, hash vs sort-merge join choice, broadcast join threshold. Without NDV, optimizers must guess — leading to bad plans on skewed data.</p>
+        <p><strong>Automatic maintenance:</strong> Iceberg's analyze table command refreshes NDV sketches. Can be scheduled as a lightweight background job.</p>
+      </div>
+    </div>
+
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--green);">
+        <span style="font-size:1.2rem;">🗺️</span> Partition-level Pruning
+        <span class="tag t-green" style="margin-left:auto;font-size:.58rem;">LEVEL 2</span>
+      </div>
+      <div class="idx-body">
+        <p>The manifest list stores partition-level summary statistics for each manifest file. Before even reading individual manifest files, the planner eliminates entire manifests based on partition ranges.</p>
+        <p>This is <strong>two-level pruning</strong>: first eliminate manifests (manifest list → small read), then eliminate files within surviving manifests (manifest file → medium read), then eliminate row groups inside Parquet files (Parquet statistics → no extra read).</p>
+        <p><strong>Cascade effect:</strong> A query targeting 1 day of data in a 10-year table eliminates 3,649 days of manifests from the manifest list read alone — before touching a single manifest file.</p>
+      </div>
+    </div>
+
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--coral);">
+        <span style="font-size:1.2rem;">📦</span> Parquet Row Group Stats
+        <span class="tag t-coral" style="margin-left:auto;font-size:.58rem;">LEVEL 4 — In-file</span>
+      </div>
+      <div class="idx-body">
+        <p>Inside each Parquet file, row groups (128MB chunks) carry their own column statistics: min, max, null count, and distinct count. Parquet page-level statistics go even deeper.</p>
+        <p>Iceberg's pruning pipeline doesn't stop at files — after determining which files to read, the Parquet reader itself skips row groups that can't satisfy predicates. This is <strong>in-file index pruning</strong>.</p>
+        <p><strong>Column indexes (Parquet v2):</strong> Page-level statistics and offset indexes enable skipping individual pages within a row group. Combined with Iceberg's sort order (which clusters rows), this achieves near-index performance.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Puffin file format -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Puffin File Format</div>
+    <h3 class="sh-title" style="font-size:1.35rem">Puffin — <em>statistics blob storage</em></h3>
+  </div>
+
+  <div class="hl hl-violet rv">
+    <strong>What is Puffin?</strong> Puffin is Iceberg's binary file format for storing extended statistics that don't fit in Avro manifest records. Named after the puffin bird (compact, self-contained). Each Puffin file contains a list of "blobs" — arbitrary byte sequences with a type tag. Blob types include <code>apache-datasketches-theta-v1</code> (NDV), <code>apache-datasketches-hll-v1</code> (HLL), and <code>apache-iceberg-flink-1.12-stats-v1</code> (Bloom filters).
+  </div>
+
+  <div class="puffin-grid rv">
+    <div class="puffin-card">
+      <div class="puffin-name">Theta Sketch (NDV)</div>
+      <div class="puffin-desc">Apache DataSketches Theta sketch for near-distinct-value estimation. Mergeable — multiple task outputs can be combined. Typical size: 2–8KB per column.</div>
+      <div class="puffin-usage">Use: COUNT DISTINCT optimization, join cost estimation</div>
+    </div>
+    <div class="puffin-card">
+      <div class="puffin-name">HLL++ Sketch</div>
+      <div class="puffin-desc">HyperLogLog++ for cardinality estimation. More space-efficient than Theta for very high cardinality. Sub-1% error rate at 4KB size.</div>
+      <div class="puffin-usage">Use: High-cardinality columns (device IDs, user IDs, UUIDs)</div>
+    </div>
+    <div class="puffin-card">
+      <div class="puffin-name">Bloom Filter</div>
+      <div class="puffin-desc">Split-block Bloom filter (Parquet-compatible format). Per-file, per-column. Enables O(1) membership test: "does this file have user_id=X?"</div>
+      <div class="puffin-usage">Use: Point lookups, IN list queries, foreign key joins</div>
+    </div>
+  </div>
+
+  <div class="code rv" data-lang="SQL — Enable Bloom Filters">
+<span class="cmt">-- Enable Bloom filters for specific columns</span>
+<span class="kw">ALTER TABLE</span> prod.events
+<span class="kw">SET TBLPROPERTIES</span> (
+  <span class="cmt">-- Write Bloom filters for high-cardinality lookup columns</span>
+  <span class="str">'write.parquet.bloom-filter-enabled.column.user_id'</span>    = <span class="str">'true'</span>,
+  <span class="str">'write.parquet.bloom-filter-enabled.column.session_id'</span>  = <span class="str">'true'</span>,
+  <span class="str">'write.parquet.bloom-filter-enabled.column.device_id'</span>   = <span class="str">'true'</span>,
+
+  <span class="cmt">-- False positive probability (lower = larger filter)</span>
+  <span class="str">'write.parquet.bloom-filter-max-bytes'</span> = <span class="str">'1048576'</span>,  <span class="cmt">-- 1MB max per column</span>
+
+  <span class="cmt">-- Collect NDV statistics for optimizer</span>
+  <span class="str">'write.parquet.statistics.enabled'</span> = <span class="str">'true'</span>
+);
+
+<span class="cmt">-- Refresh table statistics (updates Puffin blobs)</span>
+<span class="kw">ANALYZE TABLE</span> prod.events <span class="kw">COMPUTE STATISTICS FOR ALL COLUMNS</span>;
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 7. PRUNING PIPELINE ════════════════ -->
+<section id="pruning" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 07 — Query Pruning</div>
+    <h2 class="sh-title">The complete <em>pruning pipeline</em></h2>
+    <p class="sh-desc">When a query hits an Iceberg table, it goes through a 6-stage pruning cascade. Each stage eliminates data at a different granularity — from entire manifests down to individual Parquet pages. Understanding this pipeline explains why Iceberg can achieve 99%+ skip ratios.</p>
+  </div>
+
+  <div class="prune-steps rv">
+    <div class="prune-step ps-1">
+      <div class="prune-num">01</div>
+      <div class="prune-content">
+        <div class="prune-title">Catalog Resolution (nanoseconds)</div>
+        <div class="prune-body">Query engine calls the catalog (Glue, Nessie, Hive Metastore) to get the current metadata.json path. Reads metadata.json (~10KB JSON) to identify current snapshot ID and manifest list path. No data files are touched.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(167,139,250,.1);color:var(--violet);border:1px solid rgba(167,139,250,.2);">~1 HTTP call</div>
+    </div>
+    <div class="prune-step ps-2">
+      <div class="prune-num">02</div>
+      <div class="prune-content">
+        <div class="prune-title">Manifest List Scan — Partition Elimination (milliseconds)</div>
+        <div class="prune-body">Reads the manifest list Avro file (one record per manifest). Each record contains partition summary stats. Planners evaluate predicates against partition ranges: if a manifest's partition range can't intersect the query's WHERE clause, skip the entire manifest. For a 3-year table queried on today: skips ~1,095 manifests by reading a single file of ~100KB.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(0,212,255,.1);color:var(--cyan);border:1px solid rgba(0,212,255,.2);">Eliminates 90–99%</div>
+    </div>
+    <div class="prune-step ps-3">
+      <div class="prune-num">03</div>
+      <div class="prune-content">
+        <div class="prune-title">Bloom Filter Check — Point Lookup Acceleration (milliseconds)</div>
+        <div class="prune-body">For point lookup predicates (WHERE user_id = X), Iceberg loads Puffin-stored Bloom filters for surviving manifests. For each data file referenced in a manifest, queries the Bloom filter: "does this file contain user_id=12345?" — answer is NO (certain skip) or MAYBE (must read). Eliminates files that definitely don't contain the target value. Typical skip: 90–99% for uniform hash distributions.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(0,184,160,.1);color:var(--teal);border:1px solid rgba(0,184,160,.2);">O(1) per file</div>
+    </div>
+    <div class="prune-step ps-4">
+      <div class="prune-num">04</div>
+      <div class="prune-content">
+        <div class="prune-title">Manifest File Scan — Column-level File Pruning (milliseconds)</div>
+        <div class="prune-body">Reads surviving manifest Avro files (one record per data file). Uses per-file lower_bounds / upper_bounds per column to apply range predicates. If a predicate is event_ts BETWEEN A AND B, files where upper_bound &lt; A or lower_bound &gt; B are skipped. This is especially powerful for sorted tables — files contain tight time windows with non-overlapping ranges.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(245,166,35,.1);color:var(--amber);border:1px solid rgba(245,166,35,.2);">Eliminates 80–99%</div>
+    </div>
+    <div class="prune-step ps-5">
+      <div class="prune-num">05</div>
+      <div class="prune-content">
+        <div class="prune-title">Parquet Row Group Pruning (file open cost)</div>
+        <div class="prune-body">For surviving Parquet files, the Parquet reader checks row group statistics (min/max per column per row group, stored in the Parquet footer). Row groups that can't satisfy predicates are skipped without reading their pages. A 512MB Parquet file typically has 4–8 row groups of 64–128MB. Row group pruning can reduce actual bytes read to 10–25% of the file.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.2);">Row group level</div>
+    </div>
+    <div class="prune-step ps-6">
+      <div class="prune-num">06</div>
+      <div class="prune-content">
+        <div class="prune-title">Parquet Page-level + Column Projection (I/O reduction)</div>
+        <div class="prune-body">Within a surviving row group, Parquet's column index and offset index (v2 spec) enable skipping individual data pages. Additionally, column projection ensures only requested columns are read from object storage — Parquet's columnar layout means SELECTing 5 of 50 columns reads only 10% of the file bytes. Together, these reduce actual S3 bytes read to sometimes &lt;1% of total table size.</div>
+      </div>
+      <div class="prune-badge" style="background:rgba(255,107,107,.1);color:var(--coral);border:1px solid rgba(255,107,107,.2);">Page level</div>
+    </div>
+  </div>
+
+  <div class="hl rv">
+    <strong>Cumulative skip ratio:</strong> On a well-organized Iceberg table (partitioned + sorted + bloom filters), a targeted query (specific time range + specific user) can skip <strong>99.9%+ of total data</strong> across all 6 levels before touching a single Parquet row. The remaining reads are then served from OS page cache or S3 intelligent tiering — further reducing effective latency.
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ════════════════ 8. COMPACTION ════════════════ -->
+<section id="compaction" class="wrap">
+  <div class="sh rv">
+    <div class="sh-eye">Section 08 — Compaction & Maintenance</div>
+    <h2 class="sh-title">Compaction — <em>keeping data healthy</em></h2>
+    <p class="sh-desc">Streaming writes and frequent small batch jobs produce many small files. Small files destroy pruning efficiency (many manifest entries to check), waste S3 list overhead, and slow Parquet reads. Compaction is the maintenance operation that rebalances file sizes and improves layout.</p>
+  </div>
+
+  <!-- Small file problem visual -->
+  <div class="compact-flow rv">
+    <div class="cf-group">
+      <div class="cf-label" style="color:var(--coral);">⚠ Before Compaction (streaming)</div>
+      <div class="cf-file cf-small">part-0001.parquet (2MB)</div>
+      <div class="cf-file cf-small">part-0002.parquet (1MB)</div>
+      <div class="cf-file cf-small">part-0003.parquet (3MB)</div>
+      <div class="cf-file cf-small">part-0004.parquet (2MB)</div>
+      <div class="cf-file cf-small">part-0005.parquet (1MB)</div>
+      <div class="cf-file cf-small">part-0006.parquet (4MB)</div>
+      <div class="cf-file cf-small">part-0007.parquet (2MB)</div>
+      <div class="cf-file cf-small">part-0008.parquet (1MB)</div>
+    </div>
+    <div class="cf-arrow">→</div>
+    <div class="cf-group">
+      <div class="cf-label" style="color:var(--teal);">Bin-pack compaction</div>
+      <div style="font-size:.7rem;color:var(--txt3);margin-bottom:.5rem;">Groups files to fill target size</div>
+      <div style="font-size:.68rem;color:var(--txt2);line-height:1.8;">
+        Target: 512MB<br>
+        [2+1+3+2+1+4+2+1=16MB]<br>
+        → 1 output file
+      </div>
+    </div>
+    <div class="cf-arrow">→</div>
+    <div class="cf-group">
+      <div class="cf-label" style="color:var(--green);">✓ After Compaction</div>
+      <div class="cf-file cf-big">part-0001-compacted.parquet (16MB)</div>
+      <div style="font-size:.65rem;color:var(--txt3);margin-top:.5rem;">
+        8 files → 1 file<br>
+        8 manifest entries → 1 entry<br>
+        Better min/max range coverage<br>
+        Faster listing, faster planning
+      </div>
+    </div>
+  </div>
+
+  <!-- Compaction strategies -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Strategies</div>
+    <h3 class="sh-title" style="font-size:1.35rem">Compaction <em>strategies</em></h3>
+  </div>
+
+  <div class="idx-grid rv">
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--cyan);">
+        <span style="font-size:1.1rem;">📦</span> Bin-Packing
+      </div>
+      <div class="idx-body">
+        <p><strong>Default strategy.</strong> Groups small files together until they fill the target file size (~512MB). Uses a bin-packing algorithm to minimize file count while hitting target size.</p>
+        <p>Does NOT change the sort order of rows within or across files. Simply concatenates content. Best for tables that are already well-sorted or where you just need to reduce file count after streaming ingestion.</p>
+        <p><strong>Trigger:</strong> Schedule every 1–6 hours for streaming tables. Run on partitions older than 1 hour (recent partitions are still actively written).</p>
+      </div>
+    </div>
+    <div class="idx-card">
+      <div class="idx-head" style="color:var(--amber);">
+        <span style="font-size:1.1rem;">🔀</span> Sort + Rewrite
+      </div>
+      <div class="idx-body">
+        <p><strong>Most powerful for query performance.</strong> Reads all files in a partition, sorts all rows by the table's sort order, then writes out optimally-sized files. This maximizes min/max pruning effectiveness.</p>
+        <p>Cost: significantly more compute than bin-packing (full sort of all rows). Best run daily or weekly on hot partitions where read performance matters most.</p>
+        <p><strong>Combine with Z-Order</strong> for multi-dimensional locality: <code>rewriteDataFiles.zOrder("user_id", "event_ts")</code> applies Z-curve ordering across both dimensions.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="code rv" data-lang="Spark — Complete Maintenance Job">
+<span class="kw">import</span> org.apache.iceberg.spark.actions.SparkActions
+<span class="kw">import</span> org.apache.iceberg.expressions.Expressions
+
+<span class="kw">val</span> table = catalog.<span class="fn">loadTable</span>(TableIdentifier.<span class="fn">of</span>(<span class="str">"prod"</span>, <span class="str">"events"</span>))
+<span class="kw">val</span> actions = SparkActions.<span class="fn">get</span>(spark)
+
+<span class="cmt">// ─── STEP 1: Compact small files (bin-pack, 512MB target) ───────────────</span>
+actions.<span class="fn">rewriteDataFiles</span>(table)
+  .<span class="fn">option</span>(<span class="str">"target-file-size-bytes"</span>, <span class="str">"536870912"</span>)      <span class="cmt">// 512MB</span>
+  .<span class="fn">option</span>(<span class="str">"min-file-size-bytes"</span>,    <span class="str">"134217728"</span>)      <span class="cmt">// skip files >128MB</span>
+  .<span class="fn">option</span>(<span class="str">"max-file-group-size-bytes"</span>, <span class="str">"10737418240"</span>)  <span class="cmt">// 10GB max per group</span>
+  .<span class="fn">option</span>(<span class="str">"partial-progress.enabled"</span>, <span class="str">"true"</span>)          <span class="cmt">// commit partial progress</span>
+  .<span class="fn">filter</span>(Expressions.<span class="fn">lessThan</span>(<span class="str">"event_ts"</span>, <span class="fn">ninetyMinutesAgo</span>()))
+  .<span class="fn">execute</span>()
+
+<span class="cmt">// ─── STEP 2: Sort-rewrite hot partitions for optimal pruning ────────────</span>
+actions.<span class="fn">rewriteDataFiles</span>(table)
+  .<span class="fn">zOrder</span>(<span class="str">"user_id"</span>, <span class="str">"event_ts"</span>)  <span class="cmt">// Z-order on 2 most-queried cols</span>
+  .<span class="fn">option</span>(<span class="str">"target-file-size-bytes"</span>, <span class="str">"536870912"</span>)
+  .<span class="fn">filter</span>(Expressions.<span class="fn">and</span>(
+    Expressions.<span class="fn">greaterThanOrEqual</span>(<span class="str">"event_ts"</span>, <span class="fn">sevenDaysAgo</span>()),
+    Expressions.<span class="fn">lessThan</span>(<span class="str">"event_ts"</span>, <span class="fn">yesterday</span>())
+  ))
+  .<span class="fn">execute</span>()
+
+<span class="cmt">// ─── STEP 3: Rewrite manifests (reduce manifest file count) ─────────────</span>
+actions.<span class="fn">rewriteManifests</span>(table)
+  .<span class="fn">option</span>(<span class="str">"min-manifests-count-to-merge"</span>, <span class="str">"10"</span>)
+  .<span class="fn">option</span>(<span class="str">"target-manifest-file-size-bytes"</span>, <span class="str">"8388608"</span>) <span class="cmt">// 8MB</span>
+  .<span class="fn">execute</span>()
+
+<span class="cmt">// ─── STEP 4: Expire old snapshots (retain 7 days) ───────────────────────</span>
+actions.<span class="fn">expireSnapshots</span>(table)
+  .<span class="fn">expireOlderThan</span>(<span class="fn">sevenDaysAgo</span>())
+  .<span class="fn">retainLast</span>(<span class="num">100</span>)                 <span class="cmt">// always keep at least 100 snapshots</span>
+  .<span class="fn">cleanExpiredFiles</span>(<span class="kw">true</span>)          <span class="cmt">// delete unreferenced data files</span>
+  .<span class="fn">execute</span>()
+
+<span class="cmt">// ─── STEP 5: Remove orphan files (safety cleanup) ───────────────────────</span>
+actions.<span class="fn">deleteOrphanFiles</span>(table)
+  .<span class="fn">olderThan</span>(<span class="fn">threeDaysAgo</span>())        <span class="cmt">// safety buffer: in-flight writes may take time</span>
+  .<span class="fn">execute</span>()
+  </div>
+
+  <!-- Merge-on-Read vs Copy-on-Write -->
+  <div class="sh rv" style="margin-top:1rem">
+    <div class="sh-eye">Delete Modes</div>
+    <h3 class="sh-title" style="font-size:1.35rem">Copy-on-Write vs <em>Merge-on-Read</em></h3>
+  </div>
+
+  <div class="manifest-anatomy rv">
+    <div class="ma-panel">
+      <div class="ma-head" style="background:rgba(0,212,255,.08);color:var(--cyan);">Copy-on-Write (COW)</div>
+      <div class="ma-row"><div class="ma-key">On DELETE/UPDATE</div><div class="ma-val cyan">Rewrites entire affected files</div></div>
+      <div class="ma-row"><div class="ma-key">Write amplification</div><div class="ma-val coral">High (full file rewrite)</div></div>
+      <div class="ma-row"><div class="ma-key">Read overhead</div><div class="ma-val teal">Zero (no delete files)</div></div>
+      <div class="ma-row"><div class="ma-key">Compaction needed</div><div class="ma-val teal">Less often</div></div>
+      <div class="ma-row"><div class="ma-key">Best for</div><div class="ma-val">Read-heavy, infrequent updates</div></div>
+      <div class="ma-row"><div class="ma-key">Use case</div><div class="ma-val">Batch ETL, daily corrections</div></div>
+    </div>
+    <div class="ma-panel">
+      <div class="ma-head" style="background:rgba(245,166,35,.08);color:var(--amber);">Merge-on-Read (MOR)</div>
+      <div class="ma-row"><div class="ma-key">On DELETE/UPDATE</div><div class="ma-val teal">Writes small delete files</div></div>
+      <div class="ma-row"><div class="ma-key">Write amplification</div><div class="ma-val teal">Low (append delete file)</div></div>
+      <div class="ma-row"><div class="ma-key">Read overhead</div><div class="ma-val amber">Merge delete files at scan time</div></div>
+      <div class="ma-row"><div class="ma-key">Compaction needed</div><div class="ma-val amber">Regularly (clean delete files)</div></div>
+      <div class="ma-row"><div class="ma-key">Best for</div><div class="ma-val">Write-heavy, CDC, streaming</div></div>
+      <div class="ma-row"><div class="ma-key">Use case</div><div class="ma-val">CDC pipelines, GDPR deletes</div></div>
+    </div>
+  </div>
+
+  <div class="hl hl-amber rv">
+    <strong>Deletion Vectors (Spec v3):</strong> Iceberg v3 introduces Deletion Vectors (DVs) — a bitmap-based delete format borrowed from Apache Hudi and Delta Lake. A DV is a roaring bitmap stored in a Puffin blob that marks which row positions in a data file are deleted. DVs are more space-efficient than position-delete files and don't require sorting. On read, the engine applies the bitmap mask to skip deleted rows — no full merge required. Expected 2–10x reduction in delete overhead for CDC workloads.
+  </div>
+
+</section>
+
+<div class="divider"></div>
+
+<!-- FOOTER -->
+<footer style="border-top:1px solid var(--border);padding:3rem 2.5rem;text-align:center;font-size:.72rem;color:var(--txt3);letter-spacing:.05em;">
+  <div style="max-width:600px;margin:0 auto;">
+    <div style="color:var(--cyan);font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;letter-spacing:.1em;margin-bottom:.8rem;">APACHE ICEBERG — DATA ORGANIZATION DEEP DIVE</div>
+    <div>Covers Iceberg Format Spec v1–v3 · Parquet, ORC, Avro data files · Murmur3 bucketing · Manifest architecture · Puffin statistics · Z-Order clustering</div>
+    <div style="margin-top:.8rem;">
+      <span style="color:var(--cyan)">iceberg.apache.org/spec</span> &nbsp;·&nbsp; <span style="color:var(--cyan)">github.com/apache/iceberg</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── SCROLL REVEAL ──
+const rvEls = document.querySelectorAll('.rv');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('on'); });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+rvEls.forEach(el => obs.observe(el));
+
+// ── STAGGER CHILDREN ──
+document.querySelectorAll('.pt-grid, .idx-grid, .puffin-grid, .big-stats, .manifest-anatomy').forEach(grid => {
+  Array.from(grid.children).forEach((child, i) => {
+    child.style.transitionDelay = `${i * 0.07}s`;
+  });
+});
+
+document.querySelectorAll('.prune-step').forEach((el, i) => {
+  el.style.transitionDelay = `${i * 0.06}s`;
+});
+
+// ── Z-ORDER VISUAL ──
+function generateLinearGrid() {
+  const grid = document.getElementById('linear-grid');
+  const colors = ['#ff6b6b','#ff8c42','#ffd166','#06d6a0','#118ab2','#073b4c','#6a4c93','#1982c4'];
+  for(let i=0;i<16;i++){
+    const cell = document.createElement('div');
+    cell.className = 'zo-cell';
+    const row = Math.floor(i/4); // user_id dimension
+    const col = i % 4; // event_ts dimension
+    // In linear sort (by user_id), each row has same color
+    const c = colors[row % 8];
+    cell.style.background = c;
+    cell.style.opacity = 0.4 + (col * 0.15);
+    cell.title = `u=${row} t=${col}`;
+    grid.appendChild(cell);
+  }
+}
+
+function generateZOrderGrid() {
+  const grid = document.getElementById('zorder-grid');
+  // Z-order index: interleave bits of row and col
+  function zIndex(row, col) {
+    let r = 0;
+    for(let b=0;b<4;b++){
+      r |= ((row >> b) & 1) << (2*b+1);
+      r |= ((col >> b) & 1) << (2*b);
+    }
+    return r;
+  }
+  const colors = [
+    '#ff6b6b','#ff8c42','#ffd166','#06d6a0',
+    '#118ab2','#6a4c93','#1982c4','#2dc653',
+    '#e63946','#a8dadc','#457b9d','#1d3557',
+    '#f4a261','#e76f51','#264653','#2a9d8f'
+  ];
+  const cells = new Array(16);
+  for(let row=0;row<4;row++){
+    for(let col=0;col<4;col++){
+      const z = zIndex(row, col);
+      const cell = document.createElement('div');
+      cell.className = 'zo-cell';
+      cell.style.background = colors[z % colors.length];
+      cell.style.opacity = 0.75;
+      cell.title = `u=${row} t=${col} z=${z}`;
+      cells[z] = cell;
+    }
+  }
+  cells.forEach(c => grid.appendChild(c));
+}
+
+generateLinearGrid();
+generateZOrderGrid();
+</script>
+</body>
+</html>

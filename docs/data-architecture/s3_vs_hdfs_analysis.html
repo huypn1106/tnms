@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>S3 vs HDFS — Big Data Storage Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --border: #e3eaf5;
+    --text-primary: #1a2236;
+    --text-secondary: #4a5568;
+    --text-muted: #8a97ab;
+
+    --blue: #3b82f6;
+    --blue-soft: #dbeafe;
+    --blue-mid: #93c5fd;
+
+    --orange: #f97316;
+    --orange-soft: #ffedd5;
+    --orange-mid: #fdba74;
+
+    --purple: #8b5cf6;
+    --purple-soft: #ede9fe;
+    --purple-mid: #c4b5fd;
+
+    --green: #22c55e;
+    --green-soft: #dcfce7;
+    --green-mid: #86efac;
+
+    --teal: #14b8a6;
+    --teal-soft: #ccfbf1;
+
+    --red: #ef4444;
+    --red-soft: #fee2e2;
+
+    --shadow-sm: 0 1px 4px rgba(30,50,90,0.06);
+    --shadow-md: 0 4px 16px rgba(30,50,90,0.09);
+    --shadow-lg: 0 8px 32px rgba(30,50,90,0.12);
+
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 17px;
+    line-height: 1.7;
+    padding-bottom: 80px;
+  }
+
+  /* ── HEADER ─────────────────────────────── */
+  header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1a2d50 60%, #0f2040 100%);
+    color: white;
+    padding: 64px 40px 56px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 30% 50%, rgba(59,130,246,0.18) 0%, transparent 60%),
+                radial-gradient(ellipse at 75% 30%, rgba(139,92,246,0.13) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  header .badge {
+    display: inline-block;
+    background: rgba(59,130,246,0.25);
+    border: 1px solid rgba(59,130,246,0.4);
+    color: #93c5fd;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 99px;
+    margin-bottom: 20px;
+  }
+  header h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    line-height: 1.15;
+    margin-bottom: 16px;
+  }
+  header h1 span.s3  { color: #fb923c; }
+  header h1 span.hdfs { color: #60a5fa; }
+  header p.subtitle {
+    font-size: 17px;
+    color: rgba(255,255,255,0.65);
+    max-width: 620px;
+    margin: 0 auto 32px;
+    font-weight: 400;
+  }
+  .header-meta {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+  }
+  .header-meta span { display: flex; align-items: center; gap: 6px; }
+  .header-meta .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* ── NAV ─────────────────────────────────── */
+  nav.toc {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 40px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    position: sticky; top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  nav.toc a {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 6px 13px;
+    border-radius: 99px;
+    border: 1px solid transparent;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  nav.toc a:hover {
+    background: var(--blue-soft);
+    color: var(--blue);
+    border-color: var(--blue-mid);
+  }
+
+  /* ── LAYOUT ──────────────────────────────── */
+  .container {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  section {
+    margin-top: 64px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  h2.section-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.7px;
+    margin-bottom: 28px;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+  h2.section-title .accent { color: var(--blue); }
+
+  /* ── CARDS ───────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.22s, transform 0.22s;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
+
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    nav.toc { padding: 12px 16px; }
+    header { padding: 48px 20px 40px; }
+    .container { padding: 0 16px; }
+  }
+
+  /* ── OVERVIEW CARDS ──────────────────────── */
+  .overview-card {
+    border-radius: var(--radius);
+    padding: 32px;
+    border: 1px solid;
+    transition: box-shadow 0.22s, transform 0.22s;
+  }
+  .overview-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+  .overview-card.s3  { background: linear-gradient(135deg,#fff8f4,#fff3e8); border-color: #fed7aa; }
+  .overview-card.hdfs { background: linear-gradient(135deg,#f0f7ff,#e8f0fe); border-color: #bfdbfe; }
+  .overview-card .oc-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; padding: 5px 12px;
+    border-radius: 99px; margin-bottom: 18px;
+  }
+  .s3  .oc-badge { background: var(--orange-soft); color: var(--orange); border: 1px solid var(--orange-mid); }
+  .hdfs .oc-badge { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-mid); }
+  .overview-card h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; }
+  .overview-card p  { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+  .oc-stats {
+    display: flex; gap: 24px; margin-top: 24px; flex-wrap: wrap;
+  }
+  .oc-stat { display: flex; flex-direction: column; gap: 2px; }
+  .oc-stat .val { font-size: 1.4rem; font-weight: 800; }
+  .oc-stat .lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+  .s3  .oc-stat .val { color: var(--orange); }
+  .hdfs .oc-stat .val { color: var(--blue); }
+
+  /* ── ARCH DIAGRAMS ───────────────────────── */
+  .arch-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.22s;
+  }
+  .arch-box:hover { box-shadow: var(--shadow-md); }
+  .arch-box h4 { font-size: 15px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+
+  .arch-layer {
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 10px;
+    transition: transform 0.18s;
+    cursor: default;
+  }
+  .arch-layer:hover { transform: translateX(4px); }
+  .arch-arrow { text-align: center; color: var(--text-muted); font-size: 18px; margin: 2px 0; }
+
+  /* ── FEATURE TABLE ───────────────────────── */
+  .feature-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 15px;
+  }
+  .feature-table th {
+    background: var(--bg);
+    padding: 13px 18px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+  }
+  .feature-table th:first-child { border-radius: 10px 0 0 0; }
+  .feature-table th:last-child  { border-radius: 0 10px 0 0; }
+  .feature-table td {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .feature-table tr:hover td { background: var(--bg); }
+  .feature-table td:first-child { font-weight: 600; color: var(--text-primary); font-size: 14px; }
+  .feature-table .tag {
+    display: inline-block; padding: 2px 9px; border-radius: 99px;
+    font-size: 12px; font-weight: 600; margin-right: 4px;
+  }
+  .tag-green  { background: var(--green-soft);  color: #15803d; }
+  .tag-orange { background: var(--orange-soft); color: #c2410c; }
+  .tag-blue   { background: var(--blue-soft);   color: #1d4ed8; }
+  .tag-purple { background: var(--purple-soft); color: #6d28d9; }
+  .tag-red    { background: var(--red-soft);    color: #b91c1c; }
+  .tag-teal   { background: var(--teal-soft);   color: #0f766e; }
+
+  /* ── PROS/CONS ───────────────────────────── */
+  .pros-cons {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 700px) { .pros-cons { grid-template-columns: 1fr; } }
+  .pc-block {
+    border-radius: var(--radius-sm);
+    padding: 18px 20px;
+  }
+  .pc-block.pros { background: var(--green-soft); border: 1px solid var(--green-mid); }
+  .pc-block.cons { background: var(--red-soft);   border: 1px solid #fca5a5; }
+  .pc-block h5 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .pc-block.pros h5 { color: #15803d; }
+  .pc-block.cons h5 { color: #b91c1c; }
+  .pc-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    font-size: 15px; color: var(--text-secondary);
+    margin-bottom: 10px; line-height: 1.55;
+  }
+  .pc-item:last-child { margin-bottom: 0; }
+  .pc-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
+
+  /* ── FRAMEWORK CARDS ─────────────────────── */
+  .fw-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.22s, transform 0.22s;
+  }
+  .fw-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .fw-card .fw-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+  .fw-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .fw-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .fw-card .fw-type { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .fw-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+  .fw-card .fw-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .fw-card .fw-tag {
+    font-size: 11px; font-weight: 600; padding: 3px 9px;
+    border-radius: 99px; border: 1px solid;
+  }
+
+  /* ── ECOSYSTEM ───────────────────────────── */
+  .eco-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.22s, transform 0.22s;
+  }
+  .eco-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .eco-card h4 { font-size: 15px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .eco-list { list-style: none; }
+  .eco-list li {
+    font-size: 14px; color: var(--text-secondary);
+    padding: 7px 0; border-bottom: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: flex-start; line-height: 1.55;
+  }
+  .eco-list li:last-child { border-bottom: none; }
+  .eco-list li .eco-name { font-weight: 600; color: var(--text-primary); min-width: 130px; flex-shrink: 0; font-size: 13px; }
+
+  /* ── DECISION MATRIX ─────────────────────── */
+  .decision-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+  }
+  @media (max-width: 700px) { .decision-grid { grid-template-columns: 1fr; } }
+  .decision-card {
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    border: 1px solid;
+    transition: box-shadow 0.22s, transform 0.22s;
+    cursor: default;
+  }
+  .decision-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .decision-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .decision-card p  { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+  .decision-card.use-s3   { background: #fff8f4; border-color: #fed7aa; }
+  .decision-card.use-hdfs { background: #eff6ff; border-color: #bfdbfe; }
+  .decision-card.use-s3   h4 { color: var(--orange); }
+  .decision-card.use-hdfs h4 { color: var(--blue); }
+
+  /* ── CODE BLOCK ──────────────────────────── */
+  .code-block {
+    background: #1e2d3d;
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #cdd9e5;
+    overflow-x: auto;
+    margin-top: 14px;
+    border: 1px solid #2d4a6a;
+  }
+  .code-block .kw  { color: #79c0ff; }
+  .code-block .str { color: #a5d6ff; }
+  .code-block .cm  { color: #6e8098; font-style: italic; }
+  .code-block .fn  { color: #d2a8ff; }
+  .code-block .num { color: #f8c555; }
+
+  /* ── PERF BARS ───────────────────────────── */
+  .perf-row { margin-bottom: 16px; }
+  .perf-row .perf-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .perf-bar-bg { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+  .perf-bar { height: 100%; border-radius: 99px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+
+  /* ── CALLOUT ─────────────────────────────── */
+  .callout {
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    display: flex; gap: 14px; align-items: flex-start;
+    margin-top: 18px;
+  }
+  .callout.info   { background: var(--blue-soft);   border-left: 4px solid var(--blue); }
+  .callout.warn   { background: var(--orange-soft); border-left: 4px solid var(--orange); }
+  .callout.tip    { background: var(--green-soft);  border-left: 4px solid var(--green); }
+  .callout.purple { background: var(--purple-soft); border-left: 4px solid var(--purple); }
+  .callout .co-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .callout p { font-size: 14.5px; color: var(--text-secondary); line-height: 1.65; }
+  .callout strong { color: var(--text-primary); }
+
+  /* ── SCORE WIDGET ────────────────────────── */
+  .score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 14px; }
+  .score-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px;
+    text-align: center; transition: box-shadow 0.18s, transform 0.18s;
+  }
+  .score-item:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .score-item .si-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .score-item .si-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .score-item .si-name { font-size: 12px; font-weight: 600; }
+  .score-item .si-val { font-size: 13px; font-weight: 800; }
+
+  /* ── DIVIDER ─────────────────────────────── */
+  .divider { height: 1px; background: var(--border); margin: 48px 0; }
+
+  /* ── FOOTER ──────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    margin-top: 64px;
+    background: var(--surface);
+  }
+
+  /* ── ANIMATE ─────────────────────────────── */
+  .fade-in {
+    opacity: 0; transform: translateY(16px);
+    animation: fadeUp 0.55s ease forwards;
+  }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+  .fd-1 { animation-delay: 0.05s; }
+  .fd-2 { animation-delay: 0.12s; }
+  .fd-3 { animation-delay: 0.19s; }
+  .fd-4 { animation-delay: 0.26s; }
+
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 99px;
+    font-size: 12px; font-weight: 600;
+  }
+
+  /* Scroll reveal */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ─── -->
+<header>
+  <div class="badge">📊 Big Data Architecture · PB-Scale Analysis</div>
+  <h1><span class="s3">Amazon S3</span> vs <span class="hdfs">Apache HDFS</span></h1>
+  <p class="subtitle">A comprehensive technical comparison for architects and engineers designing petabyte-scale data systems</p>
+  <div class="header-meta">
+    <span><span class="dot" style="background:#fb923c"></span> Object Storage</span>
+    <span><span class="dot" style="background:#60a5fa"></span> Distributed File System</span>
+    <span><span class="dot" style="background:#a78bfa"></span> Cloud-Native vs On-Premises</span>
+    <span><span class="dot" style="background:#4ade80"></span> Petabyte-Scale Systems</span>
+  </div>
+</header>
+
+<!-- ─── NAV ─── -->
+<nav class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#comparison">Feature Comparison</a>
+  <a href="#performance">Performance</a>
+  <a href="#strengths">Strengths & Weaknesses</a>
+  <a href="#frameworks">Frameworks</a>
+  <a href="#ecosystems">Ecosystems</a>
+  <a href="#decision">Decision Guide</a>
+  <a href="#patterns">Design Patterns</a>
+  <a href="#summary">Summary</a>
+</nav>
+
+<div class="container">
+
+<!-- ─── SECTION 1: OVERVIEW ─── -->
+<section id="overview">
+  <div class="section-label">Section 01</div>
+  <h2 class="section-title">System <span class="accent">Overview</span></h2>
+
+  <div class="grid-2 fade-in fd-1">
+    <div class="overview-card s3 reveal">
+      <div class="oc-badge">☁️ Amazon S3</div>
+      <h3>Simple Storage Service</h3>
+      <p>Amazon S3 is a massively scalable object storage service launched in 2006. It decouples compute from storage, enabling independent scaling of each. S3 stores data as flat objects with metadata, accessible via HTTP REST APIs. At petabyte scale, S3 becomes the backbone of nearly every cloud-native data lakehouse architecture, with durability guarantees of 99.999999999% (11 nines) achieved through automatic replication across ≥3 AZs.</p>
+      <div class="oc-stats">
+        <div class="oc-stat"><span class="val">∞</span><span class="lbl">Scale Ceiling</span></div>
+        <div class="oc-stat"><span class="val">11 9s</span><span class="lbl">Durability</span></div>
+        <div class="oc-stat"><span class="val">~200ms</span><span class="lbl">Typical Latency</span></div>
+        <div class="oc-stat"><span class="val">Pay-go</span><span class="lbl">Cost Model</span></div>
+      </div>
+    </div>
+
+    <div class="overview-card hdfs reveal">
+      <div class="oc-badge">🏗️ Apache HDFS</div>
+      <h3>Hadoop Distributed File System</h3>
+      <p>HDFS is the fault-tolerant, distributed file system at the core of the Hadoop ecosystem, designed in 2006 inspired by Google's GFS paper. It stores data in large blocks (128MB–256MB) distributed across DataNodes with a centralized NameNode for metadata. HDFS co-locates compute and storage (data locality), enabling high-throughput sequential reads ideal for large-scale batch processing workloads. It operates best in managed cluster environments.</p>
+      <div class="oc-stats">
+        <div class="oc-stat"><span class="val">10s PB</span><span class="lbl">Practical Scale</span></div>
+        <div class="oc-stat"><span class="val">3×</span><span class="lbl">Replication Factor</span></div>
+        <div class="oc-stat"><span class="val">~1ms</span><span class="lbl">Local Latency</span></div>
+        <div class="oc-stat"><span class="val">CapEx</span><span class="lbl">Cost Model</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info reveal" style="margin-top:24px">
+    <span class="co-icon">💡</span>
+    <p><strong>Context:</strong> At petabyte scale, the choice between S3 and HDFS is rarely binary. Modern architectures increasingly adopt a <strong>hybrid or lakehouse model</strong> — storing cold/warm data in S3 while using HDFS-compatible APIs (via EMR, Databricks, or open-source clusters) for hot compute-intensive workloads. The decision hinges on access patterns, cost structures, team capability, and cloud strategy.</p>
+  </div>
+</section>
+
+<!-- ─── SECTION 2: ARCHITECTURE ─── -->
+<section id="architecture">
+  <div class="section-label">Section 02</div>
+  <h2 class="section-title">Architectural <span class="accent">Deep Dive</span></h2>
+
+  <div class="grid-2">
+    <!-- S3 Architecture -->
+    <div class="arch-box reveal">
+      <h4>☁️ <span style="color:var(--orange)">S3 Architecture</span></h4>
+
+      <div class="arch-layer" style="background:#fff3e8;color:#c2410c;border:1px solid #fed7aa">
+        🌐 &nbsp;Client / Application Layer (SDK, REST API, S3 Select)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#fffbeb;color:#92400e;border:1px solid #fde68a">
+        🔐 &nbsp;IAM / Bucket Policies / ACLs / S3 Object Lock
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#fef3c7;color:#78350f;border:1px solid #fcd34d">
+        🗂️ &nbsp;Bucket + Prefix Namespace (Flat Object Model)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7">
+        💾 &nbsp;Distributed Object Store (AWS-managed, opaque)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe">
+        🔄 &nbsp;Cross-AZ Replication (≥3 zones automatically)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#f3e8ff;color:#6d28d9;border:1px solid #d8b4fe">
+        🧊 &nbsp;Tiering: S3 Standard → IA → Glacier → Deep Archive
+      </div>
+
+      <div class="callout warn" style="margin-top:16px">
+        <span class="co-icon">⚠️</span>
+        <p><strong>Key trait:</strong> Eventual consistency was the default until 2020. Since Dec 2020, S3 offers <strong>strong read-after-write consistency</strong> for all operations — a major architectural improvement for stream and incremental workloads.</p>
+      </div>
+    </div>
+
+    <!-- HDFS Architecture -->
+    <div class="arch-box reveal">
+      <h4>🏗️ <span style="color:var(--blue)">HDFS Architecture</span></h4>
+
+      <div class="arch-layer" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">
+        💻 &nbsp;Client Layer (HDFS Client, WebHDFS, HttpFS)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd">
+        🧠 &nbsp;NameNode (Master) — Metadata &amp; Namespace FSImage + EditLog
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#e0e7ff;color:#3730a3;border:1px solid #a5b4fc">
+        🔁 &nbsp;Secondary NameNode / Standby HA NameNode (ZKFC)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7">
+        🗃️ &nbsp;DataNodes — Block Storage (128MB/256MB blocks × 3 replicas)
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#f0fdf4;color:#166534;border:1px solid #86efac">
+        📡 &nbsp;Block Reports + Heartbeats (3s interval) → NameNode
+      </div>
+      <div class="arch-arrow">↓</div>
+      <div class="arch-layer" style="background:#fefce8;color:#713f12;border:1px solid #fde047">
+        ⚡ &nbsp;Data Locality Scheduler (Rack-aware pipeline writes)
+      </div>
+
+      <div class="callout info" style="margin-top:16px">
+        <span class="co-icon">🔑</span>
+        <p><strong>Key trait:</strong> The NameNode is a <strong>single point of metadata bottleneck</strong>. In large deployments, the in-memory metadata (~150 bytes/file) limits namespace to ~500M–1B files without HDFS Federation. HA NameNode (ZKFC + JournalNodes) mitigates SPOF but not the memory ceiling.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 3: FEATURE COMPARISON ─── -->
+<section id="comparison">
+  <div class="section-label">Section 03</div>
+  <h2 class="section-title">Feature-by-Feature <span class="accent">Comparison</span></h2>
+
+  <div class="card reveal" style="padding:0;overflow:hidden">
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th style="width:18%">Dimension</th>
+          <th style="width:38%">☁️ Amazon S3</th>
+          <th style="width:38%">🏗️ Apache HDFS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Storage Model</td>
+          <td><span class="tag tag-orange">Object Store</span> Flat key-value namespace; no real directories. Prefix-based hierarchy simulation. Objects up to 5TB each.</td>
+          <td><span class="tag tag-blue">Block Store</span> POSIX-like hierarchical file system. Files split into 128/256MB blocks distributed across DataNodes.</td>
+        </tr>
+        <tr>
+          <td>Scalability</td>
+          <td><span class="tag tag-green">Virtually Unlimited</span> No capacity ceiling. AWS manages sharding transparently. Scales to exabytes with zero operator effort.</td>
+          <td><span class="tag tag-orange">Bounded by NameNode</span> Memory-limited metadata (~150B/file). HDFS Federation partially alleviates this. Practical upper bound: ~1B files per NameNode.</td>
+        </tr>
+        <tr>
+          <td>Durability</td>
+          <td><span class="tag tag-green">99.999999999%</span> 11 nines. Auto-replication across ≥3 AZs. S3 One Zone-IA: 99.999999999% within single AZ.</td>
+          <td><span class="tag tag-blue">Configurable</span> Default 3× replication. Erasure Coding (EC) available (3+2 / 6+3). EC reduces storage overhead by ~50% vs triple replication.</td>
+        </tr>
+        <tr>
+          <td>Consistency</td>
+          <td><span class="tag tag-green">Strong (since 2020)</span> Strong read-after-write consistency for PUTs, DELETEs, and list operations on all objects.</td>
+          <td><span class="tag tag-green">Strong (POSIX-like)</span> Native strong consistency for all operations. HDFS leases provide exclusive write locks per file.</td>
+        </tr>
+        <tr>
+          <td>Latency</td>
+          <td><span class="tag tag-orange">Higher</span> ~100–500ms per GET (first byte). High TPS throughput compensates. S3 Express One Zone: ~10ms (newer).</td>
+          <td><span class="tag tag-green">Lower</span> Local reads: sub-millisecond to low-ms. Rack-local reads: 1–5ms. Network hop reads: 5–30ms. Ideal for shuffle-heavy jobs.</td>
+        </tr>
+        <tr>
+          <td>Throughput</td>
+          <td><span class="tag tag-green">Massive</span> Per-prefix: 5,500 GET/s, 3,500 PUT/s. Multiple prefixes multiply this. S3 Transfer Acceleration via CloudFront edge.</td>
+          <td><span class="tag tag-blue">High (sequential)</span> Optimized for sequential large-block reads (MapReduce, Spark). Random I/O is poor. DataNode bandwidth-bound.</td>
+        </tr>
+        <tr>
+          <td>Data Locality</td>
+          <td><span class="tag tag-red">None</span> Compute and storage are fully decoupled. Network I/O is always required. Mitigated by co-locating EC2/EMR in same AZ.</td>
+          <td><span class="tag tag-green">Native</span> Rack-aware scheduling. MapReduce/YARN schedules tasks on nodes holding data blocks. Reduces network I/O significantly.</td>
+        </tr>
+        <tr>
+          <td>Metadata Operations</td>
+          <td><span class="tag tag-orange">Slow</span> LIST is expensive and eventually consistent (up to 1000 keys/call). S3 Inventory + Athena recommended for large namespaces. No rename (copy+delete).</td>
+          <td><span class="tag tag-green">Fast</span> NameNode holds all metadata in memory. Rename/move is atomic O(1). HDFS supports snapshots natively.</td>
+        </tr>
+        <tr>
+          <td>ACID / Transactions</td>
+          <td><span class="tag tag-purple">Via Table Formats</span> Native S3 has no ACID. Delta Lake, Apache Iceberg, Apache Hudi add ACID on top with optimistic concurrency + transaction logs.</td>
+          <td><span class="tag tag-orange">Limited</span> File-level append-only. ACID requires table format layers (Iceberg, Hudi) just like S3. Hive ACID on ORC supported.</td>
+        </tr>
+        <tr>
+          <td>Security</td>
+          <td><span class="tag tag-green">Comprehensive</span> IAM, bucket policies, ACLs, KMS encryption at rest, SSE-S3/SSE-KMS/SSE-C, S3 Object Lock (WORM), Macie, VPC endpoints.</td>
+          <td><span class="tag tag-blue">Kerberos-based</span> Kerberos authentication, HDFS encryption zones (KMS), POSIX permissions, Ranger/Sentry for fine-grained policies.</td>
+        </tr>
+        <tr>
+          <td>Cost Structure</td>
+          <td><span class="tag tag-teal">OpEx / Pay-go</span> Storage: ~$0.023/GB-month (Standard). Egress expensive (~$0.09/GB). Requests billed. No upfront investment. Lifecycle policies automate tiering.</td>
+          <td><span class="tag tag-orange">CapEx Heavy</span> Large upfront hardware investment. Ongoing power, cooling, rack space, ops staff costs. 3× replication = 3× raw capacity needed. EC reduces this to ~1.5×.</td>
+        </tr>
+        <tr>
+          <td>Operational Burden</td>
+          <td><span class="tag tag-green">Minimal</span> Fully managed AWS service. No cluster to operate. Auto-scaling, patching, and availability handled. SLA 99.99% availability.</td>
+          <td><span class="tag tag-red">High</span> Requires dedicated ops team. NameNode HA, DataNode expansion, rebalancing, decommissioning, upgrades are non-trivial at PB scale.</td>
+        </tr>
+        <tr>
+          <td>Append / Streaming</td>
+          <td><span class="tag tag-orange">Limited</span> Multipart upload (MPU) for large objects. No true append semantics. Kinesis Firehose or MSK buffers streaming writes before S3 sink.</td>
+          <td><span class="tag tag-green">Native</span> Supports append (hflush/hsync). HBase WAL uses HDFS append. Kafka log segments on HDFS. Direct streaming write support.</td>
+        </tr>
+        <tr>
+          <td>Multi-Cloud / Portability</td>
+          <td><span class="tag tag-orange">Vendor Lock-in Risk</span> S3 API is de facto standard (GCS/Azure Blob have S3 compatibility). But native features (Glacier, Lambda triggers) are AWS-specific.</td>
+          <td><span class="tag tag-green">Open Source</span> Apache-licensed. Runs on any commodity hardware, any cloud (via EMR, HDInsight, Dataproc). No vendor lock-in.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─── SECTION 4: PERFORMANCE ─── -->
+<section id="performance">
+  <div class="section-label">Section 04</div>
+  <h2 class="section-title">Performance <span class="accent">Analysis</span></h2>
+
+  <div class="grid-2">
+    <div class="card reveal">
+      <h4 style="margin-bottom:20px;font-size:15px;font-weight:700">☁️ S3 — Relative Performance Scores</h4>
+
+      <div class="perf-row">
+        <div class="perf-header"><span>Sequential Read Throughput</span><span style="color:var(--orange)">85/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:85%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Random I/O</span><span style="color:var(--orange)">55/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:55%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Metadata Operations (LIST)</span><span style="color:var(--orange)">30/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:30%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Concurrent Access / TPS</span><span style="color:var(--orange)">95/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:95%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>First-Byte Latency</span><span style="color:var(--orange)">45/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:45%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Scalability Ceiling</span><span style="color:var(--orange)">100/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:100%;background:linear-gradient(90deg,#fb923c,#f97316)"></div></div>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <h4 style="margin-bottom:20px;font-size:15px;font-weight:700">🏗️ HDFS — Relative Performance Scores</h4>
+
+      <div class="perf-row">
+        <div class="perf-header"><span>Sequential Read Throughput</span><span style="color:var(--blue)">90/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Random I/O</span><span style="color:var(--blue)">40/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:40%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Metadata Operations</span><span style="color:var(--blue)">85/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:85%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Concurrent Access / TPS</span><span style="color:var(--blue)">65/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:65%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>First-Byte Latency</span><span style="color:var(--blue)">92/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:92%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+      <div class="perf-row">
+        <div class="perf-header"><span>Scalability Ceiling</span><span style="color:var(--blue)">70/100</span></div>
+        <div class="perf-bar-bg"><div class="perf-bar" style="width:70%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout purple reveal" style="margin-top:20px">
+    <span class="co-icon">📈</span>
+    <p><strong>PB-Scale Performance Note:</strong> At petabyte scale with 10,000+ concurrent Spark tasks, S3's aggregate throughput (5,500 GET/s per prefix × N prefixes) often exceeds HDFS total cluster bandwidth. However, S3 network egress costs and inter-request latency become dominant cost/latency factors. Solutions: S3 Express One Zone (~10ms latency), partition-aware prefix design, and intelligent tiering via S3 Intelligent-Tiering.</p>
+  </div>
+</section>
+
+<!-- ─── SECTION 5: STRENGTHS & WEAKNESSES ─── -->
+<section id="strengths">
+  <div class="section-label">Section 05</div>
+  <h2 class="section-title">Strengths &amp; <span class="accent">Weaknesses</span></h2>
+
+  <div style="margin-bottom:28px">
+    <h3 style="font-size:1.1rem;font-weight:700;color:var(--orange);margin-bottom:14px;display:flex;align-items:center;gap:8px">☁️ Amazon S3</h3>
+    <div class="pros-cons reveal">
+      <div class="pc-block pros">
+        <h5>✅ Strengths</h5>
+        <div class="pc-item"><span class="pc-icon">🚀</span><div><strong>Infinite horizontal scalability</strong> — No storage capacity planning. Grows seamlessly from GB to EB. AWS provisions capacity on demand, transparently.</div></div>
+        <div class="pc-item"><span class="pc-icon">💰</span><div><strong>OpEx economics at scale</strong> — Zero capital expenditure. Lifecycle policies auto-tier cold data to Glacier Deep Archive ($0.00099/GB-month). Total cost drops dramatically vs HDFS at lower data temperatures.</div></div>
+        <div class="pc-item"><span class="pc-icon">🔌</span><div><strong>Ecosystem integration</strong> — Native connectors for EMR, Glue, Athena, Redshift Spectrum, SageMaker, Lambda, EventBridge. Enables serverless, event-driven architectures.</div></div>
+        <div class="pc-item"><span class="pc-icon">🔒</span><div><strong>Enterprise security</strong> — IAM, KMS, WORM, Macie, VPC endpoints, Object Lock. Meets HIPAA, PCI-DSS, SOC 2, FedRAMP, ISO 27001 requirements out of the box.</div></div>
+        <div class="pc-item"><span class="pc-icon">🌎</span><div><strong>Global multi-region replication</strong> — Cross-Region Replication (CRR) for disaster recovery. S3 Multi-Region Access Points for latency-optimized global reads.</div></div>
+        <div class="pc-item"><span class="pc-icon">⚙️</span><div><strong>Zero operational overhead</strong> — No cluster management. Engineers focus on data products, not infrastructure plumbing. SLA of 99.99% availability guaranteed by AWS.</div></div>
+      </div>
+      <div class="pc-block cons">
+        <h5>❌ Weaknesses</h5>
+        <div class="pc-item"><span class="pc-icon">⏱️</span><div><strong>High first-byte latency</strong> — 100–500ms typical GET latency makes S3 unsuitable for real-time, sub-second query engines without a caching layer (ElastiCache, FSx, Alluxio).</div></div>
+        <div class="pc-item"><span class="pc-icon">💸</span><div><strong>Egress cost shock</strong> — Data egress to internet: ~$0.09/GB. At PB scale this is catastrophic. Mitigation: S3 Transfer Acceleration, VPC endpoints, same-region services.</div></div>
+        <div class="pc-item"><span class="pc-icon">📂</span><div><strong>Expensive and slow LIST operations</strong> — Listing millions of objects is slow and billed per 1,000 API calls. Rename is impossible (copy+delete). Small-file problem amplified.</div></div>
+        <div class="pc-item"><span class="pc-icon">🔗</span><div><strong>No data locality</strong> — Every compute job crosses the network. Spark on EMR reading S3 pays network I/O costs on every shuffle and read, degrading performance vs local HDFS.</div></div>
+        <div class="pc-item"><span class="pc-icon">🏢</span><div><strong>Vendor lock-in risk</strong> — AWS-specific features (Glacier, Lambda integration, Object Lock) create dependency. Migrating PBs off S3 is costly and time-consuming.</div></div>
+        <div class="pc-item"><span class="pc-icon">✏️</span><div><strong>No true POSIX append semantics</strong> — Streaming writes require workarounds (MPU, Kinesis buffering). WAL-based systems (HBase, Kafka) cannot use S3 directly without abstraction.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3 style="font-size:1.1rem;font-weight:700;color:var(--blue);margin-bottom:14px;display:flex;align-items:center;gap:8px">🏗️ Apache HDFS</h3>
+    <div class="pros-cons reveal">
+      <div class="pc-block pros">
+        <h5>✅ Strengths</h5>
+        <div class="pc-item"><span class="pc-icon">⚡</span><div><strong>Data locality = zero network I/O</strong> — YARN schedules Spark/MapReduce tasks on nodes co-located with data blocks. Eliminates network bottleneck for shuffle-heavy workloads. Massive throughput gains.</div></div>
+        <div class="pc-item"><span class="pc-icon">📝</span><div><strong>Native append &amp; streaming</strong> — Supports hflush/hsync append semantics. HBase Write-Ahead Log (WAL), Kafka log segments, and Flink checkpoints can write directly to HDFS reliably.</div></div>
+        <div class="pc-item"><span class="pc-icon">📁</span><div><strong>Fast metadata operations</strong> — NameNode holds full namespace in RAM. Rename/move is O(1) atomic. Snapshots, access time tracking, and POSIX-like ops work natively.</div></div>
+        <div class="pc-item"><span class="pc-icon">🆓</span><div><strong>No egress cost</strong> — Internal cluster I/O has no per-GB billing. At PB scale with heavy compute, this can mean millions of dollars saved vs S3 egress.</div></div>
+        <div class="pc-item"><span class="pc-icon">🔓</span><div><strong>Open-source &amp; vendor-neutral</strong> — Apache-licensed. Runs on commodity hardware, bare metal, or any cloud. No vendor dependency. Full control over data and cluster configuration.</div></div>
+        <div class="pc-item"><span class="pc-icon">📉</span><div><strong>Erasure Coding for storage efficiency</strong> — EC (e.g., Reed-Solomon 6+3) reduces storage overhead to ~1.5× vs 3× replication. Significant savings at PB scale.</div></div>
+      </div>
+      <div class="pc-block cons">
+        <h5>❌ Weaknesses</h5>
+        <div class="pc-item"><span class="pc-icon">🧠</span><div><strong>NameNode memory bottleneck</strong> — All metadata lives in NameNode RAM (~150 bytes/file). 1 billion files ≈ 150GB RAM. HDFS Federation required for very large namespaces, adding operational complexity.</div></div>
+        <div class="pc-item"><span class="pc-icon">💸</span><div><strong>High CapEx &amp; OpEx</strong> — Requires significant hardware investment. Dedicated ops team for cluster management, capacity planning, upgrades. Total cost often exceeds S3 for infrequently accessed data.</div></div>
+        <div class="pc-item"><span class="pc-icon">📦</span><div><strong>Small-file problem is severe</strong> — Millions of small files saturate the NameNode and degrade performance dramatically. Requires periodic compaction (CombineFileInputFormat, Avro/ORC compaction jobs).</div></div>
+        <div class="pc-item"><span class="pc-icon">📉</span><div><strong>Poor elasticity</strong> — Adding/removing DataNodes triggers rebalancing (hdfs balancer), which is slow and resource-intensive. Cannot scale compute independently from storage.</div></div>
+        <div class="pc-item"><span class="pc-icon">🌐</span><div><strong>No multi-region durability</strong> — HDFS replication is rack-aware within a cluster but not multi-datacenter by default. Disaster recovery requires DistCp-based mirroring (NameNode Federation across DCs).</div></div>
+        <div class="pc-item"><span class="pc-icon">☁️</span><div><strong>Cloud-native integration friction</strong> — Integrating HDFS with cloud-native services (serverless compute, managed ML) requires significant engineering. S3A connector is the standard bridge but adds latency.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 6: FRAMEWORKS ─── -->
+<section id="frameworks">
+  <div class="section-label">Section 06</div>
+  <h2 class="section-title">Recommended <span class="accent">Frameworks</span></h2>
+
+  <!-- S3 Frameworks -->
+  <h3 style="font-size:1.05rem;font-weight:700;color:var(--orange);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+    ☁️ Frameworks Optimized for S3
+  </h3>
+
+  <div class="grid-3 reveal" style="margin-bottom:36px">
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--orange-soft)">⚡</div>
+        <div>
+          <h4>Apache Spark (EMR / Databricks)</h4>
+          <div class="fw-type">Batch + Streaming + ML</div>
+        </div>
+      </div>
+      <p>The dominant S3 compute engine. Spark's S3A connector (with magic committer) enables efficient large-scale reads/writes. AWS EMR uses EMRFS for S3 optimizations including consistent view and optimized list operations. Databricks AutoOptimize auto-compacts small files on S3.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">Batch</span>
+        <span class="fw-tag" style="background:var(--green-soft);color:#15803d;border-color:var(--green-mid)">Streaming</span>
+        <span class="fw-tag" style="background:var(--purple-soft);color:var(--purple);border-color:var(--purple-mid)">ML</span>
+      </div>
+      <div class="code-block">
+<span class="cm"># Spark S3 config best practices</span>
+spark.<span class="fn">conf</span>.set(<span class="str">"fs.s3a.committer.magic.enabled"</span>, <span class="str">"true"</span>)
+spark.<span class="fn">conf</span>.set(<span class="str">"fs.s3a.fast.upload"</span>, <span class="str">"true"</span>)
+spark.<span class="fn">conf</span>.set(<span class="str">"fs.s3a.multipart.size"</span>, <span class="str">"128M"</span>)</div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--blue-soft)">🗃️</div>
+        <div>
+          <h4>Apache Iceberg</h4>
+          <div class="fw-type">Open Table Format (ACID on S3)</div>
+        </div>
+      </div>
+      <p>The recommended table format for S3-based lakehouses. Iceberg adds hidden partitioning, schema evolution, time-travel, ACID transactions, and partition pruning on top of S3 object storage. Netflix, Apple, and LinkedIn use Iceberg at exabyte scale on S3. Works seamlessly with Spark, Flink, Trino, and Athena.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">ACID</span>
+        <span class="fw-tag" style="background:var(--teal-soft);color:var(--teal);border-color:#5eead4">Time Travel</span>
+        <span class="fw-tag" style="background:var(--green-soft);color:#15803d;border-color:var(--green-mid)">Schema Evolve</span>
+      </div>
+      <div class="code-block">
+<span class="cm">-- Iceberg ACID merge on S3</span>
+<span class="kw">MERGE INTO</span> s3_catalog.orders t
+<span class="kw">USING</span> updates u <span class="kw">ON</span> t.id = u.id
+<span class="kw">WHEN MATCHED THEN UPDATE SET</span> *
+<span class="kw">WHEN NOT MATCHED THEN INSERT</span> *;</div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--purple-soft)">🔍</div>
+        <div>
+          <h4>Amazon Athena + Glue</h4>
+          <div class="fw-type">Serverless SQL on S3</div>
+        </div>
+      </div>
+      <p>Athena enables serverless SQL directly on S3 data with zero cluster management. Glue Data Catalog acts as the Hive Metastore. Athena v3 (Trino-based) supports Iceberg, Hudi, and Delta Lake natively. At $5/TB scanned, partition pruning via columnar formats (Parquet/ORC) is essential for cost control.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--purple-soft);color:var(--purple);border-color:var(--purple-mid)">Serverless</span>
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">Pay-per-query</span>
+      </div>
+      <div class="code-block">
+<span class="cm">-- Optimize Athena cost: partition pruning</span>
+<span class="kw">SELECT</span> user_id, <span class="fn">SUM</span>(revenue)
+<span class="kw">FROM</span> events
+<span class="kw">WHERE</span> dt = <span class="str">'2024-01-15'</span> <span class="cm">-- partition prune</span>
+  <span class="kw">AND</span> region = <span class="str">'us-east-1'</span>
+<span class="kw">GROUP BY</span> <span class="num">1</span>;</div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--teal-soft)">🌊</div>
+        <div>
+          <h4>Apache Flink + Kinesis</h4>
+          <div class="fw-type">Real-time Streaming → S3 Sink</div>
+        </div>
+      </div>
+      <p>Flink's StreamingFileSink (now FileSink) writes exactly-once to S3 via Kinesis Data Firehose or direct S3 sink. Micro-batch compaction on S3 with Flink + Iceberg enables near-real-time lakehouse. Kinesis Firehose buffers records and batches into S3, optimizing for Parquet/ORC format conversion.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--teal-soft);color:var(--teal);border-color:#5eead4">Exactly-Once</span>
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">Streaming</span>
+      </div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--green-soft)">🦆</div>
+        <div>
+          <h4>DuckDB + Trino / Presto</h4>
+          <div class="fw-type">Interactive SQL on S3</div>
+        </div>
+      </div>
+      <p>DuckDB can query Parquet files on S3 directly from a laptop — ideal for data exploration at scale without spinning up clusters. Trino (formerly PrestoSQL) enables distributed interactive SQL on S3 at PB scale with sub-minute query times on Parquet/ORC Iceberg tables.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--green-soft);color:#15803d;border-color:var(--green-mid)">Interactive</span>
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">Ad-hoc SQL</span>
+      </div>
+      <div class="code-block">
+<span class="cm">-- DuckDB: query S3 Parquet directly</span>
+<span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">read_parquet</span>(
+  <span class="str">'s3://bucket/data/**/*.parquet'</span>
+) <span class="kw">WHERE</span> year = <span class="num">2024</span>;</div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--orange-soft)">🏔️</div>
+        <div>
+          <h4>Apache Hudi</h4>
+          <div class="fw-type">Incremental Data Lake on S3</div>
+        </div>
+      </div>
+      <p>Hudi is optimized for incremental data ingestion and CDC (Change Data Capture) workloads on S3. Copy-on-Write (CoW) for read-heavy and Merge-on-Read (MoR) for write-heavy pipelines. Uber originally built Hudi to handle millions of trips/day updating S3-backed tables.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">CDC</span>
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">Incremental</span>
+        <span class="fw-tag" style="background:var(--purple-soft);color:var(--purple);border-color:var(--purple-mid)">Upserts</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HDFS Frameworks -->
+  <h3 style="font-size:1.05rem;font-weight:700;color:var(--blue);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+    🏗️ Frameworks Optimized for HDFS
+  </h3>
+
+  <div class="grid-3 reveal">
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--blue-soft)">🗺️</div>
+        <div>
+          <h4>Apache MapReduce / YARN</h4>
+          <div class="fw-type">Batch Processing (Native)</div>
+        </div>
+      </div>
+      <p>The original HDFS compute paradigm. YARN's locality-aware scheduler ensures map tasks run on DataNodes holding the input splits, achieving near-zero network I/O for reads. Still used for ETL workloads where predictable, stable throughput outweighs Spark's in-memory speed.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">Locality-aware</span>
+        <span class="fw-tag" style="background:var(--green-soft);color:#15803d;border-color:var(--green-mid)">Batch ETL</span>
+      </div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--orange-soft)">🐝</div>
+        <div>
+          <h4>Apache HBase</h4>
+          <div class="fw-type">NoSQL Wide-Column on HDFS</div>
+        </div>
+      </div>
+      <p>HBase is tightly coupled to HDFS — its WAL (Write-Ahead Log) and HFile storage require HDFS append semantics and atomic renames. Provides millisecond random reads via its LSM-tree architecture. Facebook's Messages used HBase on HDFS at hundreds of PB. Not feasible on raw S3.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">Low-latency</span>
+        <span class="fw-tag" style="background:var(--red-soft);color:var(--red);border-color:#fca5a5">Append-dependent</span>
+      </div>
+      <div class="code-block">
+<span class="cm"># HBase WAL requires HDFS append</span>
+hbase.rootdir = hdfs://namenode:8020/hbase
+hbase.wal.provider = filesystem
+hbase.regionserver.hlog.enabled = <span class="kw">true</span></div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--purple-soft)">📨</div>
+        <div>
+          <h4>Apache Kafka (on HDFS)</h4>
+          <div class="fw-type">Event Streaming with HDFS Storage</div>
+        </div>
+      </div>
+      <p>Kafka log segments can be tiered to HDFS via Confluent Tiered Storage or the Kafka HDFS Connector (Kafka Connect). Enables long-term log retention on HDFS with Kafka's sequential I/O pattern matching HDFS block-sequential reads perfectly.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--purple-soft);color:var(--purple);border-color:var(--purple-mid)">Streaming</span>
+        <span class="fw-tag" style="background:var(--teal-soft);color:var(--teal);border-color:#5eead4">Tiered Storage</span>
+      </div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--green-soft)">🐘</div>
+        <div>
+          <h4>Apache Hive (LLAP)</h4>
+          <div class="fw-type">SQL Analytics on HDFS</div>
+        </div>
+      </div>
+      <p>Hive with LLAP (Live Long and Process) daemon caches data in HDFS-adjacent memory, enabling sub-second interactive queries. HDFS's fast metadata enables efficient partition management at scale. Hive ACID on ORC provides row-level insert/update/delete on HDFS-backed tables.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--green-soft);color:#15803d;border-color:var(--green-mid)">Interactive SQL</span>
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">ACID (ORC)</span>
+      </div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--teal-soft)">🌩️</div>
+        <div>
+          <h4>Apache Spark (Local HDFS)</h4>
+          <div class="fw-type">In-cluster Batch + Streaming</div>
+        </div>
+      </div>
+      <p>Spark on HDFS achieves maximum performance when co-located with DataNodes. YARN's node-local, rack-local scheduling minimizes data shuffle distance. For iterative ML workloads (MLlib), HDFS-backed RDD caching on local disks outperforms S3-backed Spark significantly.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--teal-soft);color:var(--teal);border-color:#5eead4">Locality</span>
+        <span class="fw-tag" style="background:var(--purple-soft);color:var(--purple);border-color:var(--purple-mid)">MLlib</span>
+      </div>
+    </div>
+
+    <div class="fw-card">
+      <div class="fw-header">
+        <div class="fw-icon" style="background:var(--blue-soft)">🔄</div>
+        <div>
+          <h4>Apache Flink (Stateful)</h4>
+          <div class="fw-type">Stateful Stream Processing</div>
+        </div>
+      </div>
+      <p>Flink's state backends (RocksDB) checkpoint directly to HDFS, leveraging append semantics and reliable block storage. HDFS-backed checkpoints are faster to write and restore than S3 for large state sizes (100s of GB). Ideal for stateful CEP and windowed aggregation pipelines.</p>
+      <div class="fw-tags">
+        <span class="fw-tag" style="background:var(--blue-soft);color:var(--blue);border-color:var(--blue-mid)">Checkpointing</span>
+        <span class="fw-tag" style="background:var(--orange-soft);color:var(--orange);border-color:var(--orange-mid)">Stateful</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 7: ECOSYSTEMS ─── -->
+<section id="ecosystems">
+  <div class="section-label">Section 07</div>
+  <h2 class="section-title">Most Suitable <span class="accent">Ecosystems</span></h2>
+
+  <div class="grid-2 reveal">
+    <div>
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--orange);margin-bottom:14px">☁️ S3 Ideal Ecosystems</h3>
+
+      <div class="eco-card" style="margin-bottom:16px">
+        <h4>🏠 Cloud-Native Data Lakehouse</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Storage Layer</span> S3 Standard / Intelligent-Tiering</li>
+          <li><span class="eco-name">Table Format</span> Apache Iceberg or Delta Lake</li>
+          <li><span class="eco-name">Catalog</span> AWS Glue / Project Nessie</li>
+          <li><span class="eco-name">Query Engine</span> Trino, Amazon Athena, Spark SQL</li>
+          <li><span class="eco-name">Orchestration</span> Apache Airflow / AWS Step Functions</li>
+          <li><span class="eco-name">Compute</span> EMR Serverless / Databricks on AWS</li>
+          <li><span class="eco-name">BI / Viz</span> Redshift Spectrum, QuickSight, Superset</li>
+        </ul>
+      </div>
+
+      <div class="eco-card" style="margin-bottom:16px">
+        <h4>🌊 Streaming &amp; Event-Driven Analytics</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Ingestion</span> Kinesis Data Streams / MSK (Kafka)</li>
+          <li><span class="eco-name">Processing</span> Kinesis Data Analytics (Flink)</li>
+          <li><span class="eco-name">Sink</span> Kinesis Firehose → S3 (Parquet/ORC)</li>
+          <li><span class="eco-name">Serving</span> DynamoDB, ElastiSearch / OpenSearch</li>
+          <li><span class="eco-name">Cold Query</span> Athena on S3</li>
+        </ul>
+      </div>
+
+      <div class="eco-card">
+        <h4>🤖 MLOps &amp; AI Platform</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Feature Store</span> SageMaker Feature Store → S3</li>
+          <li><span class="eco-name">Model Registry</span> MLflow / SageMaker Model Registry</li>
+          <li><span class="eco-name">Data Versioning</span> DVC + S3 backend</li>
+          <li><span class="eco-name">Training Data</span> S3 → SageMaker Training Jobs</li>
+          <li><span class="eco-name">LLM Fine-tuning</span> S3 datasets → Bedrock / SageMaker</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:1.05rem;font-weight:700;color:var(--blue);margin-bottom:14px">🏗️ HDFS Ideal Ecosystems</h3>
+
+      <div class="eco-card" style="margin-bottom:16px">
+        <h4>🏭 On-Premises Hadoop Data Platform</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Storage</span> HDFS (Erasure Coded, HA NameNode)</li>
+          <li><span class="eco-name">Resource Mgmt</span> YARN + Capacity Scheduler</li>
+          <li><span class="eco-name">SQL Layer</span> Hive LLAP / Impala / Presto</li>
+          <li><span class="eco-name">Batch Compute</span> Spark, MapReduce</li>
+          <li><span class="eco-name">NoSQL Store</span> HBase (WAL on HDFS)</li>
+          <li><span class="eco-name">Security</span> Kerberos + Apache Ranger</li>
+          <li><span class="eco-name">Governance</span> Apache Atlas (lineage on HDFS)</li>
+        </ul>
+      </div>
+
+      <div class="eco-card" style="margin-bottom:16px">
+        <h4>⚙️ Real-Time Operational Systems</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Message Bus</span> Apache Kafka (HDFS tiered storage)</li>
+          <li><span class="eco-name">Stream Proc.</span> Apache Flink (HDFS checkpoints)</li>
+          <li><span class="eco-name">Serving DB</span> HBase (HDFS-backed LSM)</li>
+          <li><span class="eco-name">OLAP Cache</span> Apache Druid (deep store: HDFS)</li>
+          <li><span class="eco-name">Search</span> Apache Solr (index on HDFS)</li>
+        </ul>
+      </div>
+
+      <div class="eco-card">
+        <h4>🔬 Scientific / HPC Workloads</h4>
+        <ul class="eco-list">
+          <li><span class="eco-name">Storage</span> HDFS (large sequential files)</li>
+          <li><span class="eco-name">Compute</span> Spark MLlib, H2O.ai on YARN</li>
+          <li><span class="eco-name">Genomics</span> GATK / Adam (Spark + HDFS)</li>
+          <li><span class="eco-name">Graph</span> Apache Giraph / GraphX on HDFS</li>
+          <li><span class="eco-name">Formats</span> Avro, Parquet, ORC, SequenceFile</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 8: DECISION GUIDE ─── -->
+<section id="decision">
+  <div class="section-label">Section 08</div>
+  <h2 class="section-title">Decision <span class="accent">Guide</span></h2>
+
+  <div class="decision-grid reveal">
+    <div class="decision-card use-s3">
+      <h4>☁️ Choose S3 When...</h4>
+      <p>✔ Building a <strong>greenfield cloud-native</strong> architecture with no on-premises constraints.<br><br>
+         ✔ Your data access is <strong>primarily read-heavy and batch</strong>, tolerating 100–500ms latency.<br><br>
+         ✔ You want <strong>zero operational overhead</strong> — no cluster team, no capacity planning.<br><br>
+         ✔ Your <strong>data temperature varies</strong> — some data is hot, most is warm/cold. S3 tiering saves dramatically.<br><br>
+         ✔ You need <strong>global multi-region durability</strong> (CRR) and compliance (WORM, Object Lock).<br><br>
+         ✔ You're building a <strong>data lakehouse</strong> with Iceberg/Delta + Spark/Trino/Athena stack.<br><br>
+         ✔ Your compute is <strong>elastic and bursty</strong> — you pay only for active processing cycles.<br><br>
+         ✔ Team expertise is in <strong>cloud-native tools</strong> rather than Hadoop ecosystem administration.</p>
+    </div>
+
+    <div class="decision-card use-hdfs">
+      <h4>🏗️ Choose HDFS When...</h4>
+      <p>✔ You have <strong>significant on-premises infrastructure investment</strong> and regulatory constraints preventing cloud adoption.<br><br>
+         ✔ Your workloads are <strong>shuffle-intensive and latency-sensitive</strong> — e.g., iterative ML, graph processing where data locality eliminates network I/O.<br><br>
+         ✔ You run <strong>HBase</strong> or other systems requiring POSIX append semantics and atomic renames.<br><br>
+         ✔ Your <strong>egress costs on cloud would be catastrophic</strong> — heavy compute jobs reading PBs repeatedly.<br><br>
+         ✔ You require <strong>sub-10ms read latency</strong> from local DataNode reads (e.g., real-time ML inference backed by Hive LLAP).<br><br>
+         ✔ You already operate a <strong>mature Hadoop platform</strong> with a dedicated ops team and want incremental migration.<br><br>
+         ✔ Your data consists of <strong>large sequential files</strong> accessed in batch patterns — HDFS block streaming is optimally tuned for this.<br><br>
+         ✔ You need <strong>vendor-neutral open-source</strong> with full data sovereignty.</p>
+    </div>
+
+    <div class="decision-card" style="background:#f5f3ff;border-color:#ddd6fe;grid-column:1/-1">
+      <h4 style="color:var(--purple)">🔀 Consider Hybrid Architecture When...</h4>
+      <p>Most large-scale enterprises end up here. Use <strong>HDFS for hot/operational data</strong> (HBase, Kafka, real-time Flink) while simultaneously using <strong>S3 as the canonical data lake</strong> for historical, analytical, and cold data. DistCp or Flink pipelines replicate from HDFS to S3 for long-term retention and cloud analytics. This pattern is common at LinkedIn, Twitter/X, Alibaba, and Tencent. The S3A connector in Hadoop 3.x enables Spark to read both HDFS and S3 transparently, enabling gradual migration. Platforms like <strong>Cloudera CDP</strong> and <strong>AWS EMR</strong> explicitly support this hybrid model.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 9: DESIGN PATTERNS ─── -->
+<section id="patterns">
+  <div class="section-label">Section 09</div>
+  <h2 class="section-title">PB-Scale Design <span class="accent">Patterns</span></h2>
+
+  <div class="grid-3 reveal">
+    <div class="card">
+      <div style="font-size:24px;margin-bottom:12px">🏗️</div>
+      <h4 style="font-weight:700;margin-bottom:10px">S3 Lakehouse — Medallion Architecture</h4>
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Multi-layered approach to data quality and reliability on S3:</p>
+      <div class="arch-layer" style="background:#fff3e8;color:#c2410c;border:1px solid #fed7aa;font-size:12px;margin-bottom:6px">🥉 Bronze: Raw ingest — Parquet/Avro, no transform</div>
+      <div class="arch-layer" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;font-size:12px;margin-bottom:6px">🥈 Silver: Cleaned, deduplicated, schema-enforced</div>
+      <div class="arch-layer" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-size:12px">🥇 Gold: Aggregated, business-ready, Iceberg ACID</div>
+      <div class="callout tip" style="margin-top:12px">
+        <p style="font-size:13px"><strong>Tip:</strong> Use S3 Lifecycle to auto-move Bronze → Glacier after 90 days. Only Gold tables need Standard tier.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:24px;margin-bottom:12px">⚡</div>
+      <h4 style="font-weight:700;margin-bottom:10px">HDFS Lambda Architecture</h4>
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Classic pattern for combining batch accuracy with real-time speed:</p>
+      <div class="arch-layer" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:12px;margin-bottom:6px">📥 Speed Layer: Flink/Storm → HDFS/HBase (minutes)</div>
+      <div class="arch-layer" style="background:#e0e7ff;color:#3730a3;border:1px solid #a5b4fc;font-size:12px;margin-bottom:6px">🔄 Batch Layer: Spark → HDFS (hourly/daily)</div>
+      <div class="arch-layer" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-size:12px">🔍 Serving Layer: Hive LLAP / Impala merge views</div>
+      <div class="callout info" style="margin-top:12px">
+        <p style="font-size:13px"><strong>Note:</strong> Kappa architecture (Flink only) is increasingly preferred for simplicity on HDFS/S3.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:24px;margin-bottom:12px">🌉</div>
+      <h4 style="font-weight:700;margin-bottom:10px">HDFS → S3 Migration Pattern</h4>
+      <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Phased migration from on-prem HDFS to cloud S3:</p>
+      <div class="arch-layer" style="background:#fefce8;color:#713f12;border:1px solid #fde047;font-size:12px;margin-bottom:6px">Phase 1: Cold data migration via DistCp</div>
+      <div class="arch-layer" style="background:#fff3e8;color:#c2410c;border:1px solid #fed7aa;font-size:12px;margin-bottom:6px">Phase 2: Dual-write to HDFS + S3 (S3A connector)</div>
+      <div class="arch-layer" style="background:#f0fdf4;color:#166534;border:1px solid #86efac;font-size:12px">Phase 3: Read from S3, retire HDFS DataNodes</div>
+      <div class="code-block" style="margin-top:10px">
+<span class="cm"># Parallel DistCp PB transfer</span>
+hadoop distcp -m <span class="num">1000</span> -bandwidth <span class="num">100</span> \
+  -strategy dynamic \
+  hdfs://src/data s3a://bucket/data</div>
+    </div>
+  </div>
+
+  <!-- PB Scale Tuning -->
+  <div class="card reveal" style="margin-top:20px">
+    <h4 style="font-weight:700;margin-bottom:18px;font-size:16px">🔧 PB-Scale Tuning Reference</h4>
+    <div class="grid-2">
+      <div>
+        <h5 style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">S3 Optimization Checklist</h5>
+        <div class="code-block">
+<span class="cm"># 1. Partition prefix strategy</span>
+s3://bucket/<span class="str">year=2024/month=01/day=15/</span>*.parquet
+
+<span class="cm"># 2. Enable S3 Transfer Acceleration</span>
+endpoint = bucket.s3-accelerate.amazonaws.com
+
+<span class="cm"># 3. Magic committer (Spark)</span>
+spark.hadoop.fs.s3a.committer.name = magic
+
+<span class="cm"># 4. Parallel multipart uploads</span>
+fs.s3a.multipart.size = <span class="num">128M</span>
+fs.s3a.connection.maximum = <span class="num">200</span>
+
+<span class="cm"># 5. S3 Intelligent-Tiering (auto)</span>
+PUT s3://bucket/data --storage-class INTELLIGENT_TIERING</div>
+      </div>
+      <div>
+        <h5 style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">HDFS Optimization Checklist</h5>
+        <div class="code-block">
+<span class="cm"># 1. Block size for large sequential files</span>
+dfs.blocksize = <span class="num">256</span>m
+
+<span class="cm"># 2. Erasure Coding (saves 50% storage)</span>
+hdfs ec -setPolicy -policy RS-<span class="num">6</span>-<span class="num">3</span>-<span class="num">1024</span>k -path /cold
+
+<span class="cm"># 3. NameNode heap for 1B files</span>
+HADOOP_NAMENODE_OPTS=<span class="str">"-Xmx200g"</span>
+
+<span class="cm"># 4. Short-circuit local reads</span>
+dfs.client.read.shortcircuit = <span class="kw">true</span>
+
+<span class="cm"># 5. HDFS Federation for namespace scale</span>
+dfs.nameservices = ns1,ns2
+dfs.namenode.rpc-address.ns1 = nn1:8020</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SECTION 10: SUMMARY ─── -->
+<section id="summary">
+  <div class="section-label">Section 10</div>
+  <h2 class="section-title">Executive <span class="accent">Summary</span></h2>
+
+  <div class="score-grid reveal">
+    <div class="score-item">
+      <div class="si-label">Scalability</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">10/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:100%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">7/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:70%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+    <div class="score-item">
+      <div class="si-label">Latency</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">4/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:40%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">9/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+    <div class="score-item">
+      <div class="si-label">Cost Efficiency</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">8/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:80%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">6/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:60%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+    <div class="score-item">
+      <div class="si-label">Ops Simplicity</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">10/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:100%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">3/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:30%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+    <div class="score-item">
+      <div class="si-label">Throughput</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">9/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">9/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+    <div class="score-item">
+      <div class="si-label">Ecosystem</div>
+      <div class="si-row"><span class="si-name" style="color:var(--orange)">S3</span><span class="si-val" style="color:var(--orange)">9/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#fb923c,#f97316);height:6px"></div></div>
+      <div class="si-row" style="margin-top:8px"><span class="si-name" style="color:var(--blue)">HDFS</span><span class="si-val" style="color:var(--blue)">9/10</span></div>
+      <div class="perf-bar-bg"><div class="perf-bar" style="width:90%;background:linear-gradient(90deg,#60a5fa,#3b82f6);height:6px"></div></div>
+    </div>
+  </div>
+
+  <div class="callout purple reveal" style="margin-top:28px">
+    <span class="co-icon">🎯</span>
+    <p><strong>Architect's Verdict:</strong> In 2024–2025, the industry has decisively shifted toward <strong>S3 as the long-term storage layer</strong> for new big data systems — driven by lakehouse formats (Iceberg, Delta), serverless query engines (Athena, Snowflake on S3), and the elimination of the data locality advantage through high-bandwidth networking. HDFS remains <strong>irreplaceable for HBase, stateful Flink checkpoints, and on-premises regulated environments</strong>. For PB-scale greenfield systems: adopt the S3 lakehouse pattern with Iceberg + Spark on EMR Serverless or Databricks. For existing HDFS investments: plan a phased migration using DistCp for cold data and S3A connector for hybrid reads, targeting a 3–5 year full migration horizon.</p>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <p>Big Data Architecture Analysis · S3 vs HDFS · PB-Scale Systems Design</p>
+  <p style="margin-top:6px;font-size:12px">Reference frameworks: Apache Spark, Iceberg, Hudi, Delta Lake, HBase, Flink, Hive, YARN · AWS EMR, Athena, Glue, Kinesis</p>
+</footer>
+
+<script>
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+  reveals.forEach(r => observer.observe(r));
+
+  // Animate perf bars on scroll
+  const barObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        // bars animate via CSS transition when visible
+      }
+    });
+  }, { threshold: 0.3 });
+</script>
+</body>
+</html>

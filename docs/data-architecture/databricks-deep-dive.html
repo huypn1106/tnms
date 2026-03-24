@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Databricks — Big Data Platform Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --blue:       #3B82F6;
+    --blue-light: #EFF6FF;
+    --blue-mid:   #BFDBFE;
+    --orange:     #F97316;
+    --orange-light:#FFF7ED;
+    --orange-mid: #FED7AA;
+    --purple:     #8B5CF6;
+    --purple-light:#F5F3FF;
+    --purple-mid: #DDD6FE;
+    --green:      #22C55E;
+    --green-light:#F0FDF4;
+    --green-mid:  #BBF7D0;
+    --red:        #EF4444;
+    --red-light:  #FEF2F2;
+    --bg:         #F8FAFC;
+    --bg-white:   #FFFFFF;
+    --text:       #0F172A;
+    --text-muted: #64748B;
+    --text-light: #94A3B8;
+    --border:     #E2E8F0;
+    --shadow-sm:  0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow:     0 4px 16px rgba(0,0,0,.07), 0 2px 6px rgba(0,0,0,.05);
+    --shadow-lg:  0 10px 40px rgba(0,0,0,.10), 0 4px 12px rgba(0,0,0,.06);
+    --radius:     14px;
+    --radius-sm:  8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    line-height: 1.75;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+  }
+  .nav-inner {
+    max-width: 1200px; margin: 0 auto;
+    display: flex; align-items: center; gap: 8px;
+    height: 60px; overflow-x: auto;
+  }
+  .nav-logo {
+    font-weight: 800; font-size: 15px;
+    color: var(--blue); white-space: nowrap;
+    margin-right: 16px; text-decoration: none;
+  }
+  nav a.pill {
+    text-decoration: none; white-space: nowrap;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-muted);
+    padding: 4px 12px; border-radius: 20px;
+    transition: background .18s, color .18s;
+  }
+  nav a.pill:hover { background: var(--blue-light); color: var(--blue); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 50%, #FFF7ED 100%);
+    padding: 80px 40px 70px;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-inner { max-width: 1200px; margin: 0 auto; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--blue-light); color: var(--blue);
+    font-size: 13px; font-weight: 600;
+    padding: 6px 14px; border-radius: 20px;
+    border: 1px solid var(--blue-mid);
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 800; line-height: 1.15;
+    letter-spacing: -1.5px; margin-bottom: 20px;
+  }
+  .hero h1 span { color: var(--blue); }
+  .hero p.lead {
+    font-size: 19px; color: var(--text-muted);
+    max-width: 680px; margin-bottom: 40px; line-height: 1.7;
+  }
+  .hero-stats {
+    display: flex; flex-wrap: wrap; gap: 20px;
+  }
+  .stat-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 28px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .stat-card .num {
+    font-size: 28px; font-weight: 800;
+    letter-spacing: -1px;
+  }
+  .stat-card .label { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+  section { padding: 72px 40px; }
+  section:nth-child(even) { background: var(--bg-white); }
+
+  /* ── SECTION HEADERS ── */
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  h2.section-title {
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 800; line-height: 1.2;
+    letter-spacing: -0.8px; margin-bottom: 14px;
+  }
+  .section-sub {
+    font-size: 16px; color: var(--text-muted);
+    max-width: 620px; margin-bottom: 48px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .card p, .card li { font-size: 15px; color: var(--text-muted); line-height: 1.7; }
+
+  /* ── GRIDS ── */
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; }
+
+  /* ── PILL BADGE ── */
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 12px; margin-bottom: 12px;
+  }
+  .tag-blue   { background: var(--blue-light);   color: var(--blue); }
+  .tag-orange { background: var(--orange-light); color: var(--orange); }
+  .tag-purple { background: var(--purple-light); color: var(--purple); }
+  .tag-green  { background: var(--green-light);  color: var(--green); }
+  .tag-red    { background: var(--red-light);    color: var(--red); }
+
+  /* ── ICON BOX ── */
+  .icon-box {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 16px; flex-shrink: 0;
+  }
+  .ib-blue   { background: var(--blue-light); }
+  .ib-orange { background: var(--orange-light); }
+  .ib-purple { background: var(--purple-light); }
+  .ib-green  { background: var(--green-light); }
+
+  /* ── CODE BLOCK ── */
+  pre, code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+  }
+  pre {
+    background: #0F172A;
+    color: #E2E8F0;
+    border-radius: var(--radius);
+    padding: 24px;
+    overflow-x: auto;
+    line-height: 1.7;
+    margin: 16px 0;
+    border: 1px solid #1E293B;
+  }
+  .kw  { color: #7DD3FC; }
+  .str { color: #86EFAC; }
+  .cmt { color: #64748B; font-style: italic; }
+  .fn  { color: #FCA5A5; }
+  .num { color: #FDE68A; }
+  .op  { color: #C084FC; }
+  .var { color: #E2E8F0; }
+  code.inline {
+    background: #F1F5F9; color: #E11D48;
+    padding: 2px 7px; border-radius: 5px;
+    font-size: 13.5px; border: 1px solid #E2E8F0;
+  }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    border-radius: var(--radius);
+    padding: 40px;
+    margin: 32px 0;
+    color: white;
+  }
+  .arch-row { display: flex; gap: 12px; margin-bottom: 14px; align-items: stretch; flex-wrap: wrap; }
+  .arch-row:last-child { margin-bottom: 0; }
+  .arch-box {
+    flex: 1; min-width: 120px;
+    border-radius: 10px; padding: 14px 18px;
+    font-size: 13px; font-weight: 600; text-align: center;
+    border: 1px solid rgba(255,255,255,.1);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    transition: transform .2s;
+  }
+  .arch-box:hover { transform: translateY(-2px); }
+  .arch-box .sub { font-size: 11px; font-weight: 400; opacity: .7; }
+  .ab-blue   { background: rgba(59,130,246,.25);   border-color: rgba(59,130,246,.4); }
+  .ab-orange { background: rgba(249,115,22,.25);   border-color: rgba(249,115,22,.4); }
+  .ab-purple { background: rgba(139,92,246,.25);   border-color: rgba(139,92,246,.4); }
+  .ab-green  { background: rgba(34,197,94,.25);    border-color: rgba(34,197,94,.4); }
+  .ab-teal   { background: rgba(20,184,166,.25);   border-color: rgba(20,184,166,.4); }
+  .ab-yellow { background: rgba(234,179,8,.25);    border-color: rgba(234,179,8,.4); }
+  .arch-label {
+    text-align: center; font-size: 11px; letter-spacing: 1px;
+    text-transform: uppercase; color: rgba(255,255,255,.4);
+    margin-bottom: 8px;
+  }
+  .arch-arrow {
+    text-align: center; color: rgba(255,255,255,.3);
+    font-size: 18px; margin: 4px 0;
+  }
+
+  /* ── STEPS ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step { display: flex; gap: 24px; position: relative; padding-bottom: 40px; }
+  .step:last-child { padding-bottom: 0; }
+  .step-left { display: flex; flex-direction: column; align-items: center; }
+  .step-num {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; flex-shrink: 0;
+    z-index: 1; position: relative;
+  }
+  .step-line {
+    width: 2px; flex: 1; margin-top: 8px;
+    background: var(--border);
+  }
+  .step:last-child .step-line { display: none; }
+  .step-body { padding-top: 7px; flex: 1; }
+  .step-body h4 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .step-body p  { font-size: 15px; color: var(--text-muted); }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-table { width: 100%; border-collapse: collapse; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .compare-table th {
+    background: #0F172A; color: white;
+    padding: 14px 20px; text-align: left;
+    font-size: 14px; font-weight: 600;
+  }
+  .compare-table td {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    font-size: 14px; background: var(--bg-white);
+  }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table tr:hover td { background: var(--blue-light); }
+  .check { color: var(--green); font-size: 16px; }
+  .cross { color: var(--red);   font-size: 16px; }
+  .partial { color: var(--orange); font-size: 16px; }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight {
+    border-left: 4px solid;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 18px 22px;
+    margin: 20px 0;
+  }
+  .hl-blue   { border-color: var(--blue);   background: var(--blue-light); }
+  .hl-orange { border-color: var(--orange); background: var(--orange-light); }
+  .hl-green  { border-color: var(--green);  background: var(--green-light); }
+  .hl-purple { border-color: var(--purple); background: var(--purple-light); }
+  .highlight strong { font-size: 14px; }
+  .highlight p { font-size: 15px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ── CHECKLIST ── */
+  ul.check-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  ul.check-list li { display: flex; gap: 10px; font-size: 15px; color: var(--text-muted); align-items: flex-start; }
+  ul.check-list li::before { content: '✓'; color: var(--green); font-weight: 700; margin-top: 1px; flex-shrink: 0; }
+
+  /* ── PRODUCTION CHECKLIST ── */
+  .prod-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: 24px; }
+  .prod-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-white);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .prod-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+  .prod-card-header {
+    padding: 18px 24px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .prod-card-body { padding: 20px 24px; }
+  .prod-card-body p { font-size: 15px; color: var(--text-muted); margin-bottom: 14px; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: #0F172A;
+    color: rgba(255,255,255,.5);
+    text-align: center;
+    padding: 40px;
+    font-size: 14px;
+  }
+  footer strong { color: rgba(255,255,255,.8); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeUp .5s ease forwards; }
+  .delay-1 { animation-delay: .1s; opacity: 0; }
+  .delay-2 { animation-delay: .2s; opacity: 0; }
+  .delay-3 { animation-delay: .3s; opacity: 0; }
+  .delay-4 { animation-delay: .4s; opacity: 0; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    nav { padding: 0 16px; }
+    .hero, section { padding: 48px 20px; }
+    .hero h1 { font-size: 30px; }
+    .arch-diagram { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="#">⬡ Databricks</a>
+    <a class="pill" href="#what">What is it</a>
+    <a class="pill" href="#how">How it Works</a>
+    <a class="pill" href="#architecture">Architecture</a>
+    <a class="pill" href="#why">Why Databricks</a>
+    <a class="pill" href="#usecases">Use Cases</a>
+    <a class="pill" href="#production">Production Setup</a>
+    <a class="pill" href="#config">Config Reference</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner fade-in">
+    <div class="hero-badge">⬡ Big Data Platform Deep Dive · 2024</div>
+    <h1>Everything About<br /><span>Databricks</span></h1>
+    <p class="lead">
+      The unified analytics platform built on Apache Spark — designed to scale from gigabytes to
+      <strong>petabytes</strong>, power AI/ML workloads, and bridge the gap between Data Engineering,
+      Data Science, and Analytics in a single Lakehouse.
+    </p>
+    <div class="hero-stats">
+      <div class="stat-card delay-1 fade-in">
+        <div class="num" style="color:var(--blue)">10,000+</div>
+        <div class="label">Enterprise Customers</div>
+      </div>
+      <div class="stat-card delay-2 fade-in">
+        <div class="num" style="color:var(--orange)">ExaBytes</div>
+        <div class="label">Data Processed Daily</div>
+      </div>
+      <div class="stat-card delay-3 fade-in">
+        <div class="num" style="color:var(--purple)">3× Faster</div>
+        <div class="label">vs. Standard Spark</div>
+      </div>
+      <div class="stat-card delay-4 fade-in">
+        <div class="num" style="color:var(--green)">AWS · Azure · GCP</div>
+        <div class="label">Multi-cloud Native</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 1 — WHAT IS DATABRICKS -->
+<section id="what">
+  <div class="container">
+    <div class="section-label" style="color:var(--blue)">Section 01</div>
+    <h2 class="section-title">What is Databricks?</h2>
+    <p class="section-sub">
+      A cloud-native, unified data intelligence platform combining data engineering, streaming, ML, and BI in one place.
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <p style="font-size:16px; margin-bottom:20px; color:var(--text-muted)">
+          Databricks was founded in 2013 by the original creators of <strong>Apache Spark</strong> at UC Berkeley's
+          AMPLab. It commercializes Spark as a fully managed cloud service — dramatically simplifying large-scale
+          data processing that once required an entire infrastructure team.
+        </p>
+        <p style="font-size:16px; margin-bottom:20px; color:var(--text-muted)">
+          At its core, Databricks implements the <strong>Lakehouse Architecture</strong> — a paradigm that merges
+          the scalability and low cost of a <em>Data Lake</em> with the reliability, performance, and ACID
+          transaction guarantees of a <em>Data Warehouse</em>.
+        </p>
+        <div class="highlight hl-blue">
+          <strong>💡 The Lakehouse Concept</strong>
+          <p>Store raw data cheaply in cloud object storage (S3, ADLS, GCS), then apply schema, governance, and query performance on top — without copying data into a separate warehouse system.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card">
+          <div class="icon-box ib-blue">🔷</div>
+          <h3>Unified Platform</h3>
+          <p>One platform for ETL pipelines, SQL analytics, machine learning, streaming, and BI — eliminating the "data silo" problem between teams.</p>
+        </div>
+        <div class="card">
+          <div class="icon-box ib-orange">⚡</div>
+          <h3>Apache Spark Engine</h3>
+          <p>Databricks Runtime is an optimized, proprietary fork of Apache Spark with performance-critical patches, providing 2–5× faster execution.</p>
+        </div>
+        <div class="card">
+          <div class="icon-box ib-purple">🌊</div>
+          <h3>Delta Lake Storage</h3>
+          <p>An open-source storage layer providing ACID transactions, schema enforcement, time travel, and CDC on top of Parquet files.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2 — HOW IT WORKS -->
+<section id="how" style="background:var(--bg)">
+  <div class="container">
+    <div class="section-label" style="color:var(--orange)">Section 02</div>
+    <h2 class="section-title">How Databricks Works</h2>
+    <p class="section-sub">From cluster provisioning to distributed job execution — understanding the core mechanics.</p>
+
+    <!-- Architecture Diagram -->
+    <div class="arch-diagram">
+      <div class="arch-label">▲ Databricks Lakehouse Platform Stack</div>
+
+      <div class="arch-row">
+        <div class="arch-box ab-blue">🖥️ Notebooks<span class="sub">Python · SQL · Scala · R</span></div>
+        <div class="arch-box ab-blue">⚙️ Workflows<span class="sub">Job Orchestration</span></div>
+        <div class="arch-box ab-blue">🤖 AutoML<span class="sub">Model Training</span></div>
+        <div class="arch-box ab-blue">📊 SQL Warehouse<span class="sub">BI &amp; Dashboards</span></div>
+      </div>
+      <div class="arch-arrow">↕ Control Plane (Databricks-managed)</div>
+      <div class="arch-row">
+        <div class="arch-box ab-orange">🔥 Databricks Runtime<span class="sub">Optimized Spark + Photon</span></div>
+        <div class="arch-box ab-orange">🔄 Delta Live Tables<span class="sub">Declarative ETL Pipelines</span></div>
+        <div class="arch-box ab-orange">🤝 MLflow<span class="sub">ML Lifecycle Management</span></div>
+      </div>
+      <div class="arch-arrow">↕ Data Plane (Customer's Cloud Account)</div>
+      <div class="arch-row">
+        <div class="arch-box ab-purple">🔷 Delta Lake<span class="sub">ACID · Time Travel · CDC</span></div>
+        <div class="arch-box ab-purple">🗃️ Unity Catalog<span class="sub">Governance &amp; Lineage</span></div>
+        <div class="arch-box ab-purple">🔗 External Data<span class="sub">Kafka · JDBC · APIs</span></div>
+      </div>
+      <div class="arch-arrow">↕ Storage Layer</div>
+      <div class="arch-row">
+        <div class="arch-box ab-green">☁️ Amazon S3<span class="sub">AWS</span></div>
+        <div class="arch-box ab-green">🗄️ Azure ADLS Gen2<span class="sub">Azure</span></div>
+        <div class="arch-box ab-green">🪣 Google GCS<span class="sub">GCP</span></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:40px;">
+      <div>
+        <h3 style="font-size:18px; font-weight:700; margin-bottom:20px;">⚙️ Cluster Lifecycle</h3>
+        <div class="steps">
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num" style="background:var(--blue-light); color:var(--blue)">1</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <h4>Cluster Request</h4>
+              <p>User or job triggers cluster creation. Control plane instructs your cloud provider (via API) to spin up EC2/VMs.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num" style="background:var(--orange-light); color:var(--orange)">2</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <h4>Driver + Workers Start</h4>
+              <p>One <strong>Driver node</strong> coordinates tasks. N <strong>Worker nodes</strong> execute parallel computation using Spark executor JVMs.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num" style="background:var(--purple-light); color:var(--purple)">3</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <h4>Job Execution (DAG)</h4>
+              <p>Spark converts code into a <strong>Directed Acyclic Graph (DAG)</strong> of stages, distributed across worker cores for parallel execution.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-left">
+              <div class="step-num" style="background:var(--green-light); color:var(--green)">4</div>
+            </div>
+            <div class="step-body">
+              <h4>Auto-termination</h4>
+              <p>Cluster auto-terminates after idle timeout. Results are persisted to Delta Lake / cloud storage — no data loss.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:18px; font-weight:700; margin-bottom:20px;">🔷 Delta Lake: The Magic Layer</h3>
+        <p style="font-size:15px; color:var(--text-muted); margin-bottom:16px;">
+          Delta Lake is what makes Databricks uniquely reliable for large-scale production. It wraps Parquet files with a
+          transaction log (<code class="inline">_delta_log/</code>) that records every change.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div class="card" style="padding:16px 20px; display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; margin-top:2px;">🔐</span>
+            <div><strong style="font-size:14px;">ACID Transactions</strong><br><span style="font-size:14px; color:var(--text-muted)">Atomicity, Consistency, Isolation, Durability — even on S3.</span></div>
+          </div>
+          <div class="card" style="padding:16px 20px; display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; margin-top:2px;">⏪</span>
+            <div><strong style="font-size:14px;">Time Travel</strong><br><span style="font-size:14px; color:var(--text-muted)">Query historical snapshots: <code class="inline">VERSION AS OF 5</code> or <code class="inline">TIMESTAMP AS OF '2024-01-01'</code></span></div>
+          </div>
+          <div class="card" style="padding:16px 20px; display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; margin-top:2px;">🔄</span>
+            <div><strong style="font-size:14px;">Schema Evolution</strong><br><span style="font-size:14px; color:var(--text-muted)">Safely add/remove columns. Schema enforcement catches bad data at write time.</span></div>
+          </div>
+          <div class="card" style="padding:16px 20px; display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; margin-top:2px;">📡</span>
+            <div><strong style="font-size:14px;">Change Data Feed (CDC)</strong><br><span style="font-size:14px; color:var(--text-muted)">Read only inserted/updated/deleted rows since last sync — crucial for streaming pipelines.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code Example -->
+    <div style="margin-top:48px;">
+      <h3 style="font-size:18px; font-weight:700; margin-bottom:16px;">📄 Core PySpark + Delta Lake Patterns</h3>
+      <pre><span class="cmt"># ── Reading from Delta Lake ──────────────────────────────────────────</span>
+<span class="kw">df</span> <span class="op">=</span> spark.<span class="fn">read</span>.<span class="fn">format</span>(<span class="str">"delta"</span>).<span class="fn">load</span>(<span class="str">"abfss://raw@datalake.dfs.core.windows.net/events"</span>)
+
+<span class="cmt"># ── Writing with MERGE (upsert) ───────────────────────────────────────</span>
+<span class="kw">from</span> delta.tables <span class="kw">import</span> DeltaTable
+
+deltaTable <span class="op">=</span> DeltaTable.<span class="fn">forPath</span>(spark, <span class="str">"/mnt/silver/users"</span>)
+deltaTable.<span class="fn">alias</span>(<span class="str">"target"</span>).<span class="fn">merge</span>(
+    newData.<span class="fn">alias</span>(<span class="str">"source"</span>),
+    <span class="str">"target.user_id = source.user_id"</span>
+).<span class="fn">whenMatchedUpdateAll</span>() \
+ .<span class="fn">whenNotMatchedInsertAll</span>() \
+ .<span class="fn">execute</span>()
+
+<span class="cmt"># ── Time Travel Query ─────────────────────────────────────────────────</span>
+df_v5 <span class="op">=</span> spark.<span class="fn">read</span>.<span class="fn">format</span>(<span class="str">"delta"</span>) \
+    .<span class="fn">option</span>(<span class="str">"versionAsOf"</span>, <span class="num">5</span>) \
+    .<span class="fn">load</span>(<span class="str">"/mnt/gold/orders"</span>)
+
+<span class="cmt"># ── Structured Streaming ──────────────────────────────────────────────</span>
+streamDf <span class="op">=</span> spark.<span class="fn">readStream</span>.<span class="fn">format</span>(<span class="str">"delta"</span>).<span class="fn">load</span>(<span class="str">"/mnt/bronze/events"</span>)
+query <span class="op">=</span> streamDf.<span class="fn">writeStream</span> \
+    .<span class="fn">format</span>(<span class="str">"delta"</span>) \
+    .<span class="fn">outputMode</span>(<span class="str">"append"</span>) \
+    .<span class="fn">option</span>(<span class="str">"checkpointLocation"</span>, <span class="str">"/mnt/checkpoints/events"</span>) \
+    .<span class="fn">trigger</span>(processingTime<span class="op">=</span><span class="str">"1 minute"</span>) \
+    .<span class="fn">start</span>(<span class="str">"/mnt/silver/events_cleaned"</span>)</pre>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3 — ARCHITECTURE -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-label" style="color:var(--purple)">Section 03</div>
+    <h2 class="section-title">Databricks Architecture</h2>
+    <p class="section-sub">Two-plane architecture separating control logic from data processing for security and scalability.</p>
+
+    <div class="grid-2" style="margin-bottom:40px;">
+      <div class="card" style="border-top: 3px solid var(--blue);">
+        <span class="tag tag-blue">Control Plane</span>
+        <h3>Databricks-Managed Layer</h3>
+        <p style="margin-bottom:14px;">Runs <strong>in Databricks' cloud account</strong>. Handles:</p>
+        <ul class="check-list">
+          <li>Web UI, REST API, CLI</li>
+          <li>Cluster Manager &amp; Job Scheduler</li>
+          <li>Notebook collaboration &amp; versioning</li>
+          <li>Workflow orchestration (Databricks Workflows)</li>
+          <li>Unity Catalog metadata &amp; governance</li>
+          <li>Authentication &amp; RBAC</li>
+        </ul>
+        <div class="highlight hl-blue" style="margin-top:16px;">
+          <strong>🔒 Security note</strong>
+          <p>Only metadata and credentials pass through the control plane. Actual data never leaves your cloud environment.</p>
+        </div>
+      </div>
+
+      <div class="card" style="border-top: 3px solid var(--orange);">
+        <span class="tag tag-orange">Data Plane</span>
+        <h3>Your Cloud Account</h3>
+        <p style="margin-bottom:14px;">Runs <strong>inside your AWS/Azure/GCP account</strong>. Contains:</p>
+        <ul class="check-list">
+          <li>Spark clusters (EC2, Azure VMs, GCE)</li>
+          <li>Delta Lake files in object storage</li>
+          <li>VPC/VNet with private networking</li>
+          <li>Notebooks executed in secure containers</li>
+          <li>Compute-optimized nodes (GPU/CPU)</li>
+          <li>Customer-managed encryption keys</li>
+        </ul>
+        <div class="highlight hl-orange" style="margin-top:16px;">
+          <strong>💡 Bring Your Own Cloud</strong>
+          <p>You pay AWS/Azure/GCP directly for compute — Databricks charges separately for the platform layer (DBUs).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medallion Architecture -->
+    <h3 style="font-size:20px; font-weight:700; margin-bottom:8px;">🏅 Medallion Architecture (Bronze → Silver → Gold)</h3>
+    <p style="font-size:15px; color:var(--text-muted); margin-bottom:24px;">
+      The de-facto data organisation pattern in Databricks Lakehouses — progressively refining raw data into business-ready assets.
+    </p>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; margin-bottom:36px;">
+      <div class="card" style="border-top:4px solid #B45309;">
+        <span class="tag tag-orange">🥉 Bronze Layer</span>
+        <h3>Raw Ingestion</h3>
+        <ul class="check-list">
+          <li>Exact copy of source data</li>
+          <li>Schema-on-read</li>
+          <li>No transformation, ever</li>
+          <li>Append-only or full snapshot</li>
+          <li>Retained indefinitely (audit)</li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:4px solid #64748B;">
+        <span class="tag" style="background:#F1F5F9; color:#475569;">🥈 Silver Layer</span>
+        <h3>Cleansed &amp; Conformed</h3>
+        <ul class="check-list">
+          <li>Deduplication &amp; null handling</li>
+          <li>Schema enforcement</li>
+          <li>Type casting &amp; standardisation</li>
+          <li>Business key resolution</li>
+          <li>Joined/enriched datasets</li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:4px solid #CA8A04;">
+        <span class="tag tag-orange">🥇 Gold Layer</span>
+        <h3>Business-Ready</h3>
+        <ul class="check-list">
+          <li>Aggregated / aggregated facts</li>
+          <li>Domain-specific data marts</li>
+          <li>Optimised for BI tools</li>
+          <li>Feature store for ML</li>
+          <li>SLA-governed, well-documented</li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:4px solid var(--purple);">
+        <span class="tag tag-purple">💎 Platinum (optional)</span>
+        <h3>ML Features / Serving</h3>
+        <ul class="check-list">
+          <li>Feature Store tables</li>
+          <li>Model serving endpoints</li>
+          <li>Real-time feature lookups</li>
+          <li>Experiment tracking via MLflow</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Key Components -->
+    <h3 style="font-size:20px; font-weight:700; margin-bottom:24px;">🧩 Key Platform Components</h3>
+    <div class="grid-3">
+      <div class="card">
+        <div class="icon-box ib-blue">⚡</div>
+        <span class="tag tag-blue">Runtime</span>
+        <h3>Photon Engine</h3>
+        <p>Databricks' native vectorized query engine written in C++ — replaces the Java-based Spark SQL engine for 2–12× faster queries on large scans.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box ib-orange">🌊</div>
+        <span class="tag tag-orange">Pipelines</span>
+        <h3>Delta Live Tables (DLT)</h3>
+        <p>Declarative pipeline framework. Define your pipeline as SQL/Python expectations, and DLT handles dependency resolution, retries, and data quality checks.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box ib-purple">🤖</div>
+        <span class="tag tag-purple">ML/AI</span>
+        <h3>MLflow + Feature Store</h3>
+        <p>Open-source ML lifecycle tool (experiment tracking, model registry, deployment). Feature Store ensures consistent feature computation between training and serving.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box ib-green">🏛️</div>
+        <span class="tag tag-green">Governance</span>
+        <h3>Unity Catalog</h3>
+        <p>Unified data governance for tables, views, ML models, files. Fine-grained column/row level security, audit logs, automated lineage, and data discovery.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box ib-blue">🔁</div>
+        <span class="tag tag-blue">Orchestration</span>
+        <h3>Databricks Workflows</h3>
+        <p>Native job scheduler with DAG-based task dependency, retry logic, email alerting, and integrations with dbt, Airflow, and external webhooks.</p>
+      </div>
+      <div class="card">
+        <div class="icon-box ib-orange">📡</div>
+        <span class="tag tag-orange">Streaming</span>
+        <h3>Structured Streaming</h3>
+        <p>Kafka → Delta Lake pipelines with exactly-once semantics. Trigger modes: micro-batch (seconds to minutes) or continuous processing (milliseconds).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4 — WHY DATABRICKS -->
+<section id="why" style="background:var(--bg)">
+  <div class="container">
+    <div class="section-label" style="color:var(--green)">Section 04</div>
+    <h2 class="section-title">Why Databricks? The Competitive Edge</h2>
+    <p class="section-sub">What separates Databricks from alternatives like Snowflake, AWS EMR, or raw Spark on Kubernetes.</p>
+
+    <!-- Comparison Table -->
+    <div style="overflow-x:auto; margin-bottom:40px;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Databricks</th>
+            <th>Snowflake</th>
+            <th>AWS EMR</th>
+            <th>BigQuery</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Batch ETL at Scale</strong></td>
+            <td><span class="check">✅ Native Spark</span></td>
+            <td><span class="partial">⚡ SQL only</span></td>
+            <td><span class="check">✅ DIY Spark</span></td>
+            <td><span class="partial">⚡ SQL-focused</span></td>
+          </tr>
+          <tr>
+            <td><strong>ML / Deep Learning</strong></td>
+            <td><span class="check">✅ GPU clusters, MLflow</span></td>
+            <td><span class="cross">❌ Limited</span></td>
+            <td><span class="partial">⚡ Manual setup</span></td>
+            <td><span class="partial">⚡ Vertex AI separate</span></td>
+          </tr>
+          <tr>
+            <td><strong>Real-time Streaming</strong></td>
+            <td><span class="check">✅ Structured Streaming + DLT</span></td>
+            <td><span class="partial">⚡ Snowpipe only</span></td>
+            <td><span class="check">✅ Kinesis integration</span></td>
+            <td><span class="partial">⚡ Dataflow needed</span></td>
+          </tr>
+          <tr>
+            <td><strong>Open Format Storage</strong></td>
+            <td><span class="check">✅ Delta / Iceberg / Hudi</span></td>
+            <td><span class="cross">❌ Proprietary format</span></td>
+            <td><span class="check">✅ Open formats</span></td>
+            <td><span class="cross">❌ Proprietary</span></td>
+          </tr>
+          <tr>
+            <td><strong>Multi-language Support</strong></td>
+            <td><span class="check">✅ Python, Scala, SQL, R</span></td>
+            <td><span class="partial">⚡ SQL + Snowpark</span></td>
+            <td><span class="check">✅ Any JVM lang</span></td>
+            <td><span class="partial">⚡ SQL + Python</span></td>
+          </tr>
+          <tr>
+            <td><strong>Data Governance</strong></td>
+            <td><span class="check">✅ Unity Catalog</span></td>
+            <td><span class="check">✅ Strong</span></td>
+            <td><span class="cross">❌ Manual / Lake Formation</span></td>
+            <td><span class="check">✅ IAM + DLP</span></td>
+          </tr>
+          <tr>
+            <td><strong>Managed Operations</strong></td>
+            <td><span class="check">✅ Fully managed clusters</span></td>
+            <td><span class="check">✅ Serverless</span></td>
+            <td><span class="cross">❌ Self-managed</span></td>
+            <td><span class="check">✅ Serverless</span></td>
+          </tr>
+          <tr>
+            <td><strong>Cost at Petabyte Scale</strong></td>
+            <td><span class="check">✅ Storage + DBU separation</span></td>
+            <td><span class="cross">❌ High storage cost</span></td>
+            <td><span class="partial">⚡ Spot instances help</span></td>
+            <td><span class="partial">⚡ Per-query pricing</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-3">
+      <div class="card" style="border-top:3px solid var(--green);">
+        <div class="icon-box ib-green">💰</div>
+        <h3>Cost Efficiency at Scale</h3>
+        <p>Data stored as open Parquet/Delta files on cheap object storage (~$0.023/GB/month on S3 vs $40+/TB/month for Snowflake credits). Pay for compute only when running.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--blue);">
+        <div class="icon-box ib-blue">🔓</div>
+        <h3>No Vendor Lock-in</h3>
+        <p>Delta Lake, Apache Spark, MLflow, and Apache Iceberg are all open-source. Your data format is portable — you can read Delta files with any Spark cluster.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--purple);">
+        <div class="icon-box ib-purple">🚀</div>
+        <h3>Photon + Runtime Optimisations</h3>
+        <p>Databricks Runtime applies 100+ optimisations over open-source Spark: adaptive query execution, Z-ordering, liquid clustering, and ZSTD compression.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--orange);">
+        <div class="icon-box ib-orange">🤝</div>
+        <h3>Unified Team Collaboration</h3>
+        <p>Data Engineers, Data Scientists, ML Engineers, and Analysts all work on the same platform — shared notebooks, lineage, and governance via Unity Catalog.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--green);">
+        <div class="icon-box ib-green">🌐</div>
+        <h3>Multi-cloud Portability</h3>
+        <p>Run on AWS, Azure, or GCP — or all three. Same APIs, same notebooks, same governance. Deploy where your data or compliance requirements dictate.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--blue);">
+        <div class="icon-box ib-blue">🧠</div>
+        <h3>GenAI &amp; LLM Integration</h3>
+        <p>Mosaic AI (formerly MosaicML), Vector Search, and Foundation Model APIs allow fine-tuning and deploying LLMs directly within the Lakehouse — on your data.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 5 — USE CASES -->
+<section id="usecases">
+  <div class="container">
+    <div class="section-label" style="color:var(--blue)">Section 05</div>
+    <h2 class="section-title">What is Databricks Good For?</h2>
+    <p class="section-sub">Industry-specific and cross-industry workloads where Databricks delivers outsized value.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <span class="tag tag-blue">⚙️ Data Engineering</span>
+        <h3>Large-scale ETL / ELT Pipelines</h3>
+        <p>Transform terabytes to petabytes daily. Delta Live Tables brings CI/CD-style pipeline reliability with automatic retries, data quality assertions, and lineage tracking.</p>
+        <div class="highlight hl-blue" style="margin-top:12px;">
+          <strong>Best for:</strong>
+          <p>CDC from operational DBs, event log aggregation, complex multi-hop transformations, regulatory reporting pipelines.</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="tag tag-orange">🤖 Machine Learning</span>
+        <h3>End-to-end ML Lifecycle</h3>
+        <p>From feature engineering on PB datasets → distributed training with Horovod/DeepSpeed → MLflow experiment tracking → model registry → real-time serving endpoints.</p>
+        <div class="highlight hl-orange" style="margin-top:12px;">
+          <strong>Best for:</strong>
+          <p>Fraud detection, recommendation systems, predictive maintenance, NLP at scale, large language model fine-tuning.</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="tag tag-purple">📡 Streaming Analytics</span>
+        <h3>Real-time Data Pipelines</h3>
+        <p>Ingest from Kafka, Kinesis, Event Hubs with exactly-once semantics. Trigger alerts, update dashboards, or feed operational systems with sub-minute latency.</p>
+        <div class="highlight hl-purple" style="margin-top:12px;">
+          <strong>Best for:</strong>
+          <p>IoT telemetry, clickstream analytics, financial market data, real-time inventory, live personalization.</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="tag tag-green">📊 SQL Analytics / BI</span>
+        <h3>Serverless SQL Warehouses</h3>
+        <p>Run ANSI SQL on Delta tables with Photon engine. Sub-second queries on billions of rows. Connect Tableau, Power BI, Looker, or Superset via JDBC/ODBC.</p>
+        <div class="highlight hl-green" style="margin-top:12px;">
+          <strong>Best for:</strong>
+          <p>Enterprise dashboards, ad-hoc exploration, self-service analytics, cost-efficient alternative to Snowflake for compute-heavy BI.</p>
+        </div>
+      </div>
+      <div class="card">
+        <span class="tag tag-blue">🧬 Genomics / Life Sciences</span>
+        <h3>Scientific Computing at Scale</h3>
+        <p>Process whole-genome sequencing (WGS) datasets using Glow (genomics library on Spark). Run population-scale GWAS, variant annotation, and cohort analysis.</p>
+      </div>
+      <div class="card">
+        <span class="tag tag-orange">🏦 Financial Services</span>
+        <h3>Risk, Compliance &amp; Trading</h3>
+        <p>Monte Carlo simulations across millions of scenarios. AML/fraud model training. Regulatory reporting (BCBS 239, CCAR) with full audit trail via Delta time travel.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 6 — PRODUCTION SETUP -->
+<section id="production" style="background:var(--bg)">
+  <div class="container">
+    <div class="section-label" style="color:var(--orange)">Section 06</div>
+    <h2 class="section-title">Production Setup — Petabyte Scale</h2>
+    <p class="section-sub">
+      A battle-tested checklist for deploying Databricks at PB+ data volumes in enterprise production environments.
+    </p>
+
+    <div class="highlight hl-orange" style="margin-bottom:36px;">
+      <strong>⚠️ Petabyte Scale Principles</strong>
+      <p>At PB scale: <strong>1)</strong> Storage costs dominate → use Z-ordering, liquid clustering, OPTIMIZE. <strong>2)</strong> Network I/O is the bottleneck → keep compute in same region/AZ as storage. <strong>3)</strong> Autoscaling needs tuning → aggressive scale-down wastes startup time, aggressive scale-up wastes money.</p>
+    </div>
+
+    <div class="prod-grid">
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--blue-light);">
+          <div class="icon-box ib-blue" style="margin:0;">🏗️</div>
+          <div>
+            <div class="tag tag-blue" style="margin:0 0 2px;">Step 1</div>
+            <strong>Infrastructure &amp; Networking</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>Isolate the data plane in a private VNet/VPC. Use VPC peering or Private Link to connect to source systems.</p>
+          <ul class="check-list">
+            <li>Enable VPC/VNet injection (no public IPs on workers)</li>
+            <li>Configure NAT Gateway for outbound traffic only</li>
+            <li>Use Private Link for Databricks control plane communication</li>
+            <li>Place clusters in same AZ as primary object storage bucket</li>
+            <li>Dedicated subnets per workspace (at least /24 for PB workloads)</li>
+          </ul>
+          <pre style="margin-top:14px; font-size:12px;"><span class="cmt"># Terraform: Databricks on Azure (private)</span>
+resource <span class="str">"azurerm_databricks_workspace"</span> <span class="str">"prod"</span> {
+  name                        <span class="op">=</span> <span class="str">"dbx-prod"</span>
+  resource_group_name         <span class="op">=</span> var.rg
+  location                    <span class="op">=</span> <span class="str">"eastus2"</span>
+  sku                         <span class="op">=</span> <span class="str">"premium"</span>
+  public_network_access_enabled <span class="op">=</span> <span class="kw">false</span>
+  custom_parameters {
+    virtual_network_id        <span class="op">=</span> var.vnet_id
+    public_subnet_name        <span class="op">=</span> <span class="str">"dbx-public"</span>
+    private_subnet_name       <span class="op">=</span> <span class="str">"dbx-private"</span>
+    no_public_ip              <span class="op">=</span> <span class="kw">true</span>
+  }
+}</pre>
+        </div>
+      </div>
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--orange-light);">
+          <div class="icon-box ib-orange" style="margin:0;">☁️</div>
+          <div>
+            <div class="tag tag-orange" style="margin:0 0 2px;">Step 2</div>
+            <strong>Storage Architecture</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>Organise your Lakehouse storage using Medallion pattern with separate containers per zone.</p>
+          <ul class="check-list">
+            <li>Separate storage accounts per environment (dev/staging/prod)</li>
+            <li>Enable hierarchical namespace (ADLS Gen2 / S3 with table format)</li>
+            <li>Set lifecycle policies: archive Bronze after 90 days to cold tier</li>
+            <li>Enable versioning on Gold layer containers</li>
+            <li>Use customer-managed keys (CMK) for encryption at rest</li>
+          </ul>
+          <pre style="margin-top:14px; font-size:12px;"><span class="cmt"># Recommended folder structure</span>
+<span class="str">abfss://bronze@prod.dfs.core.windows.net/</span>
+  ├── source_system_a/
+  ├── source_system_b/
+<span class="str">abfss://silver@prod.dfs.core.windows.net/</span>
+  ├── domain_users/
+  ├── domain_orders/
+<span class="str">abfss://gold@prod.dfs.core.windows.net/</span>
+  ├── mart_finance/
+  ├── mart_operations/</pre>
+        </div>
+      </div>
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--purple-light);">
+          <div class="icon-box ib-purple" style="margin:0;">⚡</div>
+          <div>
+            <div class="tag tag-purple" style="margin:0 0 2px;">Step 3</div>
+            <strong>Cluster Configuration (PB Scale)</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>For PB workloads, use <strong>instance fleets</strong> with autoscaling and spot/preemptible instances on workers.</p>
+          <pre style="font-size:12px;"><span class="cmt"># Recommended cluster config (JSON)</span>
+{
+  <span class="str">"cluster_name"</span>: <span class="str">"prod-etl-large"</span>,
+  <span class="str">"spark_version"</span>: <span class="str">"14.3.x-scala2.12"</span>,
+  <span class="str">"node_type_id"</span>: <span class="str">"Standard_E64ds_v4"</span>,
+  <span class="str">"driver_node_type_id"</span>: <span class="str">"Standard_E32ds_v4"</span>,
+  <span class="str">"autoscale"</span>: {
+    <span class="str">"min_workers"</span>: <span class="num">4</span>,
+    <span class="str">"max_workers"</span>: <span class="num">200</span>
+  },
+  <span class="str">"enable_elastic_disk"</span>: <span class="kw">true</span>,
+  <span class="str">"spot_bid_max_price"</span>: <span class="num">100</span>,
+  <span class="str">"spark_conf"</span>: {
+    <span class="str">"spark.databricks.delta.optimizeWrite.enabled"</span>: <span class="str">"true"</span>,
+    <span class="str">"spark.databricks.delta.autoCompact.enabled"</span>: <span class="str">"true"</span>,
+    <span class="str">"spark.sql.shuffle.partitions"</span>: <span class="str">"auto"</span>,
+    <span class="str">"spark.databricks.photon.enabled"</span>: <span class="str">"true"</span>
+  }
+}</pre>
+        </div>
+      </div>
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--green-light);">
+          <div class="icon-box ib-green" style="margin:0;">🏛️</div>
+          <div>
+            <div class="tag tag-green" style="margin:0 0 2px;">Step 4</div>
+            <strong>Unity Catalog &amp; Governance</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>Unity Catalog is mandatory for production. It provides fine-grained access control, lineage, and auditing.</p>
+          <ul class="check-list">
+            <li>Create one metastore per cloud region</li>
+            <li>Use 3-level namespace: <code class="inline">catalog.schema.table</code></li>
+            <li>Apply row-level filters and column masking for PII</li>
+            <li>Enable audit logging to SIEM (Splunk, Sentinel)</li>
+            <li>Use Service Principals for all automated jobs (no personal tokens)</li>
+          </ul>
+          <pre style="margin-top:14px; font-size:12px;"><span class="cmt">-- Unity Catalog: Fine-grained permissions</span>
+<span class="kw">GRANT</span> SELECT <span class="kw">ON</span> TABLE prod_catalog.gold.orders
+  <span class="kw">TO</span> `data-analysts@company.com`;
+
+<span class="kw">CREATE</span> ROW FILTER orders_region_filter
+  <span class="kw">ON</span> TABLE prod_catalog.gold.orders
+  <span class="kw">USING</span> (region = current_user_region());
+
+<span class="kw">ALTER</span> TABLE prod_catalog.gold.orders
+  <span class="kw">SET</span> ROW FILTER orders_region_filter ();</pre>
+        </div>
+      </div>
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--blue-light);">
+          <div class="icon-box ib-blue" style="margin:0;">🔧</div>
+          <div>
+            <div class="tag tag-blue" style="margin:0 0 2px;">Step 5</div>
+            <strong>Delta Lake Optimisation (PB)</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>At petabyte scale, proper Delta table tuning is critical for performance and cost.</p>
+          <pre style="font-size:12px;"><span class="cmt">-- 1. OPTIMIZE + Z-ORDER (run weekly on Gold)</span>
+<span class="kw">OPTIMIZE</span> prod_catalog.gold.events
+  ZORDER BY (event_date, user_id);
+
+<span class="cmt">-- 2. Liquid Clustering (Databricks 13+) </span>
+<span class="cmt">--    replaces static partitioning</span>
+<span class="kw">ALTER</span> TABLE prod_catalog.silver.events
+  <span class="kw">CLUSTER</span> BY (event_date, region);
+
+<span class="cmt">-- 3. VACUUM old files (30-day retention)</span>
+<span class="kw">VACUUM</span> prod_catalog.gold.events
+  RETAIN <span class="num">720</span> HOURS;
+
+<span class="cmt">-- 4. Bloom filter for high-cardinality lookups</span>
+<span class="kw">CREATE</span> BLOOMFILTER INDEX
+  <span class="kw">ON</span> TABLE prod_catalog.gold.events
+  <span class="kw">FOR</span> COLUMNS (user_id OPTIONS (fpp=<span class="num">0.1</span>));</pre>
+        </div>
+      </div>
+
+      <div class="prod-card">
+        <div class="prod-card-header" style="background:var(--orange-light);">
+          <div class="icon-box ib-orange" style="margin:0;">📊</div>
+          <div>
+            <div class="tag tag-orange" style="margin:0 0 2px;">Step 6</div>
+            <strong>Observability &amp; Cost Control</strong>
+          </div>
+        </div>
+        <div class="prod-card-body">
+          <p>Monitor costs, performance, and data quality proactively — before they become incidents.</p>
+          <ul class="check-list">
+            <li>Enable Cluster Usage &amp; DBU dashboards in Databricks Admin Console</li>
+            <li>Export cluster events to Spark UI / Log Analytics</li>
+            <li>Set up DLT data quality expectations with <code class="inline">@dlt.expect_or_fail</code></li>
+            <li>Budget alerts via Databricks Cost Management or AWS Cost Explorer</li>
+            <li>Use Spot interruption handling with autoscaling retry policies</li>
+            <li>Enable predictive autoscaling (Databricks Enhanced Autoscaling)</li>
+          </ul>
+          <pre style="margin-top:14px; font-size:12px;"><span class="cmt"># DLT Data Quality Expectations</span>
+<span class="kw">import</span> dlt
+
+<span class="op">@</span>dlt.<span class="fn">table</span>
+<span class="op">@</span>dlt.<span class="fn">expect_or_drop</span>(<span class="str">"valid_order_id"</span>,
+    <span class="str">"order_id IS NOT NULL"</span>)
+<span class="op">@</span>dlt.<span class="fn">expect_or_fail</span>(<span class="str">"positive_amount"</span>,
+    <span class="str">"amount > 0"</span>)
+<span class="kw">def</span> <span class="fn">silver_orders</span>():
+    <span class="kw">return</span> dlt.<span class="fn">read</span>(<span class="str">"bronze_orders"</span>) \
+        .<span class="fn">filter</span>(<span class="str">"status != 'CANCELLED'"</span>)</pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 7 — CONFIG REFERENCE -->
+<section id="config">
+  <div class="container">
+    <div class="section-label" style="color:var(--purple)">Section 07</div>
+    <h2 class="section-title">Production Config Reference</h2>
+    <p class="section-sub">Key Spark and Databricks configurations for petabyte-scale production deployments.</p>
+
+    <div class="grid-2">
+      <div>
+        <h3 style="font-size:17px; font-weight:700; margin-bottom:16px;">🔥 Spark Performance Configs</h3>
+        <pre style="font-size:12.5px;"><span class="cmt"># spark-defaults.conf for PB workloads</span>
+
+<span class="cmt"># Adaptive Query Execution (AQE)</span>
+spark.sql.adaptive.enabled                          <span class="kw">true</span>
+spark.sql.adaptive.coalescePartitions.enabled       <span class="kw">true</span>
+spark.sql.adaptive.skewJoin.enabled                 <span class="kw">true</span>
+
+<span class="cmt"># Dynamic Partition Pruning</span>
+spark.sql.optimizer.dynamicPartitionPruning.enabled <span class="kw">true</span>
+
+<span class="cmt"># Shuffle tuning (auto for Databricks 14+)</span>
+spark.sql.shuffle.partitions                        <span class="str">auto</span>
+
+<span class="cmt"># Memory management</span>
+spark.memory.fraction                              <span class="num">0.8</span>
+spark.memory.storageFraction                       <span class="num">0.3</span>
+
+<span class="cmt"># Delta-specific</span>
+spark.databricks.delta.optimizeWrite.enabled        <span class="kw">true</span>
+spark.databricks.delta.autoCompact.enabled          <span class="kw">true</span>
+spark.databricks.delta.retentionDurationCheck.enabled <span class="kw">false</span>
+
+<span class="cmt"># Photon engine (all SQL workloads)</span>
+spark.databricks.photon.enabled                     <span class="kw">true</span>
+
+<span class="cmt"># Kryo serialization (30% faster than Java ser)</span>
+spark.serializer         org.apache.spark.serializer.KryoSerializer</pre>
+      </div>
+
+      <div>
+        <h3 style="font-size:17px; font-weight:700; margin-bottom:16px;">💾 Recommended Instance Types</h3>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="card" style="padding:16px 20px;">
+            <span class="tag tag-blue">General ETL</span>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:8px;">
+              <div style="color:var(--text-muted);">AWS: <span style="color:var(--text)">r6id.4xlarge → r6id.32xlarge</span></div>
+              <div style="color:var(--text-muted);">Azure: <span style="color:var(--text)">Standard_E16ds_v5 → E96ds_v5</span></div>
+              <div style="color:var(--text-muted);">Memory-optimised, NVMe local SSD for spill</div>
+            </div>
+          </div>
+          <div class="card" style="padding:16px 20px;">
+            <span class="tag tag-orange">SQL / BI Workloads</span>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:8px;">
+              <div style="color:var(--text-muted);">AWS: <span style="color:var(--text)">m6id.4xlarge + Photon</span></div>
+              <div style="color:var(--text-muted);">Azure: <span style="color:var(--text)">Standard_D32ds_v5 + Photon</span></div>
+              <div style="color:var(--text-muted);">Balanced compute with fast local disk</div>
+            </div>
+          </div>
+          <div class="card" style="padding:16px 20px;">
+            <span class="tag tag-purple">ML Training (GPU)</span>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:8px;">
+              <div style="color:var(--text-muted);">AWS: <span style="color:var(--text)">p4d.24xlarge (A100 x8)</span></div>
+              <div style="color:var(--text-muted);">Azure: <span style="color:var(--text)">Standard_ND96asr_v4</span></div>
+              <div style="color:var(--text-muted);">NVLink interconnect for distributed training</div>
+            </div>
+          </div>
+          <div class="card" style="padding:16px 20px;">
+            <span class="tag tag-green">Streaming (Low-latency)</span>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:8px;">
+              <div style="color:var(--text-muted);">AWS: <span style="color:var(--text)">c6id.4xlarge → c6id.16xlarge</span></div>
+              <div style="color:var(--text-muted);">Azure: <span style="color:var(--text)">Standard_F32s_v2</span></div>
+              <div style="color:var(--text-muted);">Compute-optimised, high network bandwidth</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Best Practices Summary -->
+    <div style="margin-top:48px; background:linear-gradient(135deg,#0F172A,#1E293B); border-radius:var(--radius); padding:40px; color:white;">
+      <h3 style="font-size:20px; font-weight:800; margin-bottom:24px; color:white;">🏆 PB-Scale Production Checklist</h3>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:24px;">
+        <div>
+          <div style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.4); margin-bottom:12px;">Infrastructure</div>
+          <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Private VPC/VNet with no public worker IPs</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Instance Fleet with Spot + On-demand fallback</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Enhanced autoscaling enabled</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Cluster pools to reduce startup time</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Same region AZ as primary storage</li>
+          </ul>
+        </div>
+        <div>
+          <div style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.4); margin-bottom:12px;">Data &amp; Storage</div>
+          <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Medallion architecture (Bronze/Silver/Gold)</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Liquid clustering on high-traffic tables</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Weekly OPTIMIZE + VACUUM jobs</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Target file size 128–512 MB</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> ZSTD compression for columnar files</li>
+          </ul>
+        </div>
+        <div>
+          <div style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.4); margin-bottom:12px;">Security &amp; Governance</div>
+          <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Unity Catalog with 3-level namespace</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Service Principal per pipeline (no PATs)</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> CMK encryption + TLS in transit</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Audit logs to SIEM</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> IP access lists on workspaces</li>
+          </ul>
+        </div>
+        <div>
+          <div style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.4); margin-bottom:12px;">Operations</div>
+          <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> CI/CD via Databricks Bundles (DABs)</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> DLT expectations for data quality SLAs</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Budget alerts &amp; DBU cost tagging</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Terraform IaC for all workspaces</li>
+            <li style="font-size:14px; display:flex; gap:8px; color:rgba(255,255,255,.75);"><span style="color:#86EFAC;">✓</span> Multi-workspace promotion (dev→staging→prod)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <strong>Databricks Big Data Platform Deep Dive</strong><br />
+  Compiled for enterprise architects, data engineers, and ML practitioners · 2024<br />
+  <span style="margin-top:8px; display:block;">Built with ♥ using Inter + JetBrains Mono · Covers Databricks Runtime 14.x, Delta Lake 3.x, Unity Catalog</span>
+</footer>
+
+</body>
+</html>

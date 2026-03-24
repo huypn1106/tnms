@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HDFS: Architecture, Problems & Modern Alternatives</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --bg-soft: #e8eff7;
+    --card: #ffffff;
+    --card-hover: #f8fbff;
+    --border: #dde8f5;
+    --border-soft: #eaf0f9;
+    --text-primary: #1a2540;
+    --text-secondary: #4a5a78;
+    --text-muted: #8a9bb8;
+
+    --blue: #3b7dd8;
+    --blue-light: #eef4ff;
+    --blue-mid: #c4d9f7;
+    --orange: #e07b39;
+    --orange-light: #fff3eb;
+    --orange-mid: #f8d5b8;
+    --purple: #7b5ea7;
+    --purple-light: #f3eeff;
+    --purple-mid: #d8c8f0;
+    --green: #3b9e6e;
+    --green-light: #eaf7f1;
+    --green-mid: #b8e8d4;
+    --red: #d94f4f;
+    --red-light: #fef0f0;
+
+    --shadow: 0 2px 12px rgba(59,125,216,0.08);
+    --shadow-hover: 0 8px 28px rgba(59,125,216,0.14);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .site-header {
+    background: linear-gradient(135deg, #1a2f5e 0%, #2b4a8a 60%, #3b7dd8 100%);
+    color: white;
+    padding: 70px 24px 60px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .site-header::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 70% 30%, rgba(120,180,255,0.18) 0%, transparent 65%),
+                radial-gradient(ellipse at 20% 80%, rgba(80,140,255,0.12) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  .header-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .site-header h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .site-header h1 span { color: #7ec8ff; }
+  .site-header p {
+    font-size: 17px;
+    opacity: 0.82;
+    max-width: 620px;
+    margin: 0 auto;
+    font-weight: 400;
+  }
+  .header-meta {
+    margin-top: 32px;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .header-meta span {
+    background: rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 5px 14px;
+    font-size: 13px;
+    opacity: 0.88;
+  }
+
+  /* ── NAV ── */
+  .toc-nav {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 0 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .toc-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 10px 0;
+  }
+  .toc-inner::-webkit-scrollbar { display: none; }
+  .toc-link {
+    white-space: nowrap;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .toc-link:hover { background: var(--blue-light); color: var(--blue); }
+
+  /* ── MAIN LAYOUT ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 60px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .section-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .icon-blue  { background: var(--blue-light); }
+  .icon-orange{ background: var(--orange-light); }
+  .icon-purple{ background: var(--purple-light); }
+  .icon-green { background: var(--green-light); }
+  .icon-red   { background: var(--red-light); }
+
+  .section-header h2 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+  .section-sub {
+    font-size: 15px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px 28px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.25s, transform 0.2s;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .arch-diagram svg { display: block; margin: 0 auto; }
+
+  /* ── PROBLEM CARDS ── */
+  .problem-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .problem-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+  }
+  .problem-card.orange::before { background: var(--orange); }
+  .problem-card.purple::before { background: var(--purple); }
+  .problem-card.blue::before   { background: var(--blue); }
+  .problem-card.red::before    { background: var(--red); }
+  .problem-card.green::before  { background: var(--green); }
+  .problem-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+
+  .problem-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .problem-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .badge-orange { background: var(--orange-light); color: var(--orange); }
+  .badge-red    { background: var(--red-light);    color: var(--red); }
+  .badge-purple { background: var(--purple-light); color: var(--purple); }
+  .badge-blue   { background: var(--blue-light);   color: var(--blue); }
+  .badge-green  { background: var(--green-light);  color: var(--green); }
+
+  .problem-text {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 14px;
+  }
+  .problem-solution {
+    background: var(--green-light);
+    border: 1px solid var(--green-mid);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #2d7d57;
+  }
+  .problem-solution strong { font-weight: 600; }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    background: #1a2540;
+    color: #c9d8f0;
+    padding: 16px 20px;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 14px 0;
+  }
+  .code-block .kw  { color: #7ec8ff; }
+  .code-block .str { color: #a8e6b8; }
+  .code-block .num { color: #ffcc7a; }
+  .code-block .cm  { color: #6a8aa0; font-style: italic; }
+
+  /* ── STAT BOX ── */
+  .stat-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+  .stat-box {
+    flex: 1; min-width: 180px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .stat-box:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+  .stat-num {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .stat-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ── TOOL CARDS ── */
+  .tool-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+    transition: all 0.25s;
+  }
+  .tool-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+
+  .tool-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+  .tool-icon {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .tool-name { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+  .tool-type { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .tool-desc { font-size: 15px; color: var(--text-secondary); line-height: 1.65; margin-bottom: 16px; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tag {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .tag-blue   { background: var(--blue-light);   color: var(--blue); }
+  .tag-orange { background: var(--orange-light); color: var(--orange); }
+  .tag-purple { background: var(--purple-light); color: var(--purple); }
+  .tag-green  { background: var(--green-light);  color: var(--green); }
+
+  /* ── PRO/CON ── */
+  .procon-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .procon-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+  }
+  .procon-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .procon-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 11px;
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .procon-dot {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .dot-green { background: var(--green-light); color: var(--green); }
+  .dot-red   { background: var(--red-light);   color: var(--red); }
+
+  /* ── COMPARISON TABLE ── */
+  .comparison-table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 700px; }
+  th {
+    background: #1a2540;
+    color: white;
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    letter-spacing: 0.04em;
+  }
+  td {
+    padding: 13px 18px;
+    font-size: 14.5px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg-soft); }
+  .col-feature { font-weight: 600; color: var(--text-primary); font-size: 14px; }
+  .good  { color: var(--green);  font-weight: 600; }
+  .ok    { color: var(--orange); font-weight: 600; }
+  .bad   { color: var(--red);    font-weight: 600; }
+
+  /* ── REFS ── */
+  .ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .ref-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+  }
+  .ref-card:hover { border-color: var(--blue-mid); box-shadow: var(--shadow-hover); }
+  .ref-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--blue);
+    margin-bottom: 5px;
+    display: block;
+  }
+  .ref-card a { color: var(--text-primary); text-decoration: none; font-weight: 600; }
+  .ref-card a:hover { color: var(--blue); text-decoration: underline; }
+  .ref-source { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+  /* ── DIVIDER ── */
+  .divider { height: 1px; background: var(--border); margin: 8px 0 32px; }
+
+  /* ── INLINE TEXT HELPERS ── */
+  .text-body { font-size: 16px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 20px; }
+  .text-body strong { color: var(--text-primary); font-weight: 600; }
+
+  .label-blue { color: var(--blue); font-weight: 600; }
+  .label-orange { color: var(--orange); font-weight: 600; }
+  .label-purple { color: var(--purple); font-weight: 600; }
+  .label-green { color: var(--green); font-weight: 600; }
+
+  /* ── BLOCK REPL VISUAL ── */
+  .block-visual {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+    padding: 22px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--border);
+  }
+  .block-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .block-box {
+    width: 64px; height: 42px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+  }
+  .block-label { font-size: 11px; color: var(--text-muted); text-align: center; }
+  .blk-primary { background: var(--blue); }
+  .blk-rep1    { background: var(--purple); }
+  .blk-rep2    { background: var(--green); }
+  .blk-arrow   { font-size: 20px; color: var(--text-muted); line-height: 42px; }
+
+  /* ── FOOTER ── */
+  .footer {
+    background: #1a2540;
+    color: rgba(255,255,255,0.55);
+    text-align: center;
+    padding: 32px 24px;
+    font-size: 14px;
+    margin-top: 40px;
+  }
+  .footer a { color: rgba(126,200,255,0.8); text-decoration: none; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .procon-grid { grid-template-columns: 1fr; }
+    .grid-auto { grid-template-columns: 1fr; }
+    .stat-row { gap: 10px; }
+    .stat-box { min-width: 140px; }
+    .site-header { padding: 48px 20px 44px; }
+    .main { padding: 32px 16px 60px; }
+    .section-header h2 { font-size: 22px; }
+    table { font-size: 13px; }
+    th, td { padding: 10px 12px; }
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .section { animation: fadeUp 0.5s ease both; }
+  .section:nth-child(1) { animation-delay: 0.05s; }
+  .section:nth-child(2) { animation-delay: 0.1s; }
+  .section:nth-child(3) { animation-delay: 0.15s; }
+  .section:nth-child(4) { animation-delay: 0.2s; }
+  .section:nth-child(5) { animation-delay: 0.25s; }
+  .section:nth-child(6) { animation-delay: 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="header-badge">In-Depth Technical Research</div>
+  <h1>Hadoop Distributed File System<br><span>Architecture, Problems &amp; Modern Alternatives</span></h1>
+  <p>A comprehensive deep-dive into how HDFS works, the real operational challenges it faces, new tools built to solve them, and where to go next.</p>
+  <div class="header-meta">
+    <span>📡 Apache Hadoop 3.x</span>
+    <span>📅 Updated March 2026</span>
+    <span>📚 Research-backed with references</span>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav class="toc-nav">
+  <div class="toc-inner">
+    <a class="toc-link" href="#architecture">⚙️ Architecture</a>
+    <a class="toc-link" href="#storage">💾 Data Storage</a>
+    <a class="toc-link" href="#problems">⚠️ Real Problems</a>
+    <a class="toc-link" href="#solutions">🔧 New Tools</a>
+    <a class="toc-link" href="#strengths">✅ Strengths</a>
+    <a class="toc-link" href="#weaknesses">❌ Weaknesses</a>
+    <a class="toc-link" href="#alternatives">🔄 Alternatives</a>
+    <a class="toc-link" href="#comparison">📊 Comparison</a>
+    <a class="toc-link" href="#references">📖 References</a>
+  </div>
+</nav>
+
+<main class="main">
+
+<!-- ── SECTION 1: ARCHITECTURE ── -->
+<section class="section" id="architecture">
+  <div class="section-header">
+    <div class="section-icon icon-blue">⚙️</div>
+    <div>
+      <h2>HDFS Architecture</h2>
+      <div class="section-sub">How the distributed file system is structured internally</div>
+    </div>
+  </div>
+
+  <p class="text-body">
+    HDFS (Hadoop Distributed File System) is modeled after the <strong>Google File System (GFS)</strong> paper published in 2003. It follows a <strong>master–worker architecture</strong> with a single centralized metadata server (NameNode) and many distributed storage nodes (DataNodes). The system is designed for <strong>batch processing of large sequential reads</strong>, not random access or low-latency retrieval.
+  </p>
+
+  <!-- Architecture SVG -->
+  <div class="arch-diagram">
+    <svg viewBox="0 0 860 400" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="DM Sans, sans-serif">
+      <!-- Client -->
+      <rect x="30" y="170" width="130" height="60" rx="10" fill="#eef4ff" stroke="#3b7dd8" stroke-width="1.5"/>
+      <text x="95" y="195" text-anchor="middle" font-size="13" font-weight="700" fill="#1a2540">Client</text>
+      <text x="95" y="213" text-anchor="middle" font-size="11" fill="#6a8aa0">Application</text>
+
+      <!-- Arrow Client → NameNode -->
+      <line x1="160" y1="200" x2="230" y2="200" stroke="#3b7dd8" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+      <text x="195" y="190" text-anchor="middle" font-size="10" fill="#3b7dd8">Metadata RPC</text>
+
+      <!-- NameNode -->
+      <rect x="234" y="130" width="160" height="140" rx="12" fill="#1a2f5e" stroke="#3b7dd8" stroke-width="2"/>
+      <text x="314" y="158" text-anchor="middle" font-size="14" font-weight="700" fill="white">NameNode</text>
+      <line x1="250" y1="165" x2="378" y2="165" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+      <text x="314" y="184" text-anchor="middle" font-size="11" fill="#7ec8ff">fsimage (snapshot)</text>
+      <text x="314" y="200" text-anchor="middle" font-size="11" fill="#7ec8ff">editLog (journal)</text>
+      <text x="314" y="216" text-anchor="middle" font-size="11" fill="#7ec8ff">block → DataNode map</text>
+      <text x="314" y="232" text-anchor="middle" font-size="11" fill="#7ec8ff">namespace tree (RAM)</text>
+      <text x="314" y="254" text-anchor="middle" font-size="10" fill="#a0b8d0">~150 bytes / object</text>
+
+      <!-- Arrow NameNode → DataNodes -->
+      <line x1="394" y1="200" x2="460" y2="200" stroke="#6a8aa0" stroke-width="1.5" marker-end="url(#arr-gray)"/>
+      <text x="427" y="190" text-anchor="middle" font-size="10" fill="#6a8aa0">block location</text>
+
+      <!-- DataNode 1 -->
+      <rect x="464" y="60" width="130" height="80" rx="10" fill="#f3eeff" stroke="#7b5ea7" stroke-width="1.5"/>
+      <text x="529" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">DataNode 1</text>
+      <text x="529" y="103" text-anchor="middle" font-size="11" fill="#7b5ea7">Rack A  · Blk 1,4,7</text>
+      <text x="529" y="119" text-anchor="middle" font-size="11" fill="#7b5ea7">Heartbeat every 3s</text>
+
+      <!-- DataNode 2 -->
+      <rect x="464" y="165" width="130" height="80" rx="10" fill="#eaf7f1" stroke="#3b9e6e" stroke-width="1.5"/>
+      <text x="529" y="192" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">DataNode 2</text>
+      <text x="529" y="208" text-anchor="middle" font-size="11" fill="#3b9e6e">Rack A  · Blk 2,5,8</text>
+      <text x="529" y="224" text-anchor="middle" font-size="11" fill="#3b9e6e">Block report 1h</text>
+
+      <!-- DataNode 3 -->
+      <rect x="464" y="270" width="130" height="80" rx="10" fill="#fff3eb" stroke="#e07b39" stroke-width="1.5"/>
+      <text x="529" y="297" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">DataNode 3</text>
+      <text x="529" y="313" text-anchor="middle" font-size="11" fill="#e07b39">Rack B  · Blk 3,6,9</text>
+      <text x="529" y="329" text-anchor="middle" font-size="11" fill="#e07b39">Block report 1h</text>
+
+      <!-- Lines NameNode → DataNodes -->
+      <line x1="394" y1="180" x2="464" y2="110" stroke="#7b5ea7" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="394" y1="200" x2="464" y2="205" stroke="#3b9e6e" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="394" y1="220" x2="464" y2="300" stroke="#e07b39" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- Replication pipeline arrows -->
+      <rect x="622" y="60" width="130" height="80" rx="10" fill="#eef4ff" stroke="#3b7dd8" stroke-width="1.5"/>
+      <text x="687" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">DataNode 4</text>
+      <text x="687" y="103" text-anchor="middle" font-size="11" fill="#3b7dd8">Replica Blk 1</text>
+      <text x="687" y="119" text-anchor="middle" font-size="11" fill="#3b7dd8">Rack B</text>
+
+      <line x1="594" y1="100" x2="622" y2="100" stroke="#3b7dd8" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+      <text x="608" y="92" text-anchor="middle" font-size="9.5" fill="#3b7dd8">replication</text>
+
+      <!-- Client → DataNode (data) -->
+      <line x1="160" y1="200" x2="464" y2="200" stroke="#3b9e6e" stroke-width="1" stroke-dasharray="3,4" opacity="0.5"/>
+
+      <!-- Standby NameNode -->
+      <rect x="234" y="310" width="160" height="60" rx="10" fill="#fff3eb" stroke="#e07b39" stroke-width="1.5"/>
+      <text x="314" y="335" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">Standby NameNode</text>
+      <text x="314" y="354" text-anchor="middle" font-size="11" fill="#e07b39">HA (since Hadoop 2.0)</text>
+
+      <!-- Arrow NameNode ↔ Standby -->
+      <line x1="314" y1="270" x2="314" y2="310" stroke="#e07b39" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-orange)"/>
+      <text x="360" y="292" font-size="10" fill="#e07b39">edit sync</text>
+
+      <!-- JournalNodes -->
+      <rect x="640" y="270" width="130" height="60" rx="10" fill="#f3eeff" stroke="#7b5ea7" stroke-width="1.5"/>
+      <text x="705" y="295" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">Journal Nodes</text>
+      <text x="705" y="314" text-anchor="middle" font-size="11" fill="#7b5ea7">Quorum (≥3) for HA</text>
+
+      <line x1="394" y1="310" x2="640" y2="300" stroke="#7b5ea7" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- ZooKeeper -->
+      <rect x="640" y="165" width="130" height="60" rx="10" fill="#eaf7f1" stroke="#3b9e6e" stroke-width="1.5"/>
+      <text x="705" y="190" text-anchor="middle" font-size="12" font-weight="700" fill="#1a2540">ZooKeeper</text>
+      <text x="705" y="208" text-anchor="middle" font-size="11" fill="#3b9e6e">Failover coordination</text>
+
+      <!-- Arrowhead defs -->
+      <defs>
+        <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#3b7dd8"/>
+        </marker>
+        <marker id="arr-gray" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#6a8aa0"/>
+        </marker>
+        <marker id="arr-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#e07b39"/>
+        </marker>
+      </defs>
+    </svg>
+    <p style="text-align:center;font-size:13px;color:var(--text-muted);margin-top:14px;">
+      Figure 1 — HDFS Architecture: NameNode, DataNodes, Standby NameNode, JournalNodes, and ZooKeeper coordination
+    </p>
+  </div>
+</section>
+
+<!-- ── SECTION 2: DATA STORAGE ── -->
+<section class="section" id="storage">
+  <div class="section-header">
+    <div class="section-icon icon-purple">💾</div>
+    <div>
+      <h2>How HDFS Organizes Data Storage</h2>
+      <div class="section-sub">Blocks, replication, rack awareness, and the namespace</div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--blue);">128 MB</div>
+      <div class="stat-label">Default block size<br>(CDH default; tunable)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--purple);">3×</div>
+      <div class="stat-label">Default replication<br>factor per block</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--orange);">~150 B</div>
+      <div class="stat-label">NameNode memory<br>per file/dir/block inode</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--green);">~400 M</div>
+      <div class="stat-label">Practical file limit<br>per HDFS cluster</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="problem-title">🧩 Block-Based Storage</div>
+      <p class="problem-text">Files are split into fixed-size <strong>blocks</strong> (default 128 MB). Each block is stored independently on DataNode local disks. Unlike traditional file systems, HDFS stores each block of a file as a standalone file on the underlying OS. A 500 MB file becomes ~4 blocks distributed across different DataNodes.</p>
+      <div class="code-block">
+<span class="cm"># Check block info for a file</span>
+hdfs fsck /user/data/bigfile.csv \
+  -files -blocks -locations
+
+<span class="cm"># Output: blocks, replicas, DataNode locations</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="problem-title">🗺️ Rack-Aware Replication</div>
+      <p class="problem-text">HDFS uses a <strong>rack-aware placement policy</strong> to maximize data reliability and network efficiency. For a replication factor of 3:</p>
+      <div class="block-visual">
+        <div class="block-item">
+          <div class="block-box blk-primary">Blk 1<br>Rack A</div>
+          <div class="block-label">Primary<br>(same client rack)</div>
+        </div>
+        <div class="blk-arrow">→</div>
+        <div class="block-item">
+          <div class="block-box blk-rep1">Blk 1<br>Rack B</div>
+          <div class="block-label">Replica 2<br>(different rack)</div>
+        </div>
+        <div class="blk-arrow">→</div>
+        <div class="block-item">
+          <div class="block-box blk-rep2">Blk 1<br>Rack B</div>
+          <div class="block-label">Replica 3<br>(same rack as R2)</div>
+        </div>
+      </div>
+      <p class="problem-text" style="font-size:14px;">This ensures survival of a full rack failure while reducing cross-rack bandwidth.</p>
+    </div>
+  </div>
+
+  <div style="height:18px;"></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="problem-title">📁 Namespace & Metadata</div>
+      <p class="problem-text">The NameNode maintains a hierarchical <strong>POSIX-like namespace</strong> entirely in RAM for performance. Metadata includes the namespace tree (files and directories), file-to-block mapping, and block-to-DataNode locations. The latter is NOT persisted — DataNodes rebuild it at startup via block reports.</p>
+      <p class="problem-text">Two key files on the NameNode disk:</p>
+      <div class="code-block">
+<span class="kw">fsimage</span>   <span class="cm"># periodic namespace snapshot</span>
+<span class="kw">editLog</span>   <span class="cm"># journal of changes since snapshot</span>
+<span class="cm"># Merged by Secondary NameNode (Hadoop 1)</span>
+<span class="cm"># or Standby NameNode (Hadoop 2+)</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="problem-title">💓 DataNode Heartbeats & Block Reports</div>
+      <p class="problem-text">DataNodes maintain cluster health through two mechanisms:</p>
+      <ul style="padding-left:20px;margin-bottom:12px;font-size:15px;color:var(--text-secondary);line-height:1.8;">
+        <li><strong>Heartbeat</strong> — sent every <span style="font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:13px;">3 seconds</span>. Confirms the DataNode is alive. If no heartbeat for <span style="font-family:'JetBrains Mono',monospace;color:var(--blue);font-size:13px;">10 minutes</span>, NameNode declares the node dead and triggers re-replication.</li>
+        <li><strong>Block report</strong> — sent every ~1 hour. Lists all blocks stored on that DataNode so the NameNode can verify replication factor compliance.</li>
+      </ul>
+      <div class="problem-solution">
+        <strong>📌 Node failure rate at Yahoo's clusters:</strong> 2–3 per 1,000 nodes per day — HDFS was designed assuming hardware failure is the norm, not the exception.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: REAL PROBLEMS ── -->
+<section class="section" id="problems">
+  <div class="section-header">
+    <div class="section-icon icon-red">⚠️</div>
+    <div>
+      <h2>Real Operational Problems with HDFS</h2>
+      <div class="section-sub">Issues encountered at production scale by Facebook, Yahoo, DiDi, and others</div>
+    </div>
+  </div>
+
+  <p class="text-body">
+    While HDFS has powered petabyte-scale clusters for over a decade, organizations at scale — including Facebook, Yahoo, and DiDi — have all publicly documented serious operational challenges. These are not theoretical concerns; they are <strong>real, recurring pain points in production</strong>.
+  </p>
+
+  <div class="grid-auto">
+
+    <!-- Problem 1 -->
+    <div class="problem-card orange">
+      <div class="problem-title">
+        NameNode: Single Point of Failure
+        <span class="problem-badge badge-orange">Critical</span>
+      </div>
+      <p class="problem-text">
+        In Hadoop 1.x, the NameNode was the <strong>sole custodian of all metadata</strong>. If it failed, the entire cluster became unavailable. Recovery required an administrator to manually reconstruct the namespace from the Secondary NameNode — a process that could take <strong>30+ minutes</strong> on large clusters, often with data loss due to the lag in edit log merging. Facebook explicitly cited this as a major risk for their production deployments.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Hadoop 2.0+ HA:</strong> Active/Standby NameNode pair using Quorum Journal Manager (QJM) with ≥3 JournalNodes. ZooKeeper coordinates automatic failover. Standby takes over in seconds.
+      </div>
+    </div>
+
+    <!-- Problem 2 -->
+    <div class="problem-card red">
+      <div class="problem-title">
+        The Small Files Problem
+        <span class="problem-badge badge-red">Persistent</span>
+      </div>
+      <p class="problem-text">
+        HDFS was designed to store a <em>small number of large files</em>, not millions of small ones. Every file, directory, and block occupies <strong>~150 bytes of NameNode heap memory</strong>, regardless of actual file size. 100 million files consume hundreds of gigabytes of RAM. A 1 KB log file consumes the same metadata overhead as a 128 MB file. IoT, streaming, and event-driven pipelines constantly produce small files, overwhelming the NameNode.
+      </p>
+      <div class="code-block">
+<span class="cm"># Impact: 10M small files → 3 GB+ NameNode RAM</span>
+<span class="cm"># Each object: ~150 bytes</span>
+10,000,000 × 150 <span class="str">bytes</span> ≈ <span class="num">1.4 GB</span> heap
+<span class="cm"># Plus 2 replicas → blocks × 150 each</span>
+30,000,000 × 150 <span class="str">bytes</span> ≈ <span class="num">4.2 GB</span> total
+      </div>
+      <div class="problem-solution">
+        ✅ <strong>Mitigations:</strong> HAR files (Hadoop Archives), SequenceFiles, Avro containers, CombineFileInputFormat — though none are seamless. Apache Ozone solves this architecturally.
+      </div>
+    </div>
+
+    <!-- Problem 3 -->
+    <div class="problem-card purple">
+      <div class="problem-title">
+        NameNode Memory Scalability Ceiling
+        <span class="problem-badge badge-purple">Scaling</span>
+      </div>
+      <p class="problem-text">
+        Since all namespace metadata is stored in the NameNode's JVM heap, the cluster's file count is <strong>bounded by the RAM of a single machine</strong>. In practice this limits clusters to around 400 million files. HDFS Federation (Hadoop 2.0+) allows multiple independent NameNodes, each owning a portion of the namespace — but this adds significant operational complexity and does not share metadata across namespaces.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>HDFS Federation:</strong> multiple NameNodes, each owning a namespace volume. <strong>Apache Ozone:</strong> moves metadata to RocksDB, tested to 10 billion objects.
+      </div>
+    </div>
+
+    <!-- Problem 4 -->
+    <div class="problem-card blue">
+      <div class="problem-title">
+        No Low-Latency or Random Access
+        <span class="problem-badge badge-blue">Performance</span>
+      </div>
+      <p class="problem-text">
+        HDFS optimizes for <strong>high-throughput streaming reads</strong> of large files. It explicitly sacrifices low-latency access. The read path involves an RPC call to the NameNode for block locations, then sequential reads from DataNodes. Random reads require seeking to arbitrary block offsets, causing multiple network hops. This makes HDFS unsuitable for interactive analytics, databases, or any workload requiring sub-second response times.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Alluxio</strong> provides an in-memory caching layer above HDFS. Apache Spark's data locality features help reduce latency for compute-on-storage patterns.
+      </div>
+    </div>
+
+    <!-- Problem 5 -->
+    <div class="problem-card orange">
+      <div class="problem-title">
+        Write-Once, Append-Only Semantics
+        <span class="problem-badge badge-orange">Flexibility</span>
+      </div>
+      <p class="problem-text">
+        HDFS files are fundamentally <strong>write-once, read-many</strong>. Appending was added in Hadoop 0.21 but is unreliable under concurrent access. Overwriting a file requires deleting and re-creating it. There is no in-place update support. This creates major challenges for GDPR/CCPA data deletion requirements, schema corrections, and any workload requiring ACID-style updates — such as dimension table updates in a data warehouse.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Apache Hudi, Iceberg, Delta Lake</strong> provide ACID transactions and row-level updates on top of HDFS or object stores.
+      </div>
+    </div>
+
+    <!-- Problem 6 -->
+    <div class="problem-card purple">
+      <div class="problem-title">
+        Storage–Compute Coupling
+        <span class="problem-badge badge-purple">Cloud Readiness</span>
+      </div>
+      <p class="problem-text">
+        HDFS ties storage and compute together on the same nodes to exploit <strong>data locality</strong> (processing data where it lives). While efficient for MapReduce, this model means you cannot scale storage and compute independently. Adding more compute requires adding storage nodes and vice versa. In cloud environments where elastic scaling is the norm, this is a fundamental mismatch — you must provision for peak storage AND peak compute simultaneously, driving up costs.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Cloud object stores (S3, GCS, ADLS)</strong> decouple storage from compute entirely. Apache Ozone + YARN/Kubernetes hybrid deployments help on-premise.
+      </div>
+    </div>
+
+    <!-- Problem 7 -->
+    <div class="problem-card red">
+      <div class="problem-title">
+        Replication Overhead (3× Storage Amplification)
+        <span class="problem-badge badge-red">Cost</span>
+      </div>
+      <p class="problem-text">
+        The default 3× replication means <strong>you need 3 TB of raw disk to store 1 TB of data</strong>. At petabyte scale this is enormously expensive. While Erasure Coding (EC) was added in Hadoop 3.0 and can reduce overhead to ~1.5×, it introduces significant CPU overhead for encoding/decoding and increased network I/O during reconstruction. DiDi reported switching from 3× replication to EC 6-3 and saving hundreds of petabytes of storage.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Hadoop 3.0 Erasure Coding</strong> (Reed-Solomon). Apache Ozone also supports EC natively, with DiDi reporting ~50% storage cost reduction vs. 3× replication.
+      </div>
+    </div>
+
+    <!-- Problem 8 -->
+    <div class="problem-card blue">
+      <div class="problem-title">
+        Slow NameNode Cold Start
+        <span class="problem-badge badge-blue">Availability</span>
+      </div>
+      <p class="problem-text">
+        When a NameNode restarts from scratch, it must load the entire namespace (fsimage) into memory and replay all edit logs. On large clusters with tens of millions of files, this <strong>safe mode period can last 30–60 minutes</strong>, during which the cluster is read-only. DataNodes also need time to report their blocks before the NameNode considers the cluster healthy, further delaying availability.
+      </p>
+      <div class="problem-solution">
+        ✅ <strong>Standby NameNode</strong> (Hadoop 2+) eliminates cold start for failover since the standby has already replayed all edits in memory.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SECTION 4: NEW TOOLS ── -->
+<section class="section" id="solutions">
+  <div class="section-header">
+    <div class="section-icon icon-green">🔧</div>
+    <div>
+      <h2>New Tools That Emerged to Solve These Problems</h2>
+      <div class="section-sub">From Apache Ozone to table formats — the modern HDFS-adjacent ecosystem</div>
+    </div>
+  </div>
+
+  <div class="grid-auto">
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--blue-light);">🪨</div>
+        <div>
+          <div class="tool-name">Apache Ozone</div>
+          <div class="tool-type" style="color:var(--blue);">Next-gen Object Store (Hadoop-native)</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        Ozone was developed inside the Hadoop project specifically to overcome HDFS scalability limits. It separates metadata management (Ozone Manager, backed by RocksDB) from block management (Storage Container Manager). Tested to <strong>10 billion objects</strong> vs. HDFS's ~400M limit. DiDi migrated hundreds of petabytes to Ozone and saw P90 metadata latency drop from 90ms to 17ms and 20%+ read throughput improvement. Supports S3 API and HDFS API simultaneously. Cloudera's TPC-DS benchmark showed Ozone outperforms HDFS by an average of 3.5% on query completion time.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-blue">S3-compatible</span>
+        <span class="tag tag-blue">RocksDB metadata</span>
+        <span class="tag tag-blue">Erasure Coding</span>
+        <span class="tag tag-green">10B objects tested</span>
+        <span class="tag tag-orange">Hadoop-native</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--purple-light);">🏔️</div>
+        <div>
+          <div class="tool-name">Apache Iceberg</div>
+          <div class="tool-type" style="color:var(--purple);">Open Table Format</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        Originally designed at Netflix, Iceberg solves the lack of ACID semantics on HDFS and object stores. It provides <strong>snapshot isolation, schema evolution, hidden partitioning, and time travel</strong> without rewriting data. Works on HDFS, S3, GCS, ADLS. Widely considered the leading open table format in 2025–2026 due to its engine-agnostic design (works with Spark, Flink, Trino, Hive, Dremio). Critical for GDPR row-level deletes that HDFS cannot natively support.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-purple">ACID transactions</span>
+        <span class="tag tag-purple">Time travel</span>
+        <span class="tag tag-purple">Schema evolution</span>
+        <span class="tag tag-green">Multi-engine</span>
+        <span class="tag tag-blue">Hidden partitioning</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--orange-light);">🔺</div>
+        <div>
+          <div class="tool-name">Delta Lake</div>
+          <div class="tool-type" style="color:var(--orange);">Open Table Format (Databricks)</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        Created by Databricks in 2019 and open-sourced under the Linux Foundation. Delta Lake adds a <strong>transaction log</strong> (delta log) on top of Parquet files stored in HDFS or object stores, enabling ACID operations, data versioning, and Z-order clustering. Best suited for Spark-centric ecosystems. Its Delta UniForm feature allows reading Delta tables as Iceberg or Hudi tables for cross-format interoperability.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-orange">ACID on Spark</span>
+        <span class="tag tag-orange">Transaction log</span>
+        <span class="tag tag-orange">Z-order clustering</span>
+        <span class="tag tag-blue">Parquet-native</span>
+        <span class="tag tag-green">Delta UniForm</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--green-light);">🐝</div>
+        <div>
+          <div class="tool-name">Apache Hudi</div>
+          <div class="tool-type" style="color:var(--green);">Data Lakehouse Platform</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        Developed at Uber for their data ingestion pipelines, Hudi (Hadoop Upserts Deletes and Incrementals) was the first table format to bring <strong>row-level updates and deletes</strong> to HDFS. Its merge-on-read architecture enables near-real-time upserts with low latency. Hudi 1.x now positions itself as a full DLMS (Data Lakehouse Management System) and supports Iceberg as an underlying table format.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-green">Row-level upserts</span>
+        <span class="tag tag-green">Merge-on-read</span>
+        <span class="tag tag-green">Incremental CDC</span>
+        <span class="tag tag-blue">Streaming ingestion</span>
+        <span class="tag tag-purple">Iceberg-compatible</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--blue-light);">⚡</div>
+        <div>
+          <div class="tool-name">Alluxio</div>
+          <div class="tool-type" style="color:var(--blue);">Distributed Cache / Data Orchestration</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        Alluxio sits between compute engines (Spark, Presto, Hive) and storage systems (HDFS, S3, Azure). It provides an <strong>in-memory distributed cache</strong>, enabling sub-second data access for hot datasets without changing the underlying storage. It also abstracts the storage layer, allowing transparent migration from HDFS to cloud object stores. Often deployed to eliminate the latency gap when moving from HDFS-local to S3-remote storage.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-blue">In-memory cache</span>
+        <span class="tag tag-blue">Storage abstraction</span>
+        <span class="tag tag-orange">Transparent tiering</span>
+        <span class="tag tag-green">Multi-cloud</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--purple-light);">🗄️</div>
+        <div>
+          <div class="tool-name">HopsFS</div>
+          <div class="tool-type" style="color:var(--purple);">Distributed HDFS Metadata (Research)</div>
+        </div>
+      </div>
+      <p class="tool-desc">
+        HopsFS replaces the single-node in-memory metadata service with a <strong>distributed metadata service built on NDB (MySQL Cluster)</strong>. It can store 24× more metadata than vanilla HDFS and delivers 2.6× the throughput. Spotify contributed real workload traces for benchmarking. HopsFS is the storage layer for Hopsworks, a managed ML platform. This approach demonstrates that distributing NameNode metadata is technically feasible, influencing design discussions for future HDFS iterations.
+      </p>
+      <div class="tag-row">
+        <span class="tag tag-purple">Distributed metadata</span>
+        <span class="tag tag-purple">24× more files</span>
+        <span class="tag tag-purple">NewSQL backend</span>
+        <span class="tag tag-green">ML platform</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SECTION 5: STRENGTHS ── -->
+<section class="section" id="strengths">
+  <div class="section-header">
+    <div class="section-icon icon-green">✅</div>
+    <div>
+      <h2>HDFS Strengths</h2>
+      <div class="section-sub">Where HDFS genuinely excels and why it remained dominant for a decade</div>
+    </div>
+  </div>
+  <div class="procon-grid">
+    <div class="procon-box">
+      <div class="procon-title" style="color:var(--green);">💪 Where HDFS Wins</div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Extremely high sequential throughput</strong> — designed for streaming reads of large files, HDFS can deliver sustained GB/s throughput by reading from multiple DataNodes in parallel.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Proven fault tolerance</strong> — 3× replication (or EC in Hadoop 3) means data survives DataNode failures automatically without administrator intervention.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Data locality for MapReduce/Spark</strong> — compute tasks are scheduled on nodes that already hold the data, eliminating most network I/O for batch jobs.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Commodity hardware</strong> — runs on standard x86 servers with JBODs (Just a Bunch of Disks). No specialized hardware required, dramatically reducing costs.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Battle-tested at extreme scale</strong> — Facebook (hundreds of PB), Yahoo (tens of PB), Twitter, LinkedIn, Alibaba all ran HDFS at massive scale.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Strong POSIX-like consistency</strong> — unlike eventual-consistent object stores (S3), HDFS provides strong read-after-write consistency without coordination overhead.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-green">✓</div>
+        <div><strong>Rich Hadoop ecosystem integration</strong> — native integration with Hive, HBase, Spark, Pig, Flume, and the entire Apache big data ecosystem without adapters.</div>
+      </div>
+    </div>
+    <div class="procon-box">
+      <div class="procon-title" style="color:var(--red);" id="weaknesses">❌ Where HDFS Struggles</div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>Small files problem</strong> — millions of small files exhaust NameNode heap memory and degrade performance across all cluster operations.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>No low-latency access</strong> — high-throughput design makes it fundamentally unsuitable for interactive queries, OLTP workloads, or sub-second dashboards.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>NameNode is a scalability ceiling</strong> — even with HDFS Federation, managing multiple federated namespaces adds significant operational complexity.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>Write-once limitation</strong> — no native support for record updates or deletes, making compliance (GDPR), corrections, and dimension table updates complex.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>3× storage overhead</strong> — unless Erasure Coding (Hadoop 3+) is used, every byte of data costs 3× in raw disk, making archival storage expensive.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>Storage–compute coupling</strong> — cannot scale storage and compute independently. Poor fit for cloud-native, elastic infrastructure patterns.</div>
+      </div>
+      <div class="procon-item">
+        <div class="procon-dot dot-red">✗</div>
+        <div><strong>Operational complexity</strong> — requires dedicated Hadoop expertise for tuning, maintenance, upgrades, and incident response. High ops burden compared to managed cloud storage.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 6: ALTERNATIVES ── -->
+<section class="section" id="alternatives">
+  <div class="section-header">
+    <div class="section-icon icon-orange">🔄</div>
+    <div>
+      <h2>Alternatives to HDFS</h2>
+      <div class="section-sub">Cloud-native, on-premise, and hybrid storage systems replacing or supplementing HDFS</div>
+    </div>
+  </div>
+
+  <div class="grid-auto">
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:#fff3eb;">☁️</div>
+        <div>
+          <div class="tool-name">Amazon S3</div>
+          <div class="tool-type" style="color:var(--orange);">Cloud Object Store</div>
+        </div>
+      </div>
+      <p class="tool-desc">The most widely adopted HDFS alternative for cloud workloads. S3 decouples storage from compute entirely. However, raw HDFS read performance can be 3× faster than S3 for large sequential workloads. The <code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg);padding:2px 6px;border-radius:4px;">s3a://</code> connector allows Spark/Hive to read from S3 with no code changes. Best combined with a table format (Iceberg/Delta) to add ACID semantics.</p>
+      <div class="tag-row">
+        <span class="tag tag-orange">Elastic</span>
+        <span class="tag tag-orange">Managed</span>
+        <span class="tag tag-blue">11 9s durability</span>
+        <span class="tag tag-green">Lifecycle tiering</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--green-light);">🦑</div>
+        <div>
+          <div class="tool-name">MinIO</div>
+          <div class="tool-type" style="color:var(--green);">S3-Compatible On-Prem Object Store</div>
+        </div>
+      </div>
+      <p class="tool-desc">MinIO is a high-performance, Kubernetes-native object store compatible with the Amazon S3 API. Unlike HDFS, it does not require a Hadoop cluster and can run anywhere from a laptop to a datacenter. Best suited for organizations that want S3 compatibility on-premise without managing a Hadoop cluster. Provides eventual consistency semantics by default, contrasting with HDFS's strong consistency.</p>
+      <div class="tag-row">
+        <span class="tag tag-green">S3-API</span>
+        <span class="tag tag-green">Kubernetes-native</span>
+        <span class="tag tag-green">Easy deployment</span>
+        <span class="tag tag-orange">No Hadoop needed</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--purple-light);">🐙</div>
+        <div>
+          <div class="tool-name">Ceph (CephFS / RGW)</div>
+          <div class="tool-type" style="color:var(--purple);">Unified Distributed Storage</div>
+        </div>
+      </div>
+      <p class="tool-desc">Ceph is an open-source distributed storage system offering object storage (via Ceph RADOS Gateway, S3-compatible), block storage (RBD), and a POSIX-compliant file system (CephFS). Unlike HDFS, Ceph has no single metadata server bottleneck — metadata is distributed via the CRUSH algorithm across monitor nodes. Widely used in OpenStack and private cloud deployments. Suitable for mixed workloads requiring block, file, and object access simultaneously.</p>
+      <div class="tag-row">
+        <span class="tag tag-purple">Unified storage</span>
+        <span class="tag tag-purple">No SPOF metadata</span>
+        <span class="tag tag-purple">POSIX + S3</span>
+        <span class="tag tag-blue">Open-source</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--blue-light);">🏔️</div>
+        <div>
+          <div class="tool-name">Google Cloud Storage (GCS)</div>
+          <div class="tool-type" style="color:var(--blue);">Managed Cloud Object Store</div>
+        </div>
+      </div>
+      <p class="tool-desc">GCS supports strong read-after-write consistency (unlike early S3) and integrates natively with Dataproc (Google's managed Hadoop). The <code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg);padding:2px 6px;border-radius:4px;">gs://</code> connector gives Spark and Hadoop direct access. Google internally uses Colossus (GFS successor) for their own workloads. GCS is the preferred HDFS replacement for GCP-based big data workloads.</p>
+      <div class="tag-row">
+        <span class="tag tag-blue">Strong consistency</span>
+        <span class="tag tag-blue">GCP-native</span>
+        <span class="tag tag-green">Dataproc integration</span>
+        <span class="tag tag-orange">Managed</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--orange-light);">🌊</div>
+        <div>
+          <div class="tool-name">Azure Data Lake Storage Gen2</div>
+          <div class="tool-type" style="color:var(--orange);">Managed Hierarchical Object Store</div>
+        </div>
+      </div>
+      <p class="tool-desc">ADLS Gen2 uniquely combines Azure Blob Storage's object store characteristics with a <strong>hierarchical namespace</strong> that enables directory-level atomic operations (rename, delete), critical for Hadoop compatibility. This gives it significant performance advantages over flat-namespace S3 for workloads that rely on directory renames (e.g., Spark job output commits). The preferred HDFS replacement for Azure HDInsight and Synapse Analytics.</p>
+      <div class="tag-row">
+        <span class="tag tag-orange">Hierarchical NS</span>
+        <span class="tag tag-orange">Atomic rename</span>
+        <span class="tag tag-orange">Azure-native</span>
+        <span class="tag tag-blue">Hadoop-compatible</span>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-header">
+        <div class="tool-icon" style="background:var(--green-light);">🪨</div>
+        <div>
+          <div class="tool-name">Apache Ozone (Recap)</div>
+          <div class="tool-type" style="color:var(--green);">Best HDFS Drop-in On-Prem</div>
+        </div>
+      </div>
+      <p class="tool-desc">For organizations that must stay on-premise and need HDFS compatibility without its limitations, Apache Ozone is the recommended evolution path. It supports both HDFS API and S3 API, integrates with the entire Hadoop ecosystem, and scales to billions of objects. Cloudera has adopted it as the default storage for CDP Private Cloud. DiDi, one of the largest Ozone deployments, manages hundreds of petabytes with it.</p>
+      <div class="tag-row">
+        <span class="tag tag-green">On-prem preferred</span>
+        <span class="tag tag-green">HDFS + S3 API</span>
+        <span class="tag tag-blue">CDP-integrated</span>
+        <span class="tag tag-orange">DiDi: 100s PB</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SECTION 7: COMPARISON TABLE ── -->
+<section class="section" id="comparison">
+  <div class="section-header">
+    <div class="section-icon icon-blue">📊</div>
+    <div>
+      <h2>Feature Comparison Matrix</h2>
+      <div class="section-sub">HDFS vs modern alternatives across key operational dimensions</div>
+    </div>
+  </div>
+
+  <div class="comparison-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Feature / Dimension</th>
+          <th>HDFS</th>
+          <th>Apache Ozone</th>
+          <th>Amazon S3</th>
+          <th>Ceph RGW</th>
+          <th>MinIO</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-feature">Small Files Handling</td>
+          <td class="bad">Poor</td>
+          <td class="good">Excellent</td>
+          <td class="good">Good</td>
+          <td class="good">Good</td>
+          <td class="good">Good</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Max Scalability (files)</td>
+          <td class="ok">~400M</td>
+          <td class="good">10B+ tested</td>
+          <td class="good">Unlimited</td>
+          <td class="good">Very High</td>
+          <td class="good">High</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Sequential Throughput</td>
+          <td class="good">Excellent</td>
+          <td class="good">Very Good</td>
+          <td class="ok">Good</td>
+          <td class="ok">Good</td>
+          <td class="good">Very Good</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Random Access Latency</td>
+          <td class="bad">Poor</td>
+          <td class="ok">Fair</td>
+          <td class="ok">Fair</td>
+          <td class="ok">Fair</td>
+          <td class="ok">Fair</td>
+        </tr>
+        <tr>
+          <td class="col-feature">POSIX Compliance</td>
+          <td class="ok">Partial</td>
+          <td class="ok">Partial</td>
+          <td class="bad">None</td>
+          <td class="good">CephFS: Full</td>
+          <td class="bad">None</td>
+        </tr>
+        <tr>
+          <td class="col-feature">S3 API Compatibility</td>
+          <td class="bad">No</td>
+          <td class="good">Yes</td>
+          <td class="good">Native</td>
+          <td class="good">Yes</td>
+          <td class="good">Yes</td>
+        </tr>
+        <tr>
+          <td class="col-feature">ACID Transactions</td>
+          <td class="bad">No</td>
+          <td class="bad">No (need Iceberg)</td>
+          <td class="bad">No (need Iceberg)</td>
+          <td class="bad">No</td>
+          <td class="bad">No</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Hadoop Ecosystem Fit</td>
+          <td class="good">Native</td>
+          <td class="good">Native</td>
+          <td class="ok">Via s3a://</td>
+          <td class="ok">Via s3a://</td>
+          <td class="ok">Via s3a://</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Storage Overhead</td>
+          <td class="bad">3× (default)</td>
+          <td class="ok">1.5× (EC 6-3)</td>
+          <td class="good">Managed</td>
+          <td class="ok">Configurable</td>
+          <td class="ok">Configurable</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Operational Complexity</td>
+          <td class="bad">High</td>
+          <td class="bad">High</td>
+          <td class="good">Low (managed)</td>
+          <td class="ok">Medium</td>
+          <td class="ok">Medium</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Compute–Storage Decoupling</td>
+          <td class="bad">No</td>
+          <td class="ok">Partial</td>
+          <td class="good">Yes</td>
+          <td class="ok">Partial</td>
+          <td class="good">Yes</td>
+        </tr>
+        <tr>
+          <td class="col-feature">On-Premise Deployment</td>
+          <td class="good">Yes</td>
+          <td class="good">Yes</td>
+          <td class="bad">Cloud only</td>
+          <td class="good">Yes</td>
+          <td class="good">Yes</td>
+        </tr>
+        <tr>
+          <td class="col-feature">Data Consistency Model</td>
+          <td class="good">Strong</td>
+          <td class="good">Strong (Raft)</td>
+          <td class="ok">Eventual → Strong (2021)</td>
+          <td class="ok">Eventual</td>
+          <td class="ok">Eventual</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">
+    * ACID transactions are typically provided by a table format layer (Apache Iceberg, Delta Lake, Hudi) on top of any storage system.
+  </p>
+</section>
+
+<!-- ── SECTION 8: REFERENCES ── -->
+<section class="section" id="references">
+  <div class="section-header">
+    <div class="section-icon icon-purple">📖</div>
+    <div>
+      <h2>References &amp; Further Reading</h2>
+      <div class="section-sub">Primary sources, official documentation, and research papers</div>
+    </div>
+  </div>
+
+  <div class="ref-grid">
+    <div class="ref-card">
+      <span class="ref-num">[1] Apache Hadoop Docs</span>
+      <a href="https://hadoop.apache.org/docs/r3.4.1/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html" target="_blank">HDFS High Availability — Official Guide (v3.4.1)</a>
+      <div class="ref-source">apache.org · Published 2024-10-09</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[2] Cloudera Blog</span>
+      <a href="https://www.cloudera.com/blog/technical/small-files-big-foils-addressing-the-associated-metadata-and-application-challenges.html" target="_blank">Small Files, Big Foils: Metadata and Application Challenges</a>
+      <div class="ref-source">Cloudera Technical Blog</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[3] USENIX Login</span>
+      <a href="https://www.usenix.org/legacy/publications/login/2010-04/openpdfs/shvachko.pdf" target="_blank">HDFS Scalability: The Limits to Growth — Konstantin Shvachko</a>
+      <div class="ref-source">USENIX ;login: 2010, Vol. 36</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[4] Apache Ozone</span>
+      <a href="https://ozone.apache.org/" target="_blank">Apache Ozone — Official Homepage</a>
+      <div class="ref-source">ozone.apache.org</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[5] ASF Blog</span>
+      <a href="https://news.apache.org/foundation/entry/how-didi-scaled-to-hundreds-of-petabytes-with-apache-ozone" target="_blank">How DiDi Scaled to Hundreds of Petabytes with Apache Ozone</a>
+      <div class="ref-source">Apache Software Foundation Blog · Jan 2026</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[6] Cloudera FAQ</span>
+      <a href="https://www.cloudera.com/resources/faqs/apache-ozone.html" target="_blank">What Is Apache Ozone? — Cloudera</a>
+      <div class="ref-source">Cloudera Resources</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[7] GTech Analysis</span>
+      <a href="https://www.gtech.com.tr/en/powerful-solution-for-big-data-projects-apache-ozone/" target="_blank">Apache Ozone: Powerful Solution for Big Data Projects</a>
+      <div class="ref-source">gtech.com.tr · Jan 2025</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[8] DEV Community</span>
+      <a href="https://dev.to/tayfun_yalcinkaya_9c29444/why-apache-ozone-is-the-preferred-object-store-for-big-data-4khh" target="_blank">Why Apache Ozone is the Preferred Object Store for Big Data</a>
+      <div class="ref-source">dev.to · Jan 2026</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[9] ACM DL</span>
+      <a href="https://dl.acm.org/doi/10.1145/3274808.3274811" target="_blank">Size Matters: Improving Performance of Small Files in HDFS</a>
+      <div class="ref-source">ACM · Middleware 2018</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[10] ScienceDirect</span>
+      <a href="https://www.sciencedirect.com/science/article/pii/S1319157821002585" target="_blank">Small Files Problem in Hadoop: Systematic Literature Review</a>
+      <div class="ref-source">Journal of King Saud Univ. · 2021</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[11] MinIO Blog</span>
+      <a href="https://blog.min.io/challenge-big-data-small-files/" target="_blank">The Small Files Problem: Solutions for Big Data</a>
+      <div class="ref-source">min.io</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[12] Preferred Networks</span>
+      <a href="https://tech.preferred.jp/en/blog/a-year-with-apache-ozone/" target="_blank">A Year with Apache Ozone</a>
+      <div class="ref-source">tech.preferred.jp · Dec 2021</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[13] Wiley / CPE</span>
+      <a href="https://onlinelibrary.wiley.com/doi/abs/10.1002/cpe.8260" target="_blank">An Archive-based Method for Efficiently Handling Small Files in HDFS</a>
+      <div class="ref-source">Concurrency Comput.: Practice Exp. · 2024</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[14] Onehouse Blog</span>
+      <a href="https://www.onehouse.ai/blog/apache-hudi-vs-delta-lake-vs-apache-iceberg-lakehouse-feature-comparison" target="_blank">Apache Hudi vs Delta Lake vs Iceberg — Lakehouse Feature Comparison</a>
+      <div class="ref-source">onehouse.ai · Updated Oct 2025</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[15] lakeFS Blog</span>
+      <a href="https://lakefs.io/blog/hudi-iceberg-and-delta-lake-data-lake-table-formats-compared/" target="_blank">Hudi vs Iceberg vs Delta Lake: Data Lake Table Formats Compared</a>
+      <div class="ref-source">lakefs.io · Mar 2025</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[16] Quora</span>
+      <a href="https://www.quora.com/What-are-some-HDFS-alternatives-for-Hadoop-used-in-production-and-why-would-someone-choose-them-over-HDFS" target="_blank">HDFS Alternatives for Hadoop Used in Production</a>
+      <div class="ref-source">Quora · Expert answers</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[17] Arenadata Docs</span>
+      <a href="https://docs.arenadata.io/en/ADH/current/concept/ozone/hdfs-vs-ozone.html" target="_blank">HDFS vs Ozone: Comparison of Features</a>
+      <div class="ref-source">docs.arenadata.io</div>
+    </div>
+    <div class="ref-card">
+      <span class="ref-num">[18] ResearchGate</span>
+      <a href="https://www.researchgate.net/publication/392151707_COMPARATIVE_ANALYSIS_OF_HDFS_AND_APACHE_OZONE_DATA_STORAGE_SYSTEMS" target="_blank">Comparative Analysis of HDFS and Apache Ozone</a>
+      <div class="ref-source">ResearchGate · Mar 2025</div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div>Compiled from official Apache documentation, peer-reviewed papers, and production engineering blogs.</div>
+  <div style="margin-top:8px;">Apache Hadoop, Apache Ozone, Apache Iceberg are trademarks of the Apache Software Foundation. Research reflects publicly available information as of March 2026.</div>
+</footer>
+
+</body>
+</html>

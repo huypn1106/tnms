@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZooKeeper vs KRaft — Kafka Architecture Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #f0f4ff;
+    --border: #e2e8f4;
+    --text: #1a1f36;
+    --text-2: #4a5380;
+    --text-3: #8892b0;
+
+    --blue: #3b82f6;
+    --blue-light: #dbeafe;
+    --blue-mid: #93c5fd;
+
+    --orange: #f59e0b;
+    --orange-light: #fef3c7;
+    --orange-mid: #fcd34d;
+
+    --purple: #8b5cf6;
+    --purple-light: #ede9fe;
+    --purple-mid: #c4b5fd;
+
+    --green: #10b981;
+    --green-light: #d1fae5;
+    --green-mid: #6ee7b7;
+
+    --red: #ef4444;
+    --red-light: #fee2e2;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow: 0 4px 16px rgba(59,82,180,0.08), 0 1px 4px rgba(0,0,0,0.04);
+    --shadow-hover: 0 8px 32px rgba(59,82,180,0.14), 0 2px 8px rgba(0,0,0,0.06);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, #1a1f36 0%, #2d3561 60%, #1e2a5e 100%);
+    color: #fff;
+    padding: 72px 48px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 80% 50%, rgba(59,130,246,0.18) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 60% at 10% 80%, rgba(139,92,246,0.12) 0%, transparent 60%);
+  }
+  .header-inner { position: relative; max-width: 1100px; margin: 0 auto; }
+  .header-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #93c5fd; margin-bottom: 24px;
+  }
+  .header h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 18px;
+  }
+  .header h1 span.zk { color: #fcd34d; }
+  .header h1 span.kr { color: #6ee7b7; }
+  .header-sub {
+    font-size: 17px; color: rgba(255,255,255,0.7);
+    max-width: 680px; line-height: 1.7;
+  }
+  .header-meta {
+    display: flex; gap: 24px; flex-wrap: wrap; margin-top: 36px;
+  }
+  .meta-pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; padding: 8px 16px;
+    font-size: 13px; color: rgba(255,255,255,0.75);
+    font-weight: 500;
+  }
+  .meta-pill strong { color: #fff; }
+
+  /* ── NAV ── */
+  .nav-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 48px;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; gap: 0; overflow-x: auto;
+  }
+  .nav-inner::-webkit-scrollbar { display: none; }
+  .nav-item {
+    padding: 16px 18px;
+    font-size: 14px; font-weight: 600;
+    color: var(--text-3);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .nav-item:hover { color: var(--blue); border-color: var(--blue); }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 48px; }
+  .section { padding: 64px 0 0; }
+  .section:last-of-type { padding-bottom: 80px; }
+
+  .section-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 1.8rem; font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .section-lead {
+    font-size: 15px; color: var(--text-2);
+    max-width: 700px; margin-bottom: 36px;
+    line-height: 1.7;
+  }
+  .divider {
+    width: 48px; height: 4px;
+    border-radius: 4px;
+    margin: 12px 0 20px;
+  }
+  .div-blue { background: var(--blue); }
+  .div-orange { background: var(--orange); }
+  .div-purple { background: var(--purple); }
+  .div-green { background: var(--green); }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+  .card-title {
+    font-size: 15px; font-weight: 700;
+    letter-spacing: 0.01em; margin-bottom: 10px;
+  }
+  .card p, .card li { font-size: 15px; color: var(--text-2); line-height: 1.75; }
+  .card ul { padding-left: 20px; }
+  .card ul li { margin-bottom: 6px; }
+
+  /* ── GRID LAYOUTS ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+
+  /* ── SIDE-BY-SIDE COMPARISON ── */
+  .compare-header {
+    display: grid; grid-template-columns: 200px 1fr 1fr;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    overflow: hidden;
+  }
+  .compare-header > div {
+    padding: 18px 24px;
+    font-weight: 700; font-size: 15px;
+  }
+  .compare-header .col-zk { background: var(--orange-light); color: #92400e; border-left: 1px solid var(--border); }
+  .compare-header .col-kr { background: var(--green-light); color: #065f46; border-left: 1px solid var(--border); }
+  .compare-row {
+    display: grid; grid-template-columns: 200px 1fr 1fr;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+  }
+  .compare-row:last-child { border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
+  .compare-row:nth-child(even) { background: var(--surface-2); }
+  .compare-row > div {
+    padding: 16px 24px;
+    font-size: 15px;
+    border-left: 1px solid var(--border);
+    line-height: 1.65;
+  }
+  .compare-row > div:first-child {
+    border-left: none;
+    font-weight: 600; font-size: 14px; color: var(--text-2);
+  }
+  .compare-row .cell-zk { color: #78350f; }
+  .compare-row .cell-kr { color: #064e3b; }
+
+  /* ── BADGE / TAG ── */
+  .tag {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .tag-blue { background: var(--blue-light); color: #1d4ed8; }
+  .tag-orange { background: var(--orange-light); color: #92400e; }
+  .tag-purple { background: var(--purple-light); color: #6d28d9; }
+  .tag-green { background: var(--green-light); color: #065f46; }
+  .tag-red { background: var(--red-light); color: #b91c1c; }
+
+  /* ── ARCH DIAGRAM ── */
+  .arch-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow);
+  }
+  .arch-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 20px; color: var(--text-3);
+  }
+
+  svg.arch { width: 100%; height: auto; display: block; }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: #1e2233;
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    overflow-x: auto;
+    margin: 16px 0;
+    border: 1px solid #2d3561;
+  }
+  .code-block .c-comment { color: #6272a4; }
+  .code-block .c-key { color: #8be9fd; }
+  .code-block .c-val { color: #f1fa8c; }
+  .code-block .c-str { color: #50fa7b; }
+  .code-block .c-sec { color: #ff79c6; }
+  .code-block .c-num { color: #bd93f9; }
+
+  /* ── STRENGTH / WEAKNESS ── */
+  .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .sw-card {
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .sw-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+  .sw-card h4 {
+    font-size: 15px; font-weight: 700; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sw-card li { font-size: 15px; line-height: 1.7; margin-bottom: 8px; }
+  .strength { background: var(--green-light); border: 1px solid #6ee7b7; }
+  .strength li::before { content: '✓  '; color: #059669; font-weight: 700; }
+  .strength h4 { color: #065f46; }
+  .weakness { background: var(--red-light); border: 1px solid #fca5a5; }
+  .weakness li::before { content: '✗  '; color: #dc2626; font-weight: 700; }
+  .weakness h4 { color: #991b1b; }
+  .sw-card ul { list-style: none; padding: 0; }
+
+  /* ── ECOSYSTEM TABLE ── */
+  .eco-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .eco-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+  .eco-header {
+    padding: 18px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .eco-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .eco-header h3 { font-size: 16px; font-weight: 700; }
+  .eco-header p { font-size: 13px; color: var(--text-3); margin-top: 1px; }
+  .eco-body { padding: 0 24px 20px; }
+  .eco-body p { font-size: 15px; color: var(--text-2); line-height: 1.7; }
+
+  /* ── SCORING ── */
+  .score-row { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .score-label { font-size: 14px; font-weight: 600; min-width: 220px; color: var(--text-2); }
+  .score-track {
+    flex: 1; height: 10px; background: var(--border);
+    border-radius: 10px; overflow: hidden; position: relative;
+  }
+  .score-fill {
+    height: 100%; border-radius: 10px;
+    transition: width 0.8s ease;
+  }
+  .score-value { font-size: 13px; font-weight: 700; min-width: 36px; text-align: right; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── TIMELINE ── */
+  .timeline { position: relative; padding-left: 40px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 12px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .tl-item { position: relative; margin-bottom: 28px; }
+  .tl-dot {
+    position: absolute; left: -34px; top: 4px;
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
+  .tl-year { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 4px; }
+  .tl-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .tl-desc { font-size: 15px; color: var(--text-2); line-height: 1.65; }
+
+  /* ── RECOMMENDATION BOX ── */
+  .rec-box {
+    border-radius: var(--radius);
+    padding: 32px 36px;
+    position: relative; overflow: hidden;
+  }
+  .rec-box::before {
+    content: '';
+    position: absolute; top: -40px; right: -40px;
+    width: 160px; height: 160px; border-radius: 50%;
+    opacity: 0.08;
+  }
+  .rec-blue { background: var(--blue-light); border: 1px solid var(--blue-mid); }
+  .rec-blue::before { background: var(--blue); }
+  .rec-green { background: var(--green-light); border: 1px solid var(--green-mid); }
+  .rec-green::before { background: var(--green); }
+  .rec-box h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; }
+  .rec-box p { font-size: 15px; line-height: 1.75; color: var(--text-2); }
+  .rec-box .rec-list { list-style: none; padding: 0; margin-top: 14px; }
+  .rec-box .rec-list li { font-size: 15px; color: var(--text-2); padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.06); line-height: 1.65; }
+  .rec-box .rec-list li:last-child { border: none; }
+  .rec-box .rec-list li::before { content: '→  '; font-weight: 700; }
+
+  /* ── DECISION TREE ── */
+  .dt-node {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 20px;
+    font-size: 14px;
+    text-align: center;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  .dt-node:hover { box-shadow: var(--shadow); border-color: var(--blue-mid); }
+  .dt-node.root { border-color: var(--blue); background: var(--blue-light); font-weight: 700; color: #1d4ed8; }
+  .dt-node.leaf-zk { border-color: var(--orange); background: var(--orange-light); font-weight: 700; color: #92400e; }
+  .dt-node.leaf-kr { border-color: var(--green); background: var(--green-light); font-weight: 700; color: #065f46; }
+  .dt-connector { text-align: center; font-size: 12px; color: var(--text-3); font-weight: 600; padding: 4px 0; }
+
+  /* ── PERF TABLE ── */
+  .perf-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .perf-table th {
+    background: var(--surface-2);
+    padding: 12px 20px;
+    text-align: left; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-2);
+  }
+  .perf-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    vertical-align: top;
+  }
+  .perf-table tr:last-child td { border: none; }
+  .perf-table tr:hover td { background: var(--surface-2); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .header { padding: 48px 24px 40px; }
+    .container { padding: 0 24px; }
+    .nav-bar { padding: 0 24px; }
+    .grid-2, .grid-3, .sw-grid { grid-template-columns: 1fr; }
+    .compare-header, .compare-row { grid-template-columns: 120px 1fr 1fr; }
+    .score-label { min-width: 160px; font-size: 13px; }
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    background: #1a1f36; color: rgba(255,255,255,0.5);
+    text-align: center; padding: 32px 48px;
+    font-size: 14px; margin-top: 64px;
+    border-top: 1px solid #2d3561;
+  }
+  .footer strong { color: rgba(255,255,255,0.8); }
+
+  /* ── ANIMATE ON SCROLL ── */
+  .fade-in {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     HEADER
+══════════════════════════════════════ -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-badge">⚡ Big Data Architecture — Deep Dive</div>
+    <h1>
+      <span class="zk">ZooKeeper</span> vs <span class="kr">KRaft</span><br/>
+      on Apache Kafka
+    </h1>
+    <p class="header-sub">
+      A comprehensive technical analysis of Kafka's coordination layer evolution — from external ZooKeeper quorum to the built-in KRaft consensus protocol — for petabyte-scale and real-time streaming architectures.
+    </p>
+    <div class="header-meta">
+      <div class="meta-pill"><strong>Scope:</strong> PB-scale &amp; Realtime Streaming</div>
+      <div class="meta-pill"><strong>Kafka versions:</strong> 0.8 → 3.x</div>
+      <div class="meta-pill"><strong>Protocol:</strong> ZAB vs Raft</div>
+      <div class="meta-pill"><strong>KIP-500:</strong> Deprecation Path</div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════
+     NAV
+══════════════════════════════════════ -->
+<nav class="nav-bar">
+  <div class="nav-inner">
+    <a class="nav-item" href="#overview">Overview</a>
+    <a class="nav-item" href="#architecture">Architecture</a>
+    <a class="nav-item" href="#comparison">Comparison</a>
+    <a class="nav-item" href="#strengths">Strengths &amp; Weaknesses</a>
+    <a class="nav-item" href="#performance">Performance</a>
+    <a class="nav-item" href="#frameworks">Frameworks</a>
+    <a class="nav-item" href="#ecosystems">Ecosystems</a>
+    <a class="nav-item" href="#migration">Migration</a>
+    <a class="nav-item" href="#recommendation">Recommendation</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════
+     SECTION 1 — OVERVIEW
+══════════════════════════════════════ -->
+<section id="overview" class="section">
+  <div class="container">
+    <p class="section-title">Background &amp; Origins</p>
+    <div class="divider div-blue"></div>
+    <p class="section-lead">Understanding how Kafka's metadata management evolved from a third-party coordination service to a self-contained consensus mechanism.</p>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <div class="card fade-in">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--orange-light);border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;">🦓</div>
+          <div>
+            <div class="card-title" style="color:#92400e;">Apache ZooKeeper</div>
+            <div class="tag tag-orange">External Coordination</div>
+          </div>
+        </div>
+        <p>ZooKeeper is a centralized, highly-available coordination service originally developed at Yahoo! and donated to the Apache Software Foundation in 2008. It provides distributed synchronization, configuration management, and naming services via a hierarchical namespace of <em>znodes</em> — essentially a distributed file system optimized for small, frequent reads.</p>
+        <br/>
+        <p>Kafka adopted ZooKeeper from its very inception (Kafka 0.8, 2012) to store cluster metadata: topic configurations, partition leadership, ISR (in-sync replica) lists, consumer group offsets, and controller election. ZooKeeper uses the <strong>ZAB (ZooKeeper Atomic Broadcast)</strong> protocol — a variant of Paxos — to maintain consensus across its quorum of nodes.</p>
+      </div>
+
+      <div class="card fade-in">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--green-light);border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;">⚙️</div>
+          <div>
+            <div class="card-title" style="color:#065f46;">Apache KRaft</div>
+            <div class="tag tag-green">Built-in Consensus</div>
+          </div>
+        </div>
+        <p>KRaft (Kafka Raft Metadata Mode) is Kafka's native consensus protocol introduced via <strong>KIP-500</strong> (Kafka Improvement Proposal 500), targeting the complete removal of ZooKeeper as a dependency. Introduced in Kafka 2.8 as an early-access feature, it reached production-readiness in Kafka 3.3 (October 2022) and became the sole supported mode from Kafka 4.0 onwards.</p>
+        <br/>
+        <p>KRaft uses a subset of the <strong>Raft consensus algorithm</strong>, embedding metadata management directly within the Kafka broker process. A dedicated set of controller nodes (or co-located controller+broker nodes) maintains a metadata log — an ordinary Kafka topic (<code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--surface-2);padding:1px 5px;border-radius:4px;">__cluster_metadata</code>) replicated via the Raft protocol.</p>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:20px;">📅 Historical Timeline</div>
+      <div class="grid-2">
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--orange);"></div>
+            <div class="tl-year">2008</div>
+            <div class="tl-title">ZooKeeper Open-Sourced</div>
+            <div class="tl-desc">Apache ZooKeeper donated to ASF by Yahoo!, initially part of Hadoop ecosystem.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--orange);"></div>
+            <div class="tl-year">2012 — Kafka 0.8</div>
+            <div class="tl-title">Kafka Adopts ZooKeeper</div>
+            <div class="tl-desc">Kafka uses ZooKeeper for broker registration, topic metadata, controller election, and consumer offsets.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--orange);"></div>
+            <div class="tl-year">2019 — KIP-500 Proposed</div>
+            <div class="tl-title">ZooKeeper Removal Plan</div>
+            <div class="tl-desc">Community proposes native Kafka metadata quorum to eliminate ZooKeeper dependency entirely.</div>
+          </div>
+        </div>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--green);"></div>
+            <div class="tl-year">2021 — Kafka 2.8</div>
+            <div class="tl-title">KRaft Early Access</div>
+            <div class="tl-desc">KRaft mode ships as a technical preview. Not suitable for production workloads yet.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--green);"></div>
+            <div class="tl-year">2022 — Kafka 3.3</div>
+            <div class="tl-title">KRaft Production-Ready</div>
+            <div class="tl-desc">KRaft declared production-ready; ZooKeeper mode begins official deprecation path.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--blue);"></div>
+            <div class="tl-year">2024 — Kafka 4.0</div>
+            <div class="tl-title">ZooKeeper Mode Removed</div>
+            <div class="tl-desc">ZooKeeper support fully removed. KRaft is the only supported metadata management mode.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 2 — ARCHITECTURE
+══════════════════════════════════════ -->
+<section id="architecture" class="section">
+  <div class="container">
+    <p class="section-title">Architecture Deep Dive</p>
+    <div class="divider div-purple"></div>
+    <p class="section-lead">How each coordination model is structurally composed, how metadata flows, and how leadership is elected.</p>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <!-- ZK Architecture -->
+      <div class="arch-box fade-in">
+        <div class="arch-title">🦓 ZooKeeper Architecture</div>
+        <svg class="arch" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+          <!-- ZK Quorum -->
+          <rect x="20" y="20" width="440" height="110" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+          <text x="240" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#92400e" font-weight="600" letter-spacing="1">ZOOKEEPER QUORUM (ZAB Protocol)</text>
+          <rect x="40" y="55" width="100" height="56" rx="8" fill="#fff" stroke="#fcd34d" stroke-width="1.5"/>
+          <text x="90" y="80" text-anchor="middle" font-family="Inter" font-size="11" fill="#92400e" font-weight="700">ZK Leader</text>
+          <text x="90" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#b45309">:2181</text>
+          <rect x="190" y="55" width="100" height="56" rx="8" fill="#fff7ed" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="4"/>
+          <text x="240" y="80" text-anchor="middle" font-family="Inter" font-size="11" fill="#92400e" font-weight="600">ZK Follower</text>
+          <text x="240" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#b45309">:2181</text>
+          <rect x="340" y="55" width="100" height="56" rx="8" fill="#fff7ed" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="4"/>
+          <text x="390" y="80" text-anchor="middle" font-family="Inter" font-size="11" fill="#92400e" font-weight="600">ZK Follower</text>
+          <text x="390" y="97" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#b45309">:2181</text>
+          <!-- Connection lines ZK -->
+          <line x1="140" y1="83" x2="190" y2="83" stroke="#fcd34d" stroke-width="1.5"/>
+          <line x1="290" y1="83" x2="340" y2="83" stroke="#fcd34d" stroke-width="1.5"/>
+
+          <!-- Arrows down -->
+          <line x1="240" y1="130" x2="240" y2="160" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4"/>
+          <polygon points="235,158 240,168 245,158" fill="#9ca3af"/>
+          <text x="255" y="148" font-family="Inter" font-size="10" fill="#6b7280">metadata</text>
+
+          <!-- Kafka Cluster -->
+          <rect x="20" y="170" width="440" height="130" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+          <text x="240" y="193" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#1d4ed8" font-weight="600" letter-spacing="1">KAFKA CLUSTER</text>
+
+          <!-- Controller -->
+          <rect x="160" y="202" width="160" height="56" rx="8" fill="#fff" stroke="#3b82f6" stroke-width="2"/>
+          <text x="240" y="226" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="700">Kafka Controller</text>
+          <text x="240" y="243" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#3b82f6">(elected broker)</text>
+
+          <!-- Brokers -->
+          <rect x="40" y="210" width="100" height="42" rx="6" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+          <text x="90" y="232" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="600">Broker 1</text>
+          <text x="90" y="246" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b82f6">:9092</text>
+          <rect x="340" y="210" width="100" height="42" rx="6" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+          <text x="390" y="232" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="600">Broker N</text>
+          <text x="390" y="246" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b82f6">:9092</text>
+
+          <!-- Lines to controller -->
+          <line x1="140" y1="231" x2="160" y2="231" stroke="#93c5fd" stroke-width="1.5"/>
+          <line x1="320" y1="231" x2="340" y2="231" stroke="#93c5fd" stroke-width="1.5"/>
+
+          <!-- Label -->
+          <text x="240" y="345" text-anchor="middle" font-family="Inter" font-size="11" fill="#6b7280">⚠ Two separate systems to manage and scale</text>
+        </svg>
+      </div>
+
+      <!-- KRaft Architecture -->
+      <div class="arch-box fade-in">
+        <div class="arch-title">⚙️ KRaft Architecture</div>
+        <svg class="arch" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+          <!-- KRaft Controller Quorum -->
+          <rect x="20" y="20" width="440" height="130" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/>
+          <text x="240" y="44" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#065f46" font-weight="600" letter-spacing="1">KRAFT CONTROLLER QUORUM (Raft Protocol)</text>
+          <text x="240" y="60" text-anchor="middle" font-family="Inter" font-size="10" fill="#047857">__cluster_metadata topic — internal log</text>
+
+          <!-- Active Controller -->
+          <rect x="160" y="68" width="160" height="64" rx="8" fill="#fff" stroke="#10b981" stroke-width="2"/>
+          <text x="240" y="93" text-anchor="middle" font-family="Inter" font-size="11" fill="#065f46" font-weight="700">Active Controller</text>
+          <text x="240" y="108" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#10b981">Raft Leader</text>
+          <text x="240" y="123" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#6b7280">epoch + offset</text>
+
+          <!-- Standby Controllers -->
+          <rect x="40" y="76" width="100" height="50" rx="6" fill="#f0fdf4" stroke="#6ee7b7" stroke-width="1.5" stroke-dasharray="4"/>
+          <text x="90" y="100" text-anchor="middle" font-family="Inter" font-size="11" fill="#065f46" font-weight="600">Controller 2</text>
+          <text x="90" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#10b981">Raft Follower</text>
+          <rect x="340" y="76" width="100" height="50" rx="6" fill="#f0fdf4" stroke="#6ee7b7" stroke-width="1.5" stroke-dasharray="4"/>
+          <text x="390" y="100" text-anchor="middle" font-family="Inter" font-size="11" fill="#065f46" font-weight="600">Controller 3</text>
+          <text x="390" y="115" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#10b981">Raft Follower</text>
+
+          <line x1="140" y1="101" x2="160" y2="101" stroke="#6ee7b7" stroke-width="1.5"/>
+          <line x1="320" y1="101" x2="340" y2="101" stroke="#6ee7b7" stroke-width="1.5"/>
+
+          <!-- Arrows down -->
+          <line x1="240" y1="150" x2="240" y2="178" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4"/>
+          <polygon points="235,176 240,186 245,176" fill="#9ca3af"/>
+          <text x="258" y="166" font-family="Inter" font-size="10" fill="#6b7280">metadata fetch</text>
+
+          <!-- Brokers -->
+          <rect x="20" y="188" width="440" height="112" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+          <text x="240" y="210" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#1d4ed8" font-weight="600" letter-spacing="1">KAFKA BROKER NODES</text>
+          <text x="240" y="225" text-anchor="middle" font-family="Inter" font-size="10" fill="#3b82f6">Pull metadata directly from controller log</text>
+
+          <rect x="40" y="232" width="100" height="52" rx="6" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+          <text x="90" y="257" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="600">Broker 1</text>
+          <text x="90" y="273" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b82f6">:9092</text>
+          <rect x="190" y="232" width="100" height="52" rx="6" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+          <text x="240" y="257" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="600">Broker 2</text>
+          <text x="240" y="273" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b82f6">:9092</text>
+          <rect x="340" y="232" width="100" height="52" rx="6" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+          <text x="390" y="257" text-anchor="middle" font-family="Inter" font-size="11" fill="#1d4ed8" font-weight="600">Broker N</text>
+          <text x="390" y="273" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#3b82f6">:9092</text>
+
+          <!-- Label -->
+          <text x="240" y="345" text-anchor="middle" font-family="Inter" font-size="11" fill="#059669">✓ Single unified system — no external dependency</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Metadata Flow -->
+    <div class="card fade-in">
+      <div class="card-title">🔄 Metadata Flow Comparison</div>
+      <div class="grid-2" style="gap:32px;margin-top:16px;">
+        <div>
+          <div class="tag tag-orange" style="margin-bottom:14px;">ZooKeeper Metadata Flow</div>
+          <div class="code-block">
+<span class="c-comment"># ZooKeeper znode hierarchy (legacy)</span>
+<span class="c-sec">/kafka</span>
+  <span class="c-sec">/brokers</span>
+    <span class="c-sec">/ids</span>/<span class="c-num">0</span>  <span class="c-comment"># ephemeral → broker alive</span>
+    <span class="c-sec">/topics</span>/<span class="c-key">my-topic</span>/<span class="c-key">partitions</span>
+  <span class="c-sec">/controller</span>        <span class="c-comment"># ephemeral → leader</span>
+  <span class="c-sec">/isr_change_notification</span>
+  <span class="c-sec">/admin/reassign_partitions</span>
+  <span class="c-sec">/config/topics</span>/<span class="c-key">my-topic</span>
+
+<span class="c-comment"># Controller writes ZK → notifies ALL brokers</span>
+<span class="c-comment"># Brokers read from ZK directly</span>
+<span class="c-comment"># O(N×P) notification storm on restarts</span>
+          </div>
+        </div>
+        <div>
+          <div class="tag tag-green" style="margin-bottom:14px;">KRaft Metadata Flow</div>
+          <div class="code-block">
+<span class="c-comment"># KRaft: metadata as a Kafka log</span>
+<span class="c-key">__cluster_metadata</span> <span class="c-comment"># partition 0</span>
+  offset <span class="c-num">0</span>: <span class="c-str">RegisterBrokerRecord</span>
+  offset <span class="c-num">1</span>: <span class="c-str">TopicRecord</span> <span class="c-comment"># topic created</span>
+  offset <span class="c-num">2</span>: <span class="c-str">PartitionRecord</span>
+  offset <span class="c-num">3</span>: <span class="c-str">PartitionChangeRecord</span>
+  offset <span class="c-num">N</span>: <span class="c-str">ProducerIdsRecord</span>
+
+<span class="c-comment"># Brokers FETCH from controller like consumers</span>
+<span class="c-comment"># No ZK watches — event-sourced, append-only</span>
+<span class="c-comment"># Snapshots compacted at configurable intervals</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 3 — COMPARISON TABLE
+══════════════════════════════════════ -->
+<section id="comparison" class="section">
+  <div class="container">
+    <p class="section-title">Feature-by-Feature Comparison</p>
+    <div class="divider div-orange"></div>
+    <p class="section-lead">A systematic breakdown across operational, architectural, and scalability dimensions critical for PB-scale deployments.</p>
+
+    <div class="fade-in">
+      <div class="compare-header">
+        <div style="font-size:13px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Dimension</div>
+        <div class="col-zk">🦓 ZooKeeper Mode</div>
+        <div class="col-kr">⚙️ KRaft Mode</div>
+      </div>
+
+      <div class="compare-row">
+        <div>External Dependency</div>
+        <div class="cell-zk">Requires separate ZK cluster (3–5 nodes typical). Adds operational overhead, separate monitoring, and JVM management.</div>
+        <div class="cell-kr">Zero external dependencies. Metadata quorum is embedded within Kafka itself — single process to manage.</div>
+      </div>
+      <div class="compare-row">
+        <div>Consensus Protocol</div>
+        <div class="cell-zk">ZAB (ZooKeeper Atomic Broadcast) — Paxos variant. Leader-follower model. ZK leader processes all writes.</div>
+        <div class="cell-kr">Raft consensus. Active controller is Raft leader. Metadata log replicated with configurable quorum (typically 3 controllers).</div>
+      </div>
+      <div class="compare-row">
+        <div>Metadata Storage</div>
+        <div class="cell-zk">In-memory tree of znodes in ZK. Persistent via transaction log + snapshots. Limited to &lt;1MB per znode. ZK write lock is global.</div>
+        <div class="cell-kr">Append-only Kafka log (<code style="font-family:'JetBrains Mono',monospace;font-size:12px;">__cluster_metadata</code>). Periodically snapshotted. No size limits from ZK constraints. Allows arbitrary record types.</div>
+      </div>
+      <div class="compare-row">
+        <div>Partition Scalability</div>
+        <div class="cell-zk">Practically limited to ~200K partitions per cluster due to ZK watch storms and controller reload latency. Performance degrades significantly beyond this.</div>
+        <div class="cell-kr">Supports millions of partitions. Benchmarks show 10–100× improvement in partition leadership handling. Confluent tested 3.3M partitions in KRaft.</div>
+      </div>
+      <div class="compare-row">
+        <div>Controller Failover</div>
+        <div class="cell-zk">New controller must reload all metadata from ZK. At 200K partitions this can take 30–60+ seconds of unavailability — a critical operational risk.</div>
+        <div class="cell-kr">Standby controllers maintain a full in-memory replica of the metadata log. Failover is near-instantaneous (seconds, not minutes).</div>
+      </div>
+      <div class="compare-row">
+        <div>Broker Startup</div>
+        <div class="cell-zk">Each broker reads all partition/topic state from ZK on startup. Slow at scale. Fan-out causes ZK read amplification.</div>
+        <div class="cell-kr">Brokers fetch metadata incrementally from the controller using a Kafka Fetch request. Faster, incremental, and bandwidth-efficient.</div>
+      </div>
+      <div class="compare-row">
+        <div>TLS / Auth Security</div>
+        <div class="cell-zk">Separate TLS configuration for ZK and Kafka. Two sets of certificates, ACLs, and SASL configs. Double the attack surface.</div>
+        <div class="cell-kr">Single unified security domain. One set of certificates and ACL configurations. Simplified compliance posture for regulated industries.</div>
+      </div>
+      <div class="compare-row">
+        <div>Observability</div>
+        <div class="cell-zk">Requires monitoring two JVM applications with separate metric namespaces. ZK has its own 4-letter commands and JMX beans.</div>
+        <div class="cell-kr">Unified JMX metrics from a single process. Simpler dashboards, single alert surface, and correlated logs.</div>
+      </div>
+      <div class="compare-row">
+        <div>Deployment Topology</div>
+        <div class="cell-zk">Minimum 6 JVM processes (3 ZK + 3 Kafka) for HA. Odd ZK quorum mandatory. More infrastructure costs.</div>
+        <div class="cell-kr">Minimum 3 JVM processes for HA (combined controller+broker). Can also run dedicated controller nodes. Lower resource floor.</div>
+      </div>
+      <div class="compare-row">
+        <div>Metadata Transaction</div>
+        <div class="cell-zk">Multi-operation ZK transactions are limited. Coordinating complex changes (e.g., partition reassignment) requires multiple round-trips.</div>
+        <div class="cell-kr">All metadata changes are atomic log entries. The controller applies them in order with exactly-once semantics guaranteed by Raft.</div>
+      </div>
+      <div class="compare-row">
+        <div>Kafka Version Support</div>
+        <div class="cell-zk">Supported in Kafka 0.8 through 3.x. Fully removed in Kafka 4.0. No longer receives bug fixes or features post-3.x.</div>
+        <div class="cell-kr">Available preview in Kafka 2.8+. Production-ready in 3.3+. Sole supported mode in Kafka 4.0+. All future features target KRaft only.</div>
+      </div>
+      <div class="compare-row">
+        <div>Rolling Upgrades</div>
+        <div class="cell-zk">Kafka brokers and ZK nodes must be rolled separately. Compatible ZK version matrix adds complexity.</div>
+        <div class="cell-kr">Rolling upgrades managed entirely within Kafka. No ZK version compatibility matrix to track. Simpler upgrade runbook.</div>
+      </div>
+      <div class="compare-row">
+        <div>Cloud-Native Fit</div>
+        <div class="cell-zk">StatefulSets for both ZK and Kafka in Kubernetes. Helm charts are large. Persistent volumes needed for two systems.</div>
+        <div class="cell-kr">Single StatefulSet. Strimzi, Confluent Platform, and MSK all primarily target KRaft for Kubernetes deployments as of 2024.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 4 — STRENGTHS & WEAKNESSES
+══════════════════════════════════════ -->
+<section id="strengths" class="section">
+  <div class="container">
+    <p class="section-title">Strengths &amp; Weaknesses</p>
+    <div class="divider div-blue"></div>
+    <p class="section-lead">An honest assessment of where each approach excels and where it falls short, especially at petabyte-scale and real-time streaming workloads.</p>
+
+    <div style="margin-bottom: 32px;">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+        <span class="tag tag-orange">🦓 ZooKeeper Mode</span>
+      </h3>
+      <div class="sw-grid">
+        <div class="sw-card strength fade-in">
+          <h4>✅ Strengths</h4>
+          <ul>
+            <li><strong>Battle-hardened maturity:</strong> 10+ years of production use across thousands of enterprise Kafka clusters globally — failure modes are well-understood.</li>
+            <li><strong>Ecosystem tooling:</strong> Extensive tooling, runbooks, monitoring dashboards (Grafana templates, DataDog integrations) are readily available and mature.</li>
+            <li><strong>General-purpose coordination:</strong> ZooKeeper can serve as a coordination service for other systems (HBase, HDFS NameNode, Solr) alongside Kafka, potentially sharing infrastructure.</li>
+            <li><strong>Migration pathways proven:</strong> Operators have vast documentation, SRE playbooks, and institutional knowledge for ZK-mode cluster operations.</li>
+            <li><strong>Stable under moderate scale:</strong> For clusters below 100K partitions with predictable workloads, ZK mode is reliable and well-understood.</li>
+          </ul>
+        </div>
+        <div class="sw-card weakness fade-in">
+          <h4>❌ Weaknesses</h4>
+          <ul>
+            <li><strong>Scalability ceiling:</strong> The infamous "200K partition wall" — ZK watch fan-out causes severe latency spikes during controller re-elections at high partition counts.</li>
+            <li><strong>Split-brain risk:</strong> ZK network partitions can produce ambiguous controller election scenarios, requiring careful timeout tuning.</li>
+            <li><strong>Slow failover:</strong> Controller restart requires full ZK reload — catastrophic minutes of unavailability for large PB-scale clusters.</li>
+            <li><strong>Dual operational burden:</strong> Two independent distributed systems to patch, tune, monitor, and capacity-plan. JVM heap and GC tuning for both.</li>
+            <li><strong>End-of-life:</strong> Deprecated since Kafka 3.x, fully removed in 4.0. No new features. Security patches only until end-of-life.</li>
+            <li><strong>Write bottleneck:</strong> All metadata writes serialized through ZK leader. At PB-scale event volumes this creates a coordination bottleneck.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+        <span class="tag tag-green">⚙️ KRaft Mode</span>
+      </h3>
+      <div class="sw-grid">
+        <div class="sw-card strength fade-in">
+          <h4>✅ Strengths</h4>
+          <ul>
+            <li><strong>Unbounded partition scalability:</strong> Confluent benchmarks demonstrate millions of partitions — critical for multi-tenant PB-scale platforms with thousands of topics.</li>
+            <li><strong>Fast failover:</strong> Near-instantaneous controller failover (sub-second in tested scenarios) since standby controllers maintain full metadata state via Raft log replication.</li>
+            <li><strong>Simplified operations:</strong> Single JVM, single deployment unit, single monitoring surface, single security domain — dramatically reduces operational complexity.</li>
+            <li><strong>Event-sourced metadata:</strong> The <code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:rgba(0,0,0,0.05);padding:1px 6px;border-radius:3px;">__cluster_metadata</code> log provides an auditable, replayable, append-only history of all cluster state changes — excellent for debugging and compliance.</li>
+            <li><strong>Cloud-native:</strong> Purpose-built for Kubernetes and containerized environments. Minimal infrastructure footprint reduces compute/storage costs.</li>
+            <li><strong>Future-proof:</strong> All Confluent, AWS MSK, and Apache Kafka development exclusively targets KRaft going forward.</li>
+          </ul>
+        </div>
+        <div class="sw-card weakness fade-in">
+          <h4>❌ Weaknesses</h4>
+          <ul>
+            <li><strong>Relative immaturity:</strong> Production-ready since 2022, meaning fewer years of widespread enterprise battle-testing compared to ZK mode's decade+ history.</li>
+            <li><strong>Migration complexity:</strong> Migrating from ZooKeeper to KRaft on live clusters requires careful planning, tooling (<code style="font-family:'JetBrains Mono',monospace;font-size:13px;">kafka-storage.sh</code> migration tool), and downtime windows.</li>
+            <li><strong>Feature parity gaps (historical):</strong> Some advanced ACL and delegation token features lagged behind ZK mode in early KRaft releases (most resolved by Kafka 3.5+).</li>
+            <li><strong>Controller node sizing:</strong> Dedicated controller nodes need carefully tuned JVM heap for the metadata log cache — underpowered controllers become the new bottleneck.</li>
+            <li><strong>Snapshot management:</strong> The metadata log requires periodic snapshotting and compaction. Poor configuration leads to slow broker restarts while replaying large logs.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 5 — PERFORMANCE
+══════════════════════════════════════ -->
+<section id="performance" class="section">
+  <div class="container">
+    <p class="section-title">Performance Analysis</p>
+    <div class="divider div-green"></div>
+    <p class="section-lead">Quantitative and qualitative performance characteristics across critical operational dimensions for high-throughput, low-latency streaming systems.</p>
+
+    <!-- Score Cards -->
+    <div class="card fade-in" style="margin-bottom:24px;">
+      <div class="card-title" style="margin-bottom:24px;">Comparative Scoring (1–10) for PB-Scale / RT Streaming</div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-3);margin-bottom:12px;">🦓 ZooKeeper Mode</div>
+        <div class="score-row"><div class="score-label">Partition Scalability</div><div class="score-track"><div class="score-fill" style="width:35%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">3.5</div></div>
+        <div class="score-row"><div class="score-label">Controller Failover Speed</div><div class="score-track"><div class="score-fill" style="width:40%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">4.0</div></div>
+        <div class="score-row"><div class="score-label">Operational Simplicity</div><div class="score-track"><div class="score-fill" style="width:45%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">4.5</div></div>
+        <div class="score-row"><div class="score-label">Ecosystem Maturity</div><div class="score-track"><div class="score-fill" style="width:95%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">9.5</div></div>
+        <div class="score-row"><div class="score-label">Security Surface</div><div class="score-track"><div class="score-fill" style="width:50%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">5.0</div></div>
+        <div class="score-row"><div class="score-label">Cloud-Native Fit</div><div class="score-track"><div class="score-fill" style="width:40%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">4.0</div></div>
+        <div class="score-row"><div class="score-label">Metadata Throughput</div><div class="score-track"><div class="score-fill" style="width:40%;background:var(--orange);"></div></div><div class="score-value" style="color:var(--orange);">4.0</div></div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;">
+        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-3);margin-bottom:12px;">⚙️ KRaft Mode</div>
+        <div class="score-row"><div class="score-label">Partition Scalability</div><div class="score-track"><div class="score-fill" style="width:97%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.7</div></div>
+        <div class="score-row"><div class="score-label">Controller Failover Speed</div><div class="score-track"><div class="score-fill" style="width:95%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.5</div></div>
+        <div class="score-row"><div class="score-label">Operational Simplicity</div><div class="score-track"><div class="score-fill" style="width:90%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.0</div></div>
+        <div class="score-row"><div class="score-label">Ecosystem Maturity</div><div class="score-track"><div class="score-fill" style="width:72%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">7.2</div></div>
+        <div class="score-row"><div class="score-label">Security Surface</div><div class="score-track"><div class="score-fill" style="width:92%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.2</div></div>
+        <div class="score-row"><div class="score-label">Cloud-Native Fit</div><div class="score-track"><div class="score-fill" style="width:96%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.6</div></div>
+        <div class="score-row"><div class="score-label">Metadata Throughput</div><div class="score-track"><div class="score-fill" style="width:93%;background:var(--green);"></div></div><div class="score-value" style="color:var(--green);">9.3</div></div>
+      </div>
+    </div>
+
+    <!-- Benchmark Table -->
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:16px;">⚡ Key Benchmark Data Points</div>
+      <div style="overflow-x:auto;">
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>ZooKeeper Mode</th>
+              <th>KRaft Mode</th>
+              <th>Source / Context</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Max Tested Partitions</strong></td>
+              <td>~200K (practical limit)</td>
+              <td>3.3M+ partitions</td>
+              <td>Confluent KIP-500 benchmarks</td>
+            </tr>
+            <tr>
+              <td><strong>Controller Failover Time</strong></td>
+              <td>30–120 sec (load-dependent)</td>
+              <td>&lt;1 sec (hot standby)</td>
+              <td>Kafka 3.3 release notes + Confluent testing</td>
+            </tr>
+            <tr>
+              <td><strong>Broker Registration (1000 brokers)</strong></td>
+              <td>Minutes (sequential ZK ops)</td>
+              <td>Seconds (parallel metadata fetch)</td>
+              <td>Apache Kafka mailing list / KIP-500</td>
+            </tr>
+            <tr>
+              <td><strong>Metadata Propagation Latency</strong></td>
+              <td>Proportional to ZK write + notify</td>
+              <td>Bounded by Raft quorum write + fetch</td>
+              <td>Implementation difference</td>
+            </tr>
+            <tr>
+              <td><strong>Memory Overhead (metadata)</strong></td>
+              <td>ZK heap: ~1–4GB for large clusters</td>
+              <td>Controller heap: ~2–8GB (configurable)</td>
+              <td>Empirical production observations</td>
+            </tr>
+            <tr>
+              <td><strong>Topic Create Throughput</strong></td>
+              <td>~100–200 topics/sec</td>
+              <td>~1000+ topics/sec</td>
+              <td>Confluent Platform benchmarks</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 6 — FRAMEWORKS
+══════════════════════════════════════ -->
+<section id="frameworks" class="section">
+  <div class="container">
+    <p class="section-title">Frameworks &amp; Tooling</p>
+    <div class="divider div-purple"></div>
+    <p class="section-lead">Key management, monitoring, and integration frameworks categorized by their alignment with ZooKeeper vs KRaft deployments.</p>
+
+    <div class="grid-2" style="margin-bottom:32px;">
+      <!-- ZK Frameworks -->
+      <div class="fade-in">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <span class="tag tag-orange" style="font-size:14px;padding:5px 14px;">🦓 ZooKeeper Mode</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--orange-light);">
+              <div class="eco-icon" style="background:var(--orange-light);">🎛️</div>
+              <div><h3>Kafka Manager (CMAK)</h3><p>Cluster management GUI by Yahoo!</p></div>
+            </div>
+            <div class="eco-body"><p>Yahoo!'s Cluster Manager for Apache Kafka. ZK-native — reads directly from ZooKeeper znodes. Rich partition rebalance UI. Deprecated in favor of KRaft-compatible tools but still in use at many enterprises.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--orange-light);">
+              <div class="eco-icon">📊</div>
+              <div><h3>Kafka Exporter + ZK Exporter</h3><p>Prometheus / Grafana monitoring</p></div>
+            </div>
+            <div class="eco-body"><p>Separate Prometheus exporters for Kafka JMX metrics (<code style="font-family:'JetBrains Mono',monospace;font-size:12px;">kafka-exporter</code>) and ZK metrics (<code style="font-family:'JetBrains Mono',monospace;font-size:12px;">zookeeper_exporter</code>). Maintained separately; two dashboards required per cluster.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--orange-light);">
+              <div class="eco-icon">🐘</div>
+              <div><h3>HBase + HDFS Shared ZK</h3><p>Multi-system coordination</p></div>
+            </div>
+            <div class="eco-body"><p>Organizations running HBase and HDFS can share a ZooKeeper ensemble with Kafka, reducing total ZK node count. This is a ZK-specific operational advantage irrelevant in KRaft mode.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--orange-light);">
+              <div class="eco-icon">🔧</div>
+              <div><h3>Strimzi Operator (ZK mode)</h3><p>Kubernetes-native Kafka</p></div>
+            </div>
+            <div class="eco-body"><p>Strimzi supported ZK-mode Kubernetes deployments for years. Custom Resource Definitions (CRDs) for <code style="font-family:'JetBrains Mono',monospace;font-size:12px;">KafkaZookeeper</code>. Now migrating all resources to KRaft-first in version 0.37+.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KRaft Frameworks -->
+      <div class="fade-in">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <span class="tag tag-green" style="font-size:14px;padding:5px 14px;">⚙️ KRaft Mode</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--green-light);">
+              <div class="eco-icon">⛵</div>
+              <div><h3>Strimzi Operator (KRaft)</h3><p>Production Kubernetes deployments</p></div>
+            </div>
+            <div class="eco-body"><p>The leading open-source Kafka Kubernetes operator. KRaft-first since Strimzi 0.37. Supports dedicated and combined controller/broker topologies. Full lifecycle: rolling upgrades, scale-out, certificate rotation, and storage expansion.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--green-light);">
+              <div class="eco-icon">☁️</div>
+              <div><h3>AWS MSK (Managed Streaming)</h3><p>Fully managed KRaft on AWS</p></div>
+            </div>
+            <div class="eco-body"><p>Amazon MSK defaulted to KRaft mode for new clusters from 2023. Managed controller quorum, automated failover, and integrated IAM-based auth. MSK Express clusters (serverless-like) are KRaft-only.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--green-light);">
+              <div class="eco-icon">🏢</div>
+              <div><h3>Confluent Platform / Cloud</h3><p>Enterprise Kafka distribution</p></div>
+            </div>
+            <div class="eco-body"><p>Confluent Platform 7.4+ ships KRaft as default for new deployments. Confluent Cloud runs KRaft exclusively. Schema Registry, ksqlDB, and Kafka Connect are all KRaft-compatible. Enterprise support SLAs available.</p></div>
+          </div>
+
+          <div class="eco-card">
+            <div class="eco-header" style="background:var(--green-light);">
+              <div class="eco-icon">🎯</div>
+              <div><h3>Redpanda (KRaft-compatible API)</h3><p>Kafka API-compatible alternative</p></div>
+            </div>
+            <div class="eco-body"><p>Redpanda is a C++ Kafka-API-compatible broker with its own Raft implementation (no ZK, no JVM). It validates the architectural principle of KRaft — proving built-in Raft consensus is superior for Kafka-style workloads at scale.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config Reference -->
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:16px;">⚙️ KRaft Configuration Reference</div>
+      <div class="grid-2" style="gap:24px;">
+        <div>
+          <div class="tag tag-blue" style="margin-bottom:10px;">Combined Mode (Dev/Small Clusters)</div>
+          <div class="code-block">
+<span class="c-comment"># server.properties — combined controller+broker</span>
+<span class="c-key">process.roles</span>=<span class="c-str">broker,controller</span>
+<span class="c-key">node.id</span>=<span class="c-num">1</span>
+<span class="c-key">controller.quorum.voters</span>=<span class="c-str">1@host1:9093,\
+  2@host2:9093,3@host3:9093</span>
+<span class="c-key">listeners</span>=<span class="c-str">PLAINTEXT://:9092,CONTROLLER://:9093</span>
+<span class="c-key">controller.listener.names</span>=<span class="c-str">CONTROLLER</span>
+<span class="c-key">inter.broker.listener.name</span>=<span class="c-str">PLAINTEXT</span>
+<span class="c-key">log.dirs</span>=<span class="c-str">/var/kafka/data</span>
+<span class="c-comment"># Generate cluster UUID:</span>
+<span class="c-comment"># kafka-storage.sh random-uuid</span>
+          </div>
+        </div>
+        <div>
+          <div class="tag tag-purple" style="margin-bottom:10px;">Dedicated Controllers (Production PB-scale)</div>
+          <div class="code-block">
+<span class="c-comment"># controller.properties</span>
+<span class="c-key">process.roles</span>=<span class="c-str">controller</span>
+<span class="c-key">node.id</span>=<span class="c-num">1</span>
+<span class="c-key">controller.quorum.voters</span>=<span class="c-str">1@ctrl1:9093,\
+  2@ctrl2:9093,3@ctrl3:9093</span>
+<span class="c-key">listeners</span>=<span class="c-str">CONTROLLER://:9093</span>
+<span class="c-key">metadata.log.dir</span>=<span class="c-str">/nvme/metadata</span>
+<span class="c-comment"># Tune controller heap for large clusters</span>
+<span class="c-key">KAFKA_HEAP_OPTS</span>=<span class="c-str">"-Xmx8g -Xms8g"</span>
+<span class="c-comment"># broker.properties — separate</span>
+<span class="c-key">process.roles</span>=<span class="c-str">broker</span>
+<span class="c-key">node.id</span>=<span class="c-num">10</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 7 — ECOSYSTEMS
+══════════════════════════════════════ -->
+<section id="ecosystems" class="section">
+  <div class="container">
+    <p class="section-title">Suitable Ecosystems</p>
+    <div class="divider div-blue"></div>
+    <p class="section-lead">Mapping each coordination mode to the architectures, cloud environments, and organizational contexts where it is most appropriate.</p>
+
+    <div class="grid-2" style="margin-bottom:32px;">
+      <!-- ZK Ecosystems -->
+      <div class="fade-in">
+        <div style="background:var(--orange-light);border:1px solid var(--orange-mid);border-radius:var(--radius);padding:24px 28px;">
+          <h3 style="font-size:17px;font-weight:800;color:#78350f;margin-bottom:18px;">🦓 ZooKeeper Mode — Best-Fit Ecosystems</h3>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--orange-mid);">
+              <div style="font-weight:700;font-size:15px;color:#92400e;margin-bottom:6px;">🏛️ Legacy Hadoop Stacks</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Organizations running HBase, HDFS NameNode HA, or Apache Solr Cloud that already maintain a ZooKeeper ensemble. Sharing ZK infrastructure avoids additional operational overhead.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--orange-mid);">
+              <div style="font-weight:700;font-size:15px;color:#92400e;margin-bottom:6px;">🔒 Regulated On-Prem Environments</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Financial institutions or healthcare organizations on Kafka 3.x with extensive ZK runbooks, compliance certifications, and change-freeze policies. Migrating carries risk that must be carefully managed.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--orange-mid);">
+              <div style="font-weight:700;font-size:15px;color:#92400e;margin-bottom:6px;">📦 Moderate Scale (&lt; 100K Partitions)</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Stable workloads well within ZK's practical scalability limits, where the ROI of migrating to KRaft doesn't justify operational risk in the short term (on Kafka 3.x only).</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--orange-mid);">
+              <div style="font-weight:700;font-size:15px;color:#92400e;margin-bottom:6px;">⚠️ End-of-Life Warning</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">All ZK-mode ecosystems have a firm migration deadline: Kafka 4.0 dropped support. Organizations must migrate to KRaft to receive ongoing security patches and feature updates.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KRaft Ecosystems -->
+      <div class="fade-in">
+        <div style="background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius);padding:24px 28px;">
+          <h3 style="font-size:17px;font-weight:800;color:#065f46;margin-bottom:18px;">⚙️ KRaft Mode — Best-Fit Ecosystems</h3>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--green-mid);">
+              <div style="font-weight:700;font-size:15px;color:#065f46;margin-bottom:6px;">☁️ Cloud-Native / Kubernetes-First</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">AWS MSK, Confluent Cloud, Azure HDInsight Kafka, GCP Managed Kafka (Datastream) — all target KRaft. Kubernetes deployments using Strimzi benefit from single-StatefulSet architecture and simplified lifecycle management.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--green-mid);">
+              <div style="font-weight:700;font-size:15px;color:#065f46;margin-bottom:6px;">📈 PB-Scale Data Platforms</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Streaming data lakes (Apache Iceberg + Kafka), real-time analytics platforms (Flink + Kafka), and multi-tenant SaaS event buses with millions of partitions. KRaft eliminates ZK as the architectural bottleneck.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--green-mid);">
+              <div style="font-weight:700;font-size:15px;color:#065f46;margin-bottom:6px;">⚡ Realtime Streaming (IoT, Fintech)</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">IoT device telemetry (millions of devices, dynamic topic creation), financial market data (microsecond SLAs, frequent partition reassignments), and edge computing pipelines requiring fast self-healing.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--green-mid);">
+              <div style="font-weight:700;font-size:15px;color:#065f46;margin-bottom:6px;">🔄 Modern Lambda/Kappa Architectures</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Systems pairing Kafka with Apache Flink (stream processing), Apache Spark Structured Streaming, or Kafka Streams for unified batch+stream processing. KRaft's fast failover is critical for exactly-once semantics pipelines.</p>
+            </div>
+            <div style="background:#fff;border-radius:var(--radius-sm);padding:14px 18px;border:1px solid var(--green-mid);">
+              <div style="font-weight:700;font-size:15px;color:#065f46;margin-bottom:6px;">🛡️ Zero-Trust / High-Security Environments</div>
+              <p style="font-size:15px;color:var(--text-2);line-height:1.65;">Single security domain simplifies certificate management, RBAC, and audit logging. PCI-DSS, SOC2, HIPAA environments benefit from reduced attack surface and unified ACL management.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Integration Frameworks -->
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:20px;">🔌 Integration Frameworks by Ecosystem</div>
+      <div class="grid-3">
+        <div style="padding:16px;background:var(--blue-light);border-radius:var(--radius-sm);border:1px solid var(--blue-mid);">
+          <div style="font-weight:700;font-size:14px;color:#1d4ed8;margin-bottom:8px;">Stream Processing</div>
+          <ul style="list-style:none;padding:0;">
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(59,130,246,0.2);">Apache Flink 1.16+</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(59,130,246,0.2);">Kafka Streams</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(59,130,246,0.2);">ksqlDB</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(59,130,246,0.2);">Spark Structured Streaming</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;">Apache Samza</li>
+          </ul>
+        </div>
+        <div style="padding:16px;background:var(--purple-light);border-radius:var(--radius-sm);border:1px solid var(--purple-mid);">
+          <div style="font-weight:700;font-size:14px;color:#6d28d9;margin-bottom:8px;">Data Integration</div>
+          <ul style="list-style:none;padding:0;">
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(139,92,246,0.2);">Kafka Connect</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(139,92,246,0.2);">Debezium (CDC)</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(139,92,246,0.2);">Apache NiFi</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(139,92,246,0.2);">Airbyte + Kafka sink</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;">MirrorMaker 2</li>
+          </ul>
+        </div>
+        <div style="padding:16px;background:var(--green-light);border-radius:var(--radius-sm);border:1px solid var(--green-mid);">
+          <div style="font-weight:700;font-size:14px;color:#065f46;margin-bottom:8px;">Storage / Lakehouse</div>
+          <ul style="list-style:none;padding:0;">
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(16,185,129,0.2);">Apache Iceberg</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(16,185,129,0.2);">Apache Hudi</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(16,185,129,0.2);">Delta Lake</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;border-bottom:1px solid rgba(16,185,129,0.2);">Apache Pinot</li>
+            <li style="font-size:14px;color:var(--text-2);padding:4px 0;">ClickHouse Kafka Engine</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 8 — MIGRATION
+══════════════════════════════════════ -->
+<section id="migration" class="section">
+  <div class="container">
+    <p class="section-title">Migration Path: ZooKeeper → KRaft</p>
+    <div class="divider div-orange"></div>
+    <p class="section-lead">For PB-scale production clusters, migrating from ZooKeeper to KRaft mode is a mandatory and critical operational event requiring careful planning.</p>
+
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="card fade-in">
+        <div class="card-title" style="margin-bottom:16px;">📋 Migration Strategy Overview</div>
+        <p style="font-size:15px;color:var(--text-2);margin-bottom:14px;">Kafka provides an official ZK-to-KRaft migration tool (Kafka 3.5+) that performs a <strong>rolling, online migration</strong> without full cluster downtime. The process works in phases:</p>
+        <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px;">
+          <li style="font-size:15px;color:var(--text-2);"><strong>Phase 1 — Preparation:</strong> Upgrade all brokers to Kafka 3.5+ on ZK mode. Verify <code style="font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:3px;">kafka-metadata-quorum.sh describe</code> output.</li>
+          <li style="font-size:15px;color:var(--text-2);"><strong>Phase 2 — KRaft Controllers:</strong> Add dedicated KRaft controller nodes. They observe ZK metadata in "migration mode" without taking over yet.</li>
+          <li style="font-size:15px;color:var(--text-2);"><strong>Phase 3 — Metadata Migration:</strong> Trigger migration: ZK metadata is replicated to the KRaft metadata log. Dual-write ensures consistency during transition.</li>
+          <li style="font-size:15px;color:var(--text-2);"><strong>Phase 4 — Broker Migration:</strong> Roll each broker to KRaft mode one at a time. Brokers begin reading metadata from KRaft controllers.</li>
+          <li style="font-size:15px;color:var(--text-2);"><strong>Phase 5 — ZK Decommission:</strong> Once all brokers are KRaft-mode, ZK ensemble can be safely shut down and decommissioned.</li>
+        </ol>
+      </div>
+      <div class="card fade-in">
+        <div class="card-title" style="margin-bottom:16px;">⚠️ Migration Risks &amp; Mitigations</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="padding:12px 16px;background:var(--red-light);border-radius:var(--radius-sm);border-left:3px solid var(--red);">
+            <div style="font-size:14px;font-weight:700;color:#991b1b;margin-bottom:4px;">Dual-write Latency Spike</div>
+            <p style="font-size:14px;color:var(--text-2);">During migration phase, all metadata writes go to both ZK and KRaft. Monitor controller CPU and heap carefully. Use maintenance windows for PB-scale clusters.</p>
+          </div>
+          <div style="padding:12px 16px;background:var(--orange-light);border-radius:var(--radius-sm);border-left:3px solid var(--orange);">
+            <div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:4px;">ACL / Config Gaps</div>
+            <p style="font-size:14px;color:var(--text-2);">Verify that all ZK-stored ACLs and custom configs are correctly replicated to KRaft metadata log before cutting over. Use <code style="font-family:'JetBrains Mono',monospace;font-size:12px;">kafka-acls.sh</code> audit before and after.</p>
+          </div>
+          <div style="padding:12px 16px;background:var(--blue-light);border-radius:var(--radius-sm);border-left:3px solid var(--blue);">
+            <div style="font-size:14px;font-weight:700;color:#1d4ed8;margin-bottom:4px;">Consumer Group State</div>
+            <p style="font-size:14px;color:var(--text-2);">Consumer group offsets (stored in <code style="font-family:'JetBrains Mono',monospace;font-size:12px;">__consumer_offsets</code>) are unaffected — they live in Kafka itself. Only metadata (topics, ACLs, configs) migrates.</p>
+          </div>
+          <div style="padding:12px 16px;background:var(--purple-light);border-radius:var(--radius-sm);border-left:3px solid var(--purple);">
+            <div style="font-size:14px;font-weight:700;color:#6d28d9;margin-bottom:4px;">Rollback Plan</div>
+            <p style="font-size:14px;color:var(--text-2);">Until Phase 5 is complete, rolling back to ZK mode is possible by removing KRaft controllers and reverting broker configs. After ZK decommission, rollback requires full cluster restore from backup.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:14px;">🔧 Migration Command Reference</div>
+      <div class="code-block">
+<span class="c-comment"># Step 1: Verify current ZK cluster health</span>
+<span class="c-key">kafka-metadata-quorum.sh</span> --bootstrap-server broker:9092 describe --status
+
+<span class="c-comment"># Step 2: Generate KRaft cluster ID (must match existing ZK cluster ID)</span>
+<span class="c-key">kafka-storage.sh</span> info -c /path/to/server.properties
+
+<span class="c-comment"># Step 3: Format KRaft controller storage</span>
+<span class="c-key">kafka-storage.sh</span> format -t <span class="c-str">&lt;CLUSTER_UUID&gt;</span> -c controller.properties --ignore-formatted
+
+<span class="c-comment"># Step 4: Start KRaft controllers in migration mode</span>
+<span class="c-key">zookeeper.metadata.migration.enable</span>=<span class="c-str">true</span>  <span class="c-comment"># in controller.properties</span>
+
+<span class="c-comment"># Step 5: Enable broker migration (rolling, one broker at a time)</span>
+<span class="c-key">zookeeper.metadata.migration.enable</span>=<span class="c-str">true</span>  <span class="c-comment"># add to each broker.properties temporarily</span>
+
+<span class="c-comment"># Step 6: Verify KRaft metadata log after each broker</span>
+<span class="c-key">kafka-metadata-quorum.sh</span> --bootstrap-server broker:9092 describe --replication
+
+<span class="c-comment"># Step 7: Complete migration (finalize + remove ZK config)</span>
+<span class="c-key">kafka-metadata-quorum.sh</span> --bootstrap-server broker:9092 describe --status
+<span class="c-comment"># Remove zookeeper.connect from all broker configs</span>
+<span class="c-comment"># Decommission ZK nodes</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SECTION 9 — RECOMMENDATION
+══════════════════════════════════════ -->
+<section id="recommendation" class="section">
+  <div class="container">
+    <p class="section-title">Architecture Recommendation</p>
+    <div class="divider div-green"></div>
+    <p class="section-lead">Final architectural guidance for Big Data engineers operating PB-scale and real-time streaming systems.</p>
+
+    <div class="grid-2" style="margin-bottom:28px;">
+      <div class="rec-box rec-green fade-in">
+        <h3 style="color:#065f46;">⚙️ New Deployments: KRaft — Always</h3>
+        <p>For any Greenfield Kafka deployment in 2024 and beyond, KRaft is the only rational choice. ZooKeeper mode is deprecated and removed from Kafka 4.0. KRaft delivers superior scalability, faster failover, simpler operations, and is the sole target of all future Kafka development.</p>
+        <ul class="rec-list">
+          <li>Use dedicated controller nodes (3 or 5) for PB-scale clusters</li>
+          <li>Allocate NVMe storage for <code style="font-family:'JetBrains Mono',monospace;font-size:13px;">metadata.log.dir</code></li>
+          <li>Size controller JVM heap at 8–16GB for &gt;500K partitions</li>
+          <li>Deploy via Strimzi (K8s) or Confluent Platform for managed lifecycle</li>
+          <li>Enable <code style="font-family:'JetBrains Mono',monospace;font-size:13px;">metadata.log.max.record.bytes.between.snapshots</code> tuning</li>
+        </ul>
+      </div>
+      <div class="rec-box rec-blue fade-in">
+        <h3 style="color:#1d4ed8;">🦓 Existing ZK Clusters: Plan Migration Now</h3>
+        <p>Organizations on Kafka 3.x ZK mode must plan their KRaft migration timeline. The migration tooling is mature (3.5+), and the risk of staying on ZK mode — including security exposure and operational debt — outweighs the migration effort.</p>
+        <ul class="rec-list">
+          <li>Target Kafka 3.7 or 3.8 for the migration (LTS candidates)</li>
+          <li>Allocate 2–4 week planning phase for PB-scale clusters</li>
+          <li>Run migration in staging environment first with production-like load</li>
+          <li>Schedule migration during low-traffic windows for large clusters</li>
+          <li>Keep ZK ensemble live for 2–4 weeks post-migration for rollback safety</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Decision tree simplified -->
+    <div class="card fade-in">
+      <div class="card-title" style="margin-bottom:24px;">🌿 Decision Framework</div>
+      <div style="max-width:600px;margin:0 auto;">
+        <div class="dt-node root" style="margin-bottom:8px;">New or existing Kafka deployment?</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0;">
+          <div>
+            <div class="dt-connector">🆕 New Deployment</div>
+            <div class="dt-node leaf-kr">Use KRaft exclusively<br/><small>Kafka 3.3+ or 4.0+</small></div>
+          </div>
+          <div>
+            <div class="dt-connector">🔄 Existing on ZK</div>
+            <div class="dt-node" style="border-color:var(--purple);background:var(--purple-light);color:#6d28d9;font-weight:600;">Assess Kafka version</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;padding-left:50%;">
+          <div>
+            <div class="dt-connector">Kafka &lt; 3.5</div>
+            <div class="dt-node" style="border-color:var(--orange);background:var(--orange-light);color:#92400e;font-weight:600;">Upgrade first, then migrate</div>
+          </div>
+          <div style="display:none;"><!-- spacer --></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;padding-left:50%;">
+          <div>
+            <div class="dt-connector">Kafka 3.5+</div>
+            <div class="dt-node leaf-kr">Run rolling ZK→KRaft migration</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:20px;padding:14px;background:var(--surface-2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          <p style="font-size:15px;color:var(--text-2);">⚠️ <strong>Kafka 4.0 deadline:</strong> ZooKeeper mode is fully removed. All production clusters must be on KRaft before upgrading to Kafka 4.0.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Final Summary -->
+    <div class="card fade-in" style="margin-top:24px;background:linear-gradient(135deg,#1e2a5e,#2d3561);color:#fff;border:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;text-align:center;">
+        <div>
+          <div style="font-size:36px;margin-bottom:8px;">🦓</div>
+          <div style="font-family:'Sora',sans-serif;font-size:15px;font-weight:700;color:#fcd34d;margin-bottom:8px;">ZooKeeper Mode</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.65);line-height:1.65;">Battle-tested, limited to ~200K partitions, slow failover, dual operational overhead. Deprecated. Suitable only for short-term legacy maintenance.</div>
+        </div>
+        <div style="border-left:1px solid rgba(255,255,255,0.15);border-right:1px solid rgba(255,255,255,0.15);padding:0 20px;">
+          <div style="font-size:36px;margin-bottom:8px;">⚖️</div>
+          <div style="font-family:'Sora',sans-serif;font-size:15px;font-weight:700;color:#93c5fd;margin-bottom:8px;">The Verdict</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.65);line-height:1.65;">For PB-scale and real-time streaming, KRaft is the definitive answer. The partition scalability, failover speed, and operational simplicity improvements are architecturally transformative.</div>
+        </div>
+        <div>
+          <div style="font-size:36px;margin-bottom:8px;">⚙️</div>
+          <div style="font-family:'Sora',sans-serif;font-size:15px;font-weight:700;color:#6ee7b7;margin-bottom:8px;">KRaft Mode</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.65);line-height:1.65;">Millions of partitions, sub-second failover, single security domain, cloud-native, event-sourced metadata. The future — and present — of Apache Kafka.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer class="footer">
+  <p><strong>ZooKeeper vs KRaft — Kafka Architecture Analysis</strong> · Prepared for Big Data &amp; Realtime Streaming Engineering</p>
+  <p style="margin-top:8px;">Apache Kafka®, ZooKeeper®, and Confluent® are trademarks of their respective owners. Analysis based on Apache Kafka 3.x / 4.0 documentation, KIP-500, and published benchmarks.</p>
+</footer>
+
+<script>
+  // Intersection Observer for fade-in animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+  // Animate score bars on scroll
+  const scoreObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.querySelectorAll('.score-fill').forEach(bar => {
+          const w = bar.style.width;
+          bar.style.width = '0';
+          setTimeout(() => { bar.style.width = w; }, 100);
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.card').forEach(c => {
+    if (c.querySelector('.score-fill')) scoreObserver.observe(c);
+  });
+
+  // Active nav highlighting
+  const sections = document.querySelectorAll('section[id]');
+  const navItems = document.querySelectorAll('.nav-item');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navItems.forEach(n => {
+      n.style.color = n.getAttribute('href') === '#' + current ? 'var(--blue)' : '';
+      n.style.borderColor = n.getAttribute('href') === '#' + current ? 'var(--blue)' : '';
+    });
+  });
+</script>
+</body>
+</html>

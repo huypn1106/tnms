@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dremio — Big Data Platform Design Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        #f4f7fb;
+    --surface:   #ffffff;
+    --surface2:  #eef3fa;
+    --border:    #dde5f0;
+    --text:      #1a2035;
+    --muted:     #5a6885;
+    --blue:      #3b82f6;
+    --blue-lt:   #dbeafe;
+    --orange:    #f97316;
+    --orange-lt: #ffedd5;
+    --purple:    #8b5cf6;
+    --purple-lt: #ede9fe;
+    --green:     #22c55e;
+    --green-lt:  #dcfce7;
+    --teal:      #06b6d4;
+    --teal-lt:   #cffafe;
+    --red:       #ef4444;
+    --red-lt:    #fee2e2;
+    --shadow-sm: 0 1px 4px rgba(0,0,0,.06);
+    --shadow:    0 4px 20px rgba(0,0,0,.08);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,.12);
+    --radius:    14px;
+    --radius-sm: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    line-height: 1.75;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; align-items: center; gap: 8px;
+    height: 58px;
+    overflow-x: auto;
+  }
+  nav a {
+    white-space: nowrap;
+    font-size: 13px; font-weight: 500;
+    color: var(--muted); text-decoration: none;
+    padding: 6px 12px; border-radius: 20px;
+    transition: all .2s;
+  }
+  nav a:hover { color: var(--blue); background: var(--blue-lt); }
+  .nav-logo {
+    font-size: 15px; font-weight: 700; color: var(--blue);
+    margin-right: 16px; white-space: nowrap;
+    letter-spacing: -.3px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(145deg, #0f1f4e 0%, #1a3a8c 50%, #0e2d6b 100%);
+    color: white;
+    padding: 80px 40px 90px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 30% 60%, rgba(59,130,246,.25) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 30%, rgba(139,92,246,.2) 0%, transparent 60%);
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 13px; font-weight: 500;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .hero h1 {
+    font-size: clamp(2.2rem, 5vw, 3.6rem);
+    font-weight: 800; letter-spacing: -.03em;
+    line-height: 1.15; margin-bottom: 20px;
+    position: relative;
+  }
+  .hero h1 span { color: #60a5fa; }
+  .hero p {
+    font-size: 18px; color: rgba(255,255,255,.78);
+    max-width: 680px; margin: 0 auto 36px;
+    line-height: 1.65; position: relative;
+  }
+  .hero-chips {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; position: relative;
+  }
+  .chip {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 20px; padding: 6px 16px;
+    font-size: 13px; font-weight: 500;
+  }
+
+  /* ── LAYOUT ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 36px; }
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  /* ── SECTION HEADERS ── */
+  .section-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--blue); margin-bottom: 10px;
+  }
+  .section-label span { font-size: 14px; }
+  h2 {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 800; letter-spacing: -.03em;
+    color: var(--text); margin-bottom: 14px;
+    line-height: 1.2;
+  }
+  .section-intro {
+    font-size: 17px; color: var(--muted);
+    max-width: 720px; margin-bottom: 44px;
+    line-height: 1.75;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 28px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+  }
+  .card h3 {
+    font-size: 16px; font-weight: 700;
+    margin-bottom: 8px; color: var(--text);
+  }
+  .card p { font-size: 15px; color: var(--muted); line-height: 1.7; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 18px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 6px; padding: 3px 10px;
+    font-size: 12px; font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .badge-blue   { background: var(--blue-lt);   color: #1d4ed8; }
+  .badge-orange { background: var(--orange-lt);  color: #c2410c; }
+  .badge-purple { background: var(--purple-lt);  color: #6d28d9; }
+  .badge-green  { background: var(--green-lt);   color: #15803d; }
+  .badge-teal   { background: var(--teal-lt);    color: #0e7490; }
+  .badge-red    { background: var(--red-lt);     color: #b91c1c; }
+
+  /* ── ICON CIRCLES ── */
+  .icon-circle {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 14px; flex-shrink: 0;
+  }
+  .ic-blue   { background: var(--blue-lt); }
+  .ic-orange { background: var(--orange-lt); }
+  .ic-purple { background: var(--purple-lt); }
+  .ic-green  { background: var(--green-lt); }
+  .ic-teal   { background: var(--teal-lt); }
+
+  /* ── CODE BLOCKS ── */
+  pre, code {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  pre {
+    background: #0f1a2e;
+    color: #c9d8f0;
+    border-radius: var(--radius-sm);
+    padding: 22px 24px;
+    font-size: 13.5px;
+    line-height: 1.8;
+    overflow-x: auto;
+    margin: 18px 0;
+    border: 1px solid #1e3057;
+    position: relative;
+  }
+  pre .c-key   { color: #7dd3fc; }
+  pre .c-str   { color: #86efac; }
+  pre .c-num   { color: #fca5a5; }
+  pre .c-cmt   { color: #64748b; }
+  pre .c-sec   { color: #f9a8d4; font-weight: 600; }
+  pre .c-val   { color: #fdba74; }
+  code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 14px;
+    color: #c2410c;
+  }
+  .code-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    color: #4a7db5; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .arch-row {
+    display: flex; align-items: stretch; gap: 0;
+    margin-bottom: 0;
+  }
+  .arch-layer {
+    flex: 1; min-width: 0;
+    border-radius: var(--radius-sm);
+    padding: 18px 14px;
+    text-align: center;
+    transition: transform .2s, box-shadow .2s;
+    cursor: default;
+  }
+  .arch-layer:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .arch-layer h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .arch-layer p  { font-size: 12px; line-height: 1.5; opacity: .85; }
+  .arch-arrow {
+    display: flex; align-items: center;
+    padding: 0 6px; color: var(--muted);
+    font-size: 18px; font-weight: 300;
+  }
+  .arch-sep {
+    width: 100%; height: 1px;
+    background: var(--border);
+    margin: 18px 0;
+    position: relative;
+  }
+  .arch-sep::after {
+    content: attr(data-label);
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    background: var(--bg);
+    padding: 2px 12px;
+    font-size: 11px; font-weight: 600; letter-spacing: .05em;
+    color: var(--muted); text-transform: uppercase;
+  }
+
+  /* ── TIMELINE ── */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .tl-item {
+    display: flex; gap: 20px;
+    padding-bottom: 28px;
+    position: relative;
+  }
+  .tl-item:not(:last-child)::before {
+    content: '';
+    position: absolute; left: 15px; top: 34px; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .tl-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+    z-index: 1;
+  }
+  .tl-content { flex: 1; padding-top: 4px; }
+  .tl-content h4 { font-size: 15px; font-weight: 700; margin-bottom: 5px; }
+  .tl-content p  { font-size: 15px; color: var(--muted); line-height: 1.7; }
+
+  /* ── INFO BOX ── */
+  .info-box {
+    border-radius: var(--radius-sm);
+    padding: 18px 22px;
+    display: flex; gap: 14px; align-items: flex-start;
+    margin: 20px 0;
+  }
+  .info-box .icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .info-box p { font-size: 15px; line-height: 1.7; }
+  .info-blue   { background: var(--blue-lt);   border-left: 4px solid var(--blue); }
+  .info-orange { background: var(--orange-lt);  border-left: 4px solid var(--orange); }
+  .info-green  { background: var(--green-lt);   border-left: 4px solid var(--green); }
+  .info-purple { background: var(--purple-lt);  border-left: 4px solid var(--purple); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface2);
+    padding: 14px 18px;
+    font-size: 13px; font-weight: 700;
+    color: var(--muted); text-align: left;
+    letter-spacing: .03em;
+  }
+  tbody td {
+    padding: 14px 18px;
+    font-size: 15px;
+    border-top: 1px solid var(--border);
+  }
+  tbody tr:hover { background: #f8fafd; }
+  .dot-green::before { content: '●'; color: var(--green); margin-right: 6px; }
+  .dot-orange::before { content: '●'; color: var(--orange); margin-right: 6px; }
+  .dot-blue::before { content: '●'; color: var(--blue); margin-right: 6px; }
+
+  /* ── ECOSYSTEM CARDS ── */
+  .eco-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .eco-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .eco-card .layer-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; margin-bottom: 12px;
+    padding: 3px 10px; border-radius: 4px;
+    display: inline-block;
+  }
+  .eco-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .eco-card p  { font-size: 14px; color: var(--muted); line-height: 1.65; }
+  .eco-tools {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
+  }
+  .eco-tool {
+    font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+    border: 1.5px solid;
+  }
+
+  /* ── FULL ARCH SVG SECTION ── */
+  .full-arch {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+    color: white;
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+  }
+  .highlight h2 { color: white; margin-bottom: 12px; }
+  .highlight p  { color: rgba(255,255,255,.8); font-size: 16px; max-width: 600px; margin: 0 auto; }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    padding: 36px 20px;
+    color: var(--muted);
+    font-size: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    nav { padding: 0 16px; }
+    .container { padding: 0 18px; }
+    .hero { padding: 52px 20px 60px; }
+    section { padding: 44px 0; }
+    pre { font-size: 12px; padding: 16px; }
+    .arch-row { flex-direction: column; }
+    .arch-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⚡ Dremio Guide</div>
+  <a href="#what">What is Dremio</a>
+  <a href="#how">How it Works</a>
+  <a href="#why">Why Dremio</a>
+  <a href="#internals">Internals</a>
+  <a href="#production">Production Setup</a>
+  <a href="#architecture">Data Architecture</a>
+  <a href="#ecosystem">Ecosystem</a>
+  <a href="#fullflow">Full Flow</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">⚡ Big Data Platform Design Guide</div>
+  <h1>Everything About<br><span>Dremio</span></h1>
+  <p>The Lakehouse Query Engine — how it works, why it's powerful, how to deploy it at petabyte scale, and how to architect a complete modern data platform around it.</p>
+  <div class="hero-chips">
+    <div class="chip">SQL on Everything</div>
+    <div class="chip">Apache Arrow Flight</div>
+    <div class="chip">Data Lakehouse</div>
+    <div class="chip">Apache Iceberg</div>
+    <div class="chip">PB-Scale Queries</div>
+    <div class="chip">Columnar Execution</div>
+    <div class="chip">Zero-Copy BI</div>
+    <div class="chip">Open Architecture</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div style="background:var(--bg);">
+
+<!-- ════════════════════════════════
+     SECTION 1 — WHAT IS DREMIO
+════════════════════════════════ -->
+<section id="what">
+  <div class="container">
+    <div class="section-label"><span>01</span> What Is Dremio</div>
+    <h2>Dremio — The Lakehouse Query Engine</h2>
+    <p class="section-intro">
+      Dremio is an open-source, high-performance <strong>lakehouse query engine</strong> that lets you run blazing-fast SQL queries directly on your data lake — no ETL, no data movement, no proprietary silos.
+    </p>
+
+    <div class="grid-2" style="margin-bottom:32px;">
+      <div class="card">
+        <div class="icon-circle ic-blue">🏛️</div>
+        <h3>What Exactly is It?</h3>
+        <p>Dremio is a <strong>distributed SQL query engine</strong> that sits on top of your data lake (S3, ADLS, GCS, HDFS) and object storage. It uses <strong>Apache Arrow</strong> for in-memory columnar processing and <strong>Apache Iceberg</strong> as the open table format — giving you data warehouse performance without a data warehouse.</p>
+      </div>
+      <div class="card">
+        <div class="icon-circle ic-orange">🎯</div>
+        <h3>The Core Problem It Solves</h3>
+        <p>Traditional ETL pipelines are slow, expensive, and create data drift. Dremio eliminates the "copy data to analyze it" anti-pattern. You connect Dremio to your <strong>existing data lake</strong>, define <strong>virtual datasets</strong>, and BI tools connect directly — as if it were a high-speed data warehouse.</p>
+      </div>
+      <div class="card">
+        <div class="icon-circle ic-purple">📅</div>
+        <h3>Founded &amp; Open Source</h3>
+        <p>Founded in 2015 by former MapR and Hortonworks engineers. The core query engine is <strong>Apache Arrow Flight SQL</strong> based. Community edition is open-source (Apache 2.0). Enterprise edition adds security, governance, and managed cloud offerings (Dremio Cloud).</p>
+      </div>
+      <div class="card">
+        <div class="icon-circle ic-green">⚡</div>
+        <h3>Key Differentiator</h3>
+        <p>Dremio's <strong>Reflections</strong> system (intelligent, automatic, transparent acceleration materialized views) combined with a vectorized execution engine means queries that take minutes on Spark/Presto finish in <strong>sub-second</strong> response times for BI workloads without any caching complexity for end users.</p>
+      </div>
+    </div>
+
+    <div class="info-box info-blue">
+      <div class="icon">💡</div>
+      <p><strong>One-liner:</strong> Dremio is to your data lake what Snowflake is to a cloud data warehouse — but open, cheaper, and you control your data. It's a <em>SQL interface over your existing lake</em>, with acceleration magic built in.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 2 — HOW IT WORKS
+════════════════════════════════ -->
+<section id="how">
+  <div class="container">
+    <div class="section-label"><span>02</span> How It Works</div>
+    <h2>Query Execution Architecture</h2>
+    <p class="section-intro">
+      Dremio's query engine is a distributed, multi-stage pipeline from SQL parse to columnar result delivery. Understanding the flow helps you tune it correctly.
+    </p>
+
+    <!-- Architecture Layer Diagram -->
+    <div class="arch-diagram" style="margin-bottom:32px;">
+      <div style="text-align:center;margin-bottom:28px;">
+        <span style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;">Dremio Query Execution Pipeline</span>
+      </div>
+
+      <!-- Row 1: BI Tools -->
+      <div class="arch-row" style="gap:8px;margin-bottom:8px;">
+        <div class="arch-layer" style="background:var(--blue-lt);color:#1d4ed8;">
+          <h4>🖥️ BI / SQL Clients</h4>
+          <p>Tableau · Power BI · Looker · Python · JDBC/ODBC · Arrow Flight</p>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:4px 0;">↓</div>
+
+      <!-- Row 2: Coordinator -->
+      <div class="arch-row" style="gap:8px;margin-bottom:8px;">
+        <div class="arch-layer" style="background:var(--orange-lt);color:#c2410c;flex:2;">
+          <h4>🎯 Coordinator Node (Master)</h4>
+          <p>SQL Parse → Semantic Analysis → Logical Plan → Physical Plan → Fragment Distribution</p>
+        </div>
+        <div class="arch-arrow">↔</div>
+        <div class="arch-layer" style="background:var(--purple-lt);color:#6d28d9;flex:1;">
+          <h4>📦 Reflections Engine</h4>
+          <p>Auto-match queries to pre-built accelerations (Raw / Agg Reflections)</p>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:4px 0;">↓</div>
+
+      <!-- Row 3: Executors -->
+      <div class="arch-row" style="gap:8px;margin-bottom:8px;">
+        <div class="arch-layer" style="background:var(--green-lt);color:#15803d;">
+          <h4>⚙️ Executor Node 1</h4>
+          <p>Vectorized Arrow execution · Local spill · Fragment work</p>
+        </div>
+        <div class="arch-layer" style="background:var(--green-lt);color:#15803d;">
+          <h4>⚙️ Executor Node 2</h4>
+          <p>Vectorized Arrow execution · Local spill · Fragment work</p>
+        </div>
+        <div class="arch-layer" style="background:var(--green-lt);color:#15803d;">
+          <h4>⚙️ Executor Node N</h4>
+          <p>Vectorized Arrow execution · Local spill · Fragment work</p>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:4px 0;">↓</div>
+
+      <!-- Row 4: Connectors -->
+      <div class="arch-row" style="gap:8px;margin-bottom:8px;">
+        <div class="arch-layer" style="background:var(--teal-lt);color:#0e7490;">
+          <h4>🔌 Source Connectors</h4>
+          <p>S3 · ADLS · GCS · HDFS · Delta Lake · Iceberg · Hudi · Hive · PostgreSQL · MongoDB · Kafka</p>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:4px 0;">↓</div>
+
+      <!-- Row 5: Storage -->
+      <div class="arch-row" style="gap:8px;">
+        <div class="arch-layer" style="background:#f1f5f9;color:var(--muted);">
+          <h4>🗄️ Object Storage / Data Lake</h4>
+          <p>Parquet · ORC · Avro · JSON · CSV · Iceberg Tables · Delta Tables</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Steps -->
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:24px;">Query Lifecycle — Step by Step</h3>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot" style="background:var(--blue-lt);color:var(--blue);">1</div>
+        <div class="tl-content">
+          <h4>SQL Parsing &amp; Semantic Analysis</h4>
+          <p>The <strong>Coordinator</strong> receives the SQL query. Calcite-based parser validates syntax, resolves table/column names against the Metadata store (Nessie catalog or internal), and checks permissions.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="background:var(--orange-lt);color:var(--orange);">2</div>
+        <div class="tl-content">
+          <h4>Logical &amp; Physical Planning</h4>
+          <p>The query is converted to a <strong>relational algebra logical plan</strong>, then the cost-based optimizer (CBO) produces an optimized physical plan. It decides join ordering, aggregation pushdowns, partition pruning, and predicate pushdown to the source.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="background:var(--purple-lt);color:var(--purple);">3</div>
+        <div class="tl-content">
+          <h4>Reflection Matching (Acceleration)</h4>
+          <p>Before execution, the engine checks if any <strong>Reflection</strong> (pre-computed materialized view) can satisfy or partially satisfy the query. If yes, it rewrites the plan to use the acceleration instead of the raw data — transparently, without changing the SQL.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="background:var(--green-lt);color:var(--green);">4</div>
+        <div class="tl-content">
+          <h4>Fragment Distribution &amp; Parallel Execution</h4>
+          <p>The physical plan is split into <strong>query fragments</strong>. The coordinator assigns fragments to executor nodes. Each executor node scans its assigned data splits (S3 file ranges / Iceberg manifest entries) in parallel using <strong>Apache Arrow columnar vectorized processing</strong>.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="background:var(--teal-lt);color:var(--teal);">5</div>
+        <div class="tl-content">
+          <h4>Data Exchange &amp; Merging</h4>
+          <p>Intermediate results flow between executor nodes using <strong>Arrow Flight RPC</strong> for zero-copy data exchange (no serialization overhead). Hash joins, merge-sort, and aggregations happen in Arrow memory buffers.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="background:#fef3c7;color:#d97706;">6</div>
+        <div class="tl-content">
+          <h4>Result Delivery</h4>
+          <p>Final results stream back to the coordinator and are returned to the client via <strong>Arrow Flight SQL</strong>, JDBC, ODBC, or REST. BI tools receive columnar data natively — Tableau and Power BI get sub-second responses even on billions of rows when Reflections are active.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 3 — WHY DREMIO
+════════════════════════════════ -->
+<section id="why">
+  <div class="container">
+    <div class="section-label"><span>03</span> Why Dremio</div>
+    <h2>What Makes Dremio Exceptional</h2>
+    <p class="section-intro">Dremio's strength comes from a combination of architectural innovations that work together to deliver warehouse-speed performance on open lake storage.</p>
+
+    <div class="grid-2" style="margin-bottom:32px;">
+      <div class="card">
+        <div class="badge badge-blue">⚡ Performance</div>
+        <h3>Apache Arrow Native Engine</h3>
+        <p>The entire execution pipeline is built on <strong>Apache Arrow's in-memory columnar format</strong>. SIMD vectorized operations process thousands of rows per CPU clock. No row-by-row iteration. No Java object overhead. Data stays in Arrow format from scan to result delivery.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-orange">🪞 Acceleration</div>
+        <h3>Reflections (Transparent Acceleration)</h3>
+        <p><strong>Reflections</strong> are like automatic materialized views. Administrators define them; queries automatically rewrite to use them — even partial matches work. Raw Reflections (sorted/partitioned pre-reads) and Aggregation Reflections (pre-computed rollups) reduce query time from minutes to milliseconds.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-green">🔓 Open Standards</div>
+        <h3>No Vendor Lock-In</h3>
+        <p>Dremio is built on <strong>Apache Iceberg</strong>, <strong>Apache Arrow</strong>, <strong>Apache Parquet</strong>, and <strong>Nessie</strong> (Git for Data). Your data stays in open formats on your own storage. Swap Dremio out anytime; your data is always yours and readable by any tool.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-purple">🗄️ Lakehouse</div>
+        <h3>Full DML on Lake Storage</h3>
+        <p>With Apache Iceberg support, Dremio supports <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>MERGE INTO</code> — full ACID transactions directly on S3/GCS/ADLS. No need for a traditional database for mutable data. Time-travel queries (<code>AT SNAPSHOT</code>, <code>AT BRANCH</code>) are native.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-teal">🌿 Data Catalog</div>
+        <h3>Nessie — Git for Data</h3>
+        <p><strong>Project Nessie</strong> (open-source, integrated by default) provides Git-like branching for your data catalog. Create a branch, run ETL, test data quality, then merge to production — all without affecting live queries. Supports multi-table transactions across Iceberg tables.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-blue">📊 BI Direct</div>
+        <h3>Semantic Layer Built-In</h3>
+        <p>Dremio's <strong>Virtual Datasets</strong> and <strong>Spaces</strong> act as a built-in semantic layer. Business users query curated, governed, documented virtual tables. Column masking, row-level security, and data lineage are all native — no separate semantic layer product needed.</p>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;">Dremio vs. Alternatives</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Dremio</th>
+            <th>Snowflake</th>
+            <th>Presto / Trino</th>
+            <th>Spark SQL</th>
+            <th>BigQuery</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Open Source</strong></td>
+            <td class="dot-green">Community Edition</td>
+            <td class="dot-orange">Closed</td>
+            <td class="dot-green">Fully OSS</td>
+            <td class="dot-green">Fully OSS</td>
+            <td class="dot-orange">Closed</td>
+          </tr>
+          <tr>
+            <td><strong>Data on Your Storage</strong></td>
+            <td class="dot-green">Yes — S3/GCS/ADLS</td>
+            <td class="dot-orange">Snowflake-managed</td>
+            <td class="dot-green">Yes</td>
+            <td class="dot-green">Yes</td>
+            <td class="dot-orange">GCS-only</td>
+          </tr>
+          <tr>
+            <td><strong>BI Query Speed</strong></td>
+            <td class="dot-green">Sub-second (Reflections)</td>
+            <td class="dot-green">Fast</td>
+            <td class="dot-blue">Moderate</td>
+            <td class="dot-orange">Slow for BI</td>
+            <td class="dot-green">Fast</td>
+          </tr>
+          <tr>
+            <td><strong>Iceberg Support</strong></td>
+            <td class="dot-green">Native + DML</td>
+            <td class="dot-green">Good</td>
+            <td class="dot-green">Good</td>
+            <td class="dot-blue">Via catalog</td>
+            <td class="dot-blue">Limited</td>
+          </tr>
+          <tr>
+            <td><strong>Transparent Acceleration</strong></td>
+            <td class="dot-green">Reflections (unique)</td>
+            <td class="dot-blue">Auto-clustering</td>
+            <td class="dot-orange">Manual only</td>
+            <td class="dot-orange">No</td>
+            <td class="dot-blue">BI Engine</td>
+          </tr>
+          <tr>
+            <td><strong>Cost Model</strong></td>
+            <td class="dot-green">Free OSS / flat license</td>
+            <td class="dot-orange">Credit-based (expensive)</td>
+            <td class="dot-green">Free OSS</td>
+            <td class="dot-green">Free OSS</td>
+            <td class="dot-orange">Pay per query</td>
+          </tr>
+          <tr>
+            <td><strong>Git-for-Data</strong></td>
+            <td class="dot-green">Nessie built-in</td>
+            <td class="dot-orange">No</td>
+            <td class="dot-orange">No</td>
+            <td class="dot-orange">No</td>
+            <td class="dot-orange">No</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 4 — INTERNALS
+════════════════════════════════ -->
+<section id="internals">
+  <div class="container">
+    <div class="section-label"><span>04</span> Internals</div>
+    <h2>How Dremio Is Built</h2>
+    <p class="section-intro">Dremio's engine is a carefully assembled stack of open-source components, each chosen for performance and interoperability.</p>
+
+    <div class="grid-2">
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:18px;">Core Technology Stack</h3>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--blue-lt);color:var(--blue);font-size:13px;">🏹</div>
+            <div class="tl-content">
+              <h4>Apache Arrow — Memory &amp; Transport</h4>
+              <p>All in-memory data is stored in Arrow columnar format. Arrow Flight RPC handles zero-copy data transfer between nodes. Arrow's C++ libraries power the vectorized execution kernels (SIMD-accelerated).</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--orange-lt);color:var(--orange);font-size:13px;">📐</div>
+            <div class="tl-content">
+              <h4>Apache Calcite — SQL Parsing &amp; Optimization</h4>
+              <p>Dremio extends Apache Calcite for SQL parsing, validation, logical planning, and cost-based optimization. The planner supports predicate pushdown, column pruning, join reordering, and subquery elimination.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--purple-lt);color:var(--purple);font-size:13px;">🧊</div>
+            <div class="tl-content">
+              <h4>Apache Iceberg — Table Format</h4>
+              <p>Iceberg provides ACID transactions, schema evolution, time-travel, partition evolution, and row-level deletes on object storage. Dremio uses Iceberg as the primary format for managed tables and Reflections.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--green-lt);color:var(--green);font-size:13px;">🌿</div>
+            <div class="tl-content">
+              <h4>Project Nessie — Catalog</h4>
+              <p>Nessie is a transactional catalog with Git-like branching semantics. It stores table metadata, schema versions, and snapshot pointers. Enables data experimentation without risk to production.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:var(--teal-lt);color:var(--teal);font-size:13px;">📄</div>
+            <div class="tl-content">
+              <h4>Apache Parquet — File Format</h4>
+              <p>Primary on-disk file format. Parquet's columnar layout + compression (Snappy/Zstd) + predicate pushdown statistics make it ideal for analytical queries. Dremio also supports ORC, Avro, JSON, CSV.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot" style="background:#fef3c7;color:#d97706;font-size:13px;">🔄</div>
+            <div class="tl-content">
+              <h4>Gandiva — LLVM JIT Compilation</h4>
+              <p>Dremio uses <strong>Gandiva</strong> (part of Arrow) to JIT-compile expression trees to native LLVM code at runtime. Filter expressions, projections, and aggregations are compiled to CPU-native code — faster than interpreted evaluation.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:17px;font-weight:700;margin-bottom:18px;">Reflections — Deep Dive</h3>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="badge badge-blue">RAW REFLECTION</div>
+          <h3>Pre-Read & Re-Sort Acceleration</h3>
+          <p>A Raw Reflection stores a <strong>physically re-sorted, re-partitioned, columnar copy</strong> of a dataset. When a query matches, Dremio reads from this pre-optimized version instead of the original files. Example: a 500GB Parquet dataset sorted by <code>customer_id</code> makes customer-based queries 100× faster.</p>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="badge badge-orange">AGGREGATION REFLECTION</div>
+          <h3>Pre-Computed Rollup Acceleration</h3>
+          <p>An Aggregation Reflection pre-computes <code>GROUP BY</code> rollups. When a BI tool queries total sales by region/month, Dremio matches it to a pre-computed aggregate — returning results in &lt;1s from a table of billions of rows. The reflection updates on a refresh schedule or triggered by new data arrivals.</p>
+        </div>
+        <div class="info-box info-purple" style="margin-top:16px;">
+          <div class="icon">🧠</div>
+          <p><strong>Reflection Matching:</strong> Uses <strong>substitution rules + constraint-based rewriting</strong>. Even a partial match (e.g., reflection has 90% of the needed columns) is used with a join to raw data for the missing 10%. Users never know — the SQL stays unchanged.</p>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <div class="badge badge-green">EXTERNAL REFLECTION</div>
+          <h3>Point to Any Pre-Built Table</h3>
+          <p>You can define a Reflection that points to an <strong>existing Iceberg table or Parquet dataset</strong> built by Spark or dbt. Dremio reuses your existing transformation outputs as acceleration sources — no duplicating ETL work.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 5 — PRODUCTION SETUP
+════════════════════════════════ -->
+<section id="production">
+  <div class="container">
+    <div class="section-label"><span>05</span> Production Setup</div>
+    <h2>Deploying Dremio at Petabyte Scale</h2>
+    <p class="section-intro">Running Dremio in production with PB-scale data requires careful cluster sizing, Kubernetes orchestration, storage strategy, and tuning. Here is a battle-tested blueprint.</p>
+
+    <!-- Architecture -->
+    <div class="info-box info-orange" style="margin-bottom:28px;">
+      <div class="icon">⚠️</div>
+      <p><strong>PB-scale strategy:</strong> Keep data in S3/GCS/ADLS as Iceberg tables in Parquet format. Dremio executors are <em>compute</em> — they scale horizontally and are stateless. Never put PB of data on executor disks. Use NVMe SSD on executors for spill-to-disk and Reflection caching only.</p>
+    </div>
+
+    <!-- Sizing -->
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:18px;">Cluster Sizing — PB Data Volume</h3>
+    <div class="table-wrap" style="margin-bottom:32px;">
+      <table>
+        <thead>
+          <tr><th>Role</th><th>Count</th><th>CPU</th><th>RAM</th><th>Storage</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Coordinator</strong></td>
+            <td>2 (HA)</td>
+            <td>16 vCPU</td>
+            <td>128 GB</td>
+            <td>500 GB SSD</td>
+            <td>Query planning, metadata, Reflection scheduling, HA failover</td>
+          </tr>
+          <tr>
+            <td><strong>Executor (Standard)</strong></td>
+            <td>20–50</td>
+            <td>32 vCPU</td>
+            <td>256 GB</td>
+            <td>2 TB NVMe SSD</td>
+            <td>Query execution, Arrow vectorized processing, spill-to-disk</td>
+          </tr>
+          <tr>
+            <td><strong>Executor (Reflection)</strong></td>
+            <td>5–10</td>
+            <td>32 vCPU</td>
+            <td>256 GB</td>
+            <td>4 TB NVMe SSD</td>
+            <td>Dedicated Reflection refresh processing (separate engine pools)</td>
+          </tr>
+          <tr>
+            <td><strong>Zookeeper</strong></td>
+            <td>3</td>
+            <td>4 vCPU</td>
+            <td>16 GB</td>
+            <td>100 GB SSD</td>
+            <td>Coordinator HA, distributed coordination</td>
+          </tr>
+          <tr>
+            <td><strong>Nessie / Catalog</strong></td>
+            <td>3</td>
+            <td>8 vCPU</td>
+            <td>32 GB</td>
+            <td>500 GB SSD + PostgreSQL</td>
+            <td>Iceberg catalog, table metadata, branching</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Kubernetes Deployment -->
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:14px;">Kubernetes Deployment (Helm)</h3>
+    <div class="code-label">values.yaml — Dremio Helm Chart (PB Production)</div>
+    <pre><span class="c-cmt"># dremio-values.yaml — Production PB-scale configuration</span>
+
+<span class="c-sec">coordinator:</span>
+  <span class="c-key">count:</span> <span class="c-num">2</span>
+  <span class="c-key">cpu:</span> <span class="c-str">"16"</span>
+  <span class="c-key">memory:</span> <span class="c-str">"131072"</span>  <span class="c-cmt"># 128 GB in MB</span>
+  <span class="c-key">volumeClaimStorageClass:</span> <span class="c-str">"fast-ssd"</span>
+  <span class="c-key">volumeSize:</span> <span class="c-str">"500Gi"</span>
+  <span class="c-key">web:</span>
+    <span class="c-key">port:</span> <span class="c-num">9047</span>
+
+<span class="c-sec">executor:</span>
+  <span class="c-key">count:</span> <span class="c-num">30</span>
+  <span class="c-key">cpu:</span> <span class="c-str">"32"</span>
+  <span class="c-key">memory:</span> <span class="c-str">"262144"</span>  <span class="c-cmt"># 256 GB in MB</span>
+  <span class="c-key">volumeClaimStorageClass:</span> <span class="c-str">"nvme-local"</span>
+  <span class="c-key">volumeSize:</span> <span class="c-str">"2Ti"</span>
+  <span class="c-key">engineOverride:</span>
+    <span class="c-key">name:</span> <span class="c-str">"default"</span>
+
+<span class="c-sec">distStorage:</span>
+  <span class="c-key">type:</span> <span class="c-str">"aws"</span>  <span class="c-cmt"># or gcs / azureStorage</span>
+  <span class="c-key">aws:</span>
+    <span class="c-key">bucketName:</span> <span class="c-str">"dremio-dist-storage-prod"</span>
+    <span class="c-key">path:</span> <span class="c-str">"/dremio"</span>
+    <span class="c-key">region:</span> <span class="c-str">"ap-southeast-1"</span>
+
+<span class="c-sec">zookeeper:</span>
+  <span class="c-key">count:</span> <span class="c-num">3</span>
+  <span class="c-key">cpu:</span> <span class="c-str">"4"</span>
+  <span class="c-key">memory:</span> <span class="c-str">"16384"</span>
+
+<span class="c-sec">image:</span>
+  <span class="c-key">repository:</span> <span class="c-str">"dremio/dremio-oss"</span>
+  <span class="c-key">tag:</span> <span class="c-str">"25.0.0"</span></pre>
+
+    <!-- dremio.conf -->
+    <div class="code-label">dremio.conf — JVM &amp; Engine Tuning for PB Scale</div>
+    <pre><span class="c-cmt"># /opt/dremio/conf/dremio.conf</span>
+
+<span class="c-sec">paths:</span> {
+  <span class="c-key">local:</span>  <span class="c-str">"/var/lib/dremio"</span>
+  <span class="c-key">dist:</span>   <span class="c-str">"s3a://dremio-dist-storage-prod/dremio"</span>
+}
+
+<span class="c-sec">services:</span> {
+  <span class="c-key">coordinator.enabled:</span>  <span class="c-val">true</span>
+  <span class="c-key">executor.enabled:</span>     <span class="c-val">true</span>
+
+  <span class="c-sec">executor:</span> {
+    <span class="c-cmt"># Memory allocation — 80% of heap to Arrow memory pool</span>
+    <span class="c-key">memory.reserve.in.bytes:</span>  <span class="c-num">4294967296</span>   <span class="c-cmt"># 4 GB OS reserve</span>
+    <span class="c-key">heap.memory.percent:</span>      <span class="c-num">20</span>            <span class="c-cmt"># 20% JVM heap</span>
+    <span class="c-key">direct.memory.percent:</span>    <span class="c-num">80</span>            <span class="c-cmt"># 80% Arrow off-heap</span>
+
+    <span class="c-cmt"># NVMe spill path for large joins / aggregations</span>
+    <span class="c-key">spill.disk:</span>             <span class="c-str">"/mnt/nvme/dremio-spill"</span>
+  }
+}
+
+<span class="c-sec">services.fabric.memory.jvm:</span>  <span class="c-num">8192</span>  <span class="c-cmt"># MB</span>
+
+<span class="c-cmt"># S3 parallelism — critical for PB data scanning</span>
+<span class="c-sec">store.s3.threadpool.size:</span>     <span class="c-num">64</span>
+<span class="c-sec">store.s3.multipart.threshold:</span> <span class="c-num">67108864</span>   <span class="c-cmt"># 64 MB</span>
+
+<span class="c-cmt"># Iceberg manifest caching</span>
+<span class="c-sec">iceberg.manifest.cache.size:</span>  <span class="c-num">10000</span></pre>
+
+    <!-- Best Practices -->
+    <h3 style="font-size:17px;font-weight:700;margin:32px 0 18px;">PB-Scale Production Best Practices</h3>
+    <div class="grid-2">
+      <div class="card">
+        <div class="badge badge-blue">🗂️ Partitioning</div>
+        <h3>Iceberg Table Partitioning</h3>
+        <p>Use <strong>hidden partitioning</strong> on Iceberg tables — partition by <code>days(event_time)</code>, <code>bucket(customer_id, 256)</code>. Dremio prunes partitions automatically. A PB table partitioned well means most queries scan &lt;0.1% of data.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-orange">📦 File Sizes</div>
+        <h3>Target 256MB–1GB Parquet Files</h3>
+        <p>Small files (many &lt;10 MB) destroy S3 throughput. Run periodic <strong>Iceberg compaction</strong> (via Spark or Dremio's <code>OPTIMIZE TABLE</code>) to merge small files. Dremio reads PB efficiently when files are 256 MB–1 GB each.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-purple">🪞 Reflections</div>
+        <h3>Design Reflections for BI Patterns</h3>
+        <p>Profile your top 20 BI queries. Create <strong>Aggregation Reflections</strong> pre-computing those rollups. Set refresh schedules tied to your data arrival SLA. Use <strong>Incremental Refresh</strong> for Reflections on append-only Iceberg tables.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-green">⚙️ Engine Pools</div>
+        <h3>Separate Query vs. Reflection Engines</h3>
+        <p>Create <strong>separate executor engine pools</strong>: one for interactive BI queries (smaller, fast-response), one for Reflection refresh jobs (larger, batch-friendly), one for data scientists (Spark-like heavy scans). Use WLM rules to route workloads.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-teal">📊 Monitoring</div>
+        <h3>Observability Stack</h3>
+        <p>Expose Dremio metrics via <strong>Prometheus JMX exporter</strong>. Dashboards in Grafana for query latency, executor memory, Reflection freshness, S3 request rates. Alert on high spill-to-disk (indicates memory pressure) and stale Reflections.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-blue">🔐 Security</div>
+        <h3>Production Security Setup</h3>
+        <p>Enable <strong>TLS on all endpoints</strong> (web UI, JDBC, Arrow Flight). Integrate with <strong>LDAP/SAML/OAuth2</strong> for SSO. Use column masking and row-level security policies via <code>CREATE POLICY</code>. IAM role-based S3 access — no static credentials.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 6 — DATA ARCHITECTURE
+════════════════════════════════ -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-label"><span>06</span> Data Architecture</div>
+    <h2>Best Architecture Patterns for Dremio</h2>
+    <p class="section-intro">Dremio shines brightest in the <strong>Lakehouse Architecture</strong> — specifically the <strong>Open Lakehouse</strong> pattern built on Apache Iceberg. Here is how to structure the full system.</p>
+
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:20px;">Recommended: Open Lakehouse with Medallion Architecture</h3>
+
+    <div class="arch-diagram" style="margin-bottom:32px;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px;">
+        <div class="arch-layer" style="background:#fef9ec;border:2px solid #f59e0b;">
+          <h4 style="color:#92400e;">🥉 Bronze Layer</h4>
+          <p style="color:#78350f;font-size:13px;">Raw ingestion. Original data as-is. Iceberg tables, append-only. Schema-on-read. Full history retained. Never overwritten.</p>
+        </div>
+        <div class="arch-layer" style="background:#f0fdf4;border:2px solid #22c55e;">
+          <h4 style="color:#14532d;">🥈 Silver Layer</h4>
+          <p style="color:#166534;font-size:13px;">Cleansed, deduplicated, validated, conformed. Iceberg with MERGE INTO for upserts. Column-typed, nulls handled, PII masked.</p>
+        </div>
+        <div class="arch-layer" style="background:#eff6ff;border:2px solid #3b82f6;">
+          <h4 style="color:#1e3a8a;">🥇 Gold Layer</h4>
+          <p style="color:#1d4ed8;font-size:13px;">Business-domain aggregates. Star schema / wide tables. Optimized for BI queries. Dremio Reflections built on Gold + Silver. Exposed via Virtual Datasets.</p>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:20px;">↑ Dremio queries all three layers. Reflections primarily on Gold &amp; Silver.</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+        <div class="arch-layer" style="background:var(--purple-lt);border:1px solid #8b5cf6;">
+          <h4 style="color:#6d28d9;">🧠 Dremio Query Layer</h4>
+          <p style="font-size:13px;color:#5b21b6;">Virtual Datasets · Reflections · SQL Engine · Semantic Layer · Access Control · Arrow Flight</p>
+        </div>
+        <div class="arch-layer" style="background:var(--teal-lt);border:1px solid var(--teal);">
+          <h4 style="color:#0e7490;">🗄️ Object Storage</h4>
+          <p style="font-size:13px;color:#164e63;">S3 / GCS / ADLS — Parquet + Iceberg. Nessie catalog. Unlimited scale. $0.023/GB/month.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="info-box info-blue">
+        <div class="icon">✅</div>
+        <p><strong>Best For Dremio:</strong> Lakehouse with Iceberg + Medallion + Nessie. Dremio becomes the single query interface across all layers, eliminating dedicated data marts.</p>
+      </div>
+      <div class="info-box info-orange">
+        <div class="icon">📐</div>
+        <p><strong>Data Modeling:</strong> Use <strong>wide denormalized tables</strong> in Gold layer (Kimball-inspired). Avoid too many joins — Dremio handles them, but pre-joining in Gold + Reflections gives best BI speed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 7 — ECOSYSTEM
+════════════════════════════════ -->
+<section id="ecosystem">
+  <div class="container">
+    <div class="section-label"><span>07</span> Open-Source Ecosystem</div>
+    <h2>The Full Open-Source Stack Around Dremio</h2>
+    <p class="section-intro">Dremio is the query &amp; serving layer — but a complete big data platform needs tools for ingestion, streaming, transformation, cataloging, orchestration, and BI. Here is the best-fit open-source stack.</p>
+
+    <div class="grid-2">
+      <!-- Batch Ingestion -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--orange-lt);color:#c2410c;">📥 Batch Ingestion</span>
+        <h3>Ingest from RDBMS, Files, APIs</h3>
+        <p>Batch-load structured &amp; semi-structured data into the Bronze Iceberg layer.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Apache Spark</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">dbt</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Apache Sqoop</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Airbyte</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Apache NiFi</span>
+        </div>
+      </div>
+
+      <!-- Streaming -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--red-lt);color:#b91c1c;">⚡ Streaming Ingestion</span>
+        <h3>Real-Time Event Streams → Iceberg</h3>
+        <p>Stream events into Iceberg Bronze tables with low-latency micro-batch or true streaming.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#ef4444;color:#b91c1c;">Apache Kafka</span>
+          <span class="eco-tool" style="border-color:#ef4444;color:#b91c1c;">Apache Flink</span>
+          <span class="eco-tool" style="border-color:#ef4444;color:#b91c1c;">Spark Structured Streaming</span>
+          <span class="eco-tool" style="border-color:#ef4444;color:#b91c1c;">Debezium (CDC)</span>
+          <span class="eco-tool" style="border-color:#ef4444;color:#b91c1c;">Redpanda</span>
+        </div>
+      </div>
+
+      <!-- Transformation -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--blue-lt);color:#1d4ed8;">🔄 Transformation (Bronze→Silver→Gold)</span>
+        <h3>ETL / ELT Processing</h3>
+        <p>Transform, clean, aggregate, and model data across the medallion layers.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">Apache Spark</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">dbt (SQL transforms)</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">Apache Flink</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">Dremio SQL (CTAS)</span>
+        </div>
+      </div>
+
+      <!-- Storage / Table Format -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--green-lt);color:#15803d;">🗄️ Storage &amp; Table Format</span>
+        <h3>Open Lake Storage</h3>
+        <p>Object storage with open ACID table formats — the foundation of the lakehouse.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#22c55e;color:#15803d;">Apache Iceberg</span>
+          <span class="eco-tool" style="border-color:#22c55e;color:#15803d;">Apache Parquet</span>
+          <span class="eco-tool" style="border-color:#22c55e;color:#15803d;">MinIO (on-prem S3)</span>
+          <span class="eco-tool" style="border-color:#22c55e;color:#15803d;">HDFS</span>
+          <span class="eco-tool" style="border-color:#22c55e;color:#15803d;">Delta Lake</span>
+        </div>
+      </div>
+
+      <!-- Catalog -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--purple-lt);color:#6d28d9;">📚 Data Catalog &amp; Governance</span>
+        <h3>Metadata &amp; Discovery</h3>
+        <p>Track table metadata, lineage, schemas, and policies. Nessie is Dremio's native catalog; supplement with external tools for broader governance.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#8b5cf6;color:#6d28d9;">Project Nessie</span>
+          <span class="eco-tool" style="border-color:#8b5cf6;color:#6d28d9;">Apache Atlas</span>
+          <span class="eco-tool" style="border-color:#8b5cf6;color:#6d28d9;">OpenMetadata</span>
+          <span class="eco-tool" style="border-color:#8b5cf6;color:#6d28d9;">DataHub</span>
+        </div>
+      </div>
+
+      <!-- Orchestration -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--teal-lt);color:#0e7490;">🔧 Orchestration</span>
+        <h3>Pipeline Scheduling &amp; DAGs</h3>
+        <p>Orchestrate batch Spark jobs, dbt runs, Flink deployments, and Reflection refresh triggers.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#06b6d4;color:#0e7490;">Apache Airflow</span>
+          <span class="eco-tool" style="border-color:#06b6d4;color:#0e7490;">Prefect</span>
+          <span class="eco-tool" style="border-color:#06b6d4;color:#0e7490;">Dagster</span>
+          <span class="eco-tool" style="border-color:#06b6d4;color:#0e7490;">Argo Workflows</span>
+        </div>
+      </div>
+
+      <!-- Query Layer -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--blue-lt);color:#1d4ed8;">🔍 Query &amp; Serving (Dremio)</span>
+        <h3>Dremio — The Core Query Engine</h3>
+        <p>SQL on everything. Reflections for BI acceleration. Arrow Flight for fast client delivery. Virtual Datasets as semantic layer. Multi-source federation.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">Dremio OSS</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">Arrow Flight SQL</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">JDBC / ODBC</span>
+          <span class="eco-tool" style="border-color:#3b82f6;color:#1d4ed8;">REST API</span>
+        </div>
+      </div>
+
+      <!-- BI -->
+      <div class="eco-card">
+        <span class="layer-label" style="background:var(--orange-lt);color:#c2410c;">📊 BI &amp; Analytics</span>
+        <h3>Visualization &amp; Reporting</h3>
+        <p>Connect BI tools directly to Dremio via JDBC/ODBC or Arrow Flight. Reflections ensure sub-second dashboard loads.</p>
+        <div class="eco-tools">
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Apache Superset</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Metabase</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Redash</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Tableau</span>
+          <span class="eco-tool" style="border-color:#f97316;color:#c2410c;">Power BI</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     SECTION 8 — FULL FLOW
+════════════════════════════════ -->
+<section id="fullflow">
+  <div class="container">
+    <div class="section-label"><span>08</span> Full Flow Architecture</div>
+    <h2>Complete Big Data Platform Flow</h2>
+    <p class="section-intro">
+      A production-ready, fully open-source big data platform with Dremio at the center — covering ingestion, streaming, transformation, storage, query, catalog, orchestration, and BI.
+    </p>
+
+    <div class="full-arch" style="margin-bottom:32px;">
+      <!-- Layer 1: Sources -->
+      <div style="text-align:center;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:12px;">DATA SOURCES</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:20px;">
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">🏢 RDBMS (PostgreSQL/MySQL)</span>
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">📡 IoT / Sensors</span>
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">🌐 APIs / Webhooks</span>
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">📄 Files (CSV/JSON)</span>
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">🖱️ Clickstream / Events</span>
+        <span style="background:#f1f5f9;border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;">🔄 CDC (Debezium)</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <!-- Batch path -->
+        <div style="background:var(--orange-lt);border:1px solid #f97316;border-radius:10px;padding:16px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:#c2410c;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Batch Path</div>
+          <div style="font-size:13px;color:#7c2d12;">Airbyte / Apache NiFi / Sqoop<br><strong>→ Apache Spark (Bronze Load)</strong></div>
+        </div>
+        <!-- Streaming path -->
+        <div style="background:var(--red-lt);border:1px solid #ef4444;border-radius:10px;padding:16px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:#b91c1c;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Streaming Path</div>
+          <div style="font-size:13px;color:#7f1d1d;">Debezium → <strong>Apache Kafka</strong> → <strong>Apache Flink</strong><br>(Kafka → Iceberg sink, real-time)</div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:6px 0;">↓</div>
+
+      <!-- Storage Layer -->
+      <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;padding:20px;margin-bottom:12px;color:white;text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;opacity:.8;">LAKEHOUSE STORAGE — S3 / MinIO / GCS / ADLS</div>
+        <div style="display:flex;justify-content:center;gap:32px;flex-wrap:wrap;">
+          <div><div style="font-size:18px;">🥉</div><div style="font-size:13px;font-weight:700;">Bronze</div><div style="font-size:12px;opacity:.8;">Raw Iceberg Tables</div></div>
+          <div style="color:rgba(255,255,255,.3);font-size:24px;align-self:center;">→</div>
+          <div><div style="font-size:18px;">🥈</div><div style="font-size:13px;font-weight:700;">Silver</div><div style="font-size:12px;opacity:.8;">Cleaned Iceberg Tables</div></div>
+          <div style="color:rgba(255,255,255,.3);font-size:24px;align-self:center;">→</div>
+          <div><div style="font-size:18px;">🥇</div><div style="font-size:13px;font-weight:700;">Gold</div><div style="font-size:12px;opacity:.8;">Aggregated Iceberg Tables</div></div>
+        </div>
+        <div style="margin-top:12px;font-size:12px;opacity:.7;">Catalog: Project Nessie &nbsp;|&nbsp; Format: Parquet + Apache Iceberg &nbsp;|&nbsp; File sizes: 256MB–1GB</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div style="background:var(--blue-lt);border:1px solid #3b82f6;border-radius:10px;padding:14px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:#1d4ed8;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;">Transformation Orchestration</div>
+          <div style="font-size:13px;color:#1e3a8a;"><strong>Apache Airflow</strong> → triggers<br>Spark jobs / dbt runs / Flink deployments</div>
+        </div>
+        <div style="background:var(--purple-lt);border:1px solid #8b5cf6;border-radius:10px;padding:14px;text-align:center;">
+          <div style="font-size:11px;font-weight:700;color:#6d28d9;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;">Data Catalog &amp; Lineage</div>
+          <div style="font-size:13px;color:#4c1d95;"><strong>Project Nessie</strong> (branching) + <strong>OpenMetadata</strong> (discovery + lineage)</div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:6px 0;">↓</div>
+
+      <!-- Dremio Layer -->
+      <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border-radius:12px;padding:22px;margin-bottom:12px;color:white;text-align:center;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;opacity:.8;">DREMIO — QUERY &amp; SEMANTIC LAYER</div>
+        <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;font-size:13px;">
+          <span style="background:rgba(255,255,255,.15);border-radius:6px;padding:5px 12px;">⚡ Reflections (Acceleration)</span>
+          <span style="background:rgba(255,255,255,.15);border-radius:6px;padding:5px 12px;">🏛️ Virtual Datasets</span>
+          <span style="background:rgba(255,255,255,.15);border-radius:6px;padding:5px 12px;">🔒 Row/Column Security</span>
+          <span style="background:rgba(255,255,255,.15);border-radius:6px;padding:5px 12px;">🏹 Arrow Flight SQL</span>
+          <span style="background:rgba(255,255,255,.15);border-radius:6px;padding:5px 12px;">🔌 Multi-Source Federation</span>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:20px;margin:6px 0;">↓</div>
+
+      <!-- Consumers -->
+      <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">
+        <span style="background:var(--orange-lt);border:1px solid #f97316;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#c2410c;">📊 Apache Superset</span>
+        <span style="background:var(--orange-lt);border:1px solid #f97316;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#c2410c;">📈 Metabase</span>
+        <span style="background:var(--orange-lt);border:1px solid #f97316;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#c2410c;">📊 Redash</span>
+        <span style="background:var(--blue-lt);border:1px solid #3b82f6;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#1d4ed8;">🐍 Python / Jupyter</span>
+        <span style="background:var(--blue-lt);border:1px solid #3b82f6;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#1d4ed8;">📡 REST APIs</span>
+        <span style="background:var(--green-lt);border:1px solid #22c55e;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;color:#15803d;">🤖 ML Pipelines</span>
+      </div>
+    </div>
+
+    <!-- Technology Mapping Table -->
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:18px;">Complete Technology Mapping</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Function</th><th>Recommended Tools</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-orange" style="margin:0;">Ingest</span></td>
+            <td>Batch loading from RDBMS/files</td>
+            <td><strong>Airbyte, Apache NiFi, Sqoop</strong></td>
+            <td>Load to Bronze Iceberg tables via Spark</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-red" style="margin:0;background:var(--red-lt);color:#b91c1c;">Stream</span></td>
+            <td>Real-time event ingestion</td>
+            <td><strong>Kafka + Flink, Debezium CDC</strong></td>
+            <td>Flink writes Iceberg with exactly-once</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-blue" style="margin:0;">Transform</span></td>
+            <td>Bronze → Silver → Gold ETL</td>
+            <td><strong>Apache Spark, dbt (SQL)</strong></td>
+            <td>Spark for heavy compute; dbt for SQL transforms on Gold</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-green" style="margin:0;">Storage</span></td>
+            <td>Lake storage + table format</td>
+            <td><strong>S3/MinIO + Apache Iceberg + Parquet</strong></td>
+            <td>Iceberg = ACID, time-travel, schema evolution</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-purple" style="margin:0;">Catalog</span></td>
+            <td>Metadata + branching + lineage</td>
+            <td><strong>Nessie + OpenMetadata / DataHub</strong></td>
+            <td>Nessie = native Dremio catalog; OpenMetadata for governance UI</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-teal" style="margin:0;">Orchestrate</span></td>
+            <td>DAG scheduling &amp; workflow</td>
+            <td><strong>Apache Airflow, Dagster</strong></td>
+            <td>Trigger Spark jobs, dbt runs, Reflection refreshes</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-blue" style="margin:0;">Query</span></td>
+            <td>SQL engine + acceleration + federation</td>
+            <td><strong>Dremio</strong></td>
+            <td>Reflections for BI speed; Arrow Flight for Python/BI clients</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-orange" style="margin:0;">BI / Viz</span></td>
+            <td>Dashboards &amp; reports</td>
+            <td><strong>Apache Superset, Metabase, Redash</strong></td>
+            <td>Connect via Dremio JDBC or Arrow Flight; Reflections = sub-second</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="info-box info-green" style="margin-top:28px;">
+      <div class="icon">🏆</div>
+      <p><strong>Why this stack wins:</strong> Every component is open-source and Apache-licensed. Data never leaves your storage. Swappable at every layer. Dremio sits at the center as the intelligence &amp; serving layer — consuming Iceberg tables produced by Spark/Flink, and serving BI tools with Reflection-accelerated speed. Total TCO is a fraction of Snowflake or Databricks.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section style="border:none;padding:64px 0;">
+  <div class="container">
+    <div class="highlight">
+      <h2>Start Your Dremio Lakehouse</h2>
+      <p>Dremio + Apache Iceberg + Kafka + Flink + Spark + Airflow + Superset is the most powerful, fully open-source big data platform stack available today — scalable from GB to PB with no vendor lock-in.</p>
+    </div>
+  </div>
+</section>
+
+</div><!-- /bg -->
+
+<footer>
+  <div>Built as a reference guide for Big Data Platform Design with Dremio &nbsp;·&nbsp; All technologies referenced are open-source or have community editions</div>
+  <div style="margin-top:8px;color:#aab2c4;font-size:13px;">Apache Iceberg · Apache Arrow · Apache Kafka · Apache Flink · Apache Spark · Apache Airflow · Project Nessie · Apache Superset</div>
+</footer>
+
+</body>
+</html>

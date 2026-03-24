@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distributed Systems — Storage, Files & Failures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface-alt: #f8faff;
+    --border: #e2e8f4;
+
+    --blue:        #3b82f6;
+    --blue-light:  #eff6ff;
+    --blue-mid:    #bfdbfe;
+    --blue-dark:   #1d4ed8;
+
+    --orange:      #f97316;
+    --orange-light:#fff7ed;
+    --orange-mid:  #fed7aa;
+    --orange-dark: #c2410c;
+
+    --purple:      #8b5cf6;
+    --purple-light:#f5f3ff;
+    --purple-mid:  #ddd6fe;
+    --purple-dark: #6d28d9;
+
+    --green:       #22c55e;
+    --green-light: #f0fdf4;
+    --green-mid:   #bbf7d0;
+    --green-dark:  #15803d;
+
+    --red:         #ef4444;
+    --red-light:   #fef2f2;
+    --red-mid:     #fecaca;
+
+    --text-primary:   #1e2a3b;
+    --text-secondary: #4a5568;
+    --text-muted:     #718096;
+    --code-bg:        #1e2a3b;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 60px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+
+  .nav-logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    color: var(--blue-dark);
+    white-space: nowrap;
+    margin-right: 16px;
+    flex-shrink: 0;
+  }
+
+  .nav-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all .2s;
+    flex-shrink: 0;
+  }
+  .nav-pill:hover { background: var(--blue-light); color: var(--blue-dark); }
+  .nav-pill.active { background: var(--blue); color: #fff; }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1d3a72 0%, #2563eb 55%, #1e40af 100%);
+    padding: 80px 60px 70px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    color: #bfdbfe;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 999px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(32px, 5vw, 54px);
+    color: #fff;
+    line-height: 1.15;
+    margin-bottom: 20px;
+  }
+  .hero p {
+    font-size: 17px;
+    color: #bfdbfe;
+    max-width: 640px;
+    margin: 0 auto 36px;
+  }
+  .hero-badges {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .hero-badge {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+
+  /* ── LAYOUT ── */
+  .page { max-width: 1080px; margin: 0 auto; padding: 0 32px 80px; }
+
+  .section-header {
+    margin: 64px 0 32px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .section-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .section-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+  .section-header p {
+    font-size: 15px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  }
+  .card h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+  .card p, .card li { font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+  .card ul { padding-left: 20px; }
+  .card li { margin-bottom: 6px; }
+
+  /* ── GRIDS ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .hero { padding: 50px 24px; }
+    nav { padding: 0 16px; }
+  }
+
+  /* ── ACCENT CARDS ── */
+  .card-blue   { border-top: 4px solid var(--blue);   }
+  .card-orange { border-top: 4px solid var(--orange); }
+  .card-purple { border-top: 4px solid var(--purple); }
+  .card-green  { border-top: 4px solid var(--green);  }
+  .card-red    { border-top: 4px solid var(--red);    }
+
+  .tag {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 2px 9px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+  .tag-blue   { background: var(--blue-light);   color: var(--blue-dark);   }
+  .tag-orange { background: var(--orange-light); color: var(--orange-dark); }
+  .tag-purple { background: var(--purple-light); color: var(--purple-dark); }
+  .tag-green  { background: var(--green-light);  color: var(--green-dark);  }
+  .tag-red    { background: var(--red-light);    color: var(--red);         }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+  }
+  .arch-diagram h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .diagram-svg-wrap { overflow-x: auto; }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: var(--code-bg);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+  .code-block pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: #e2e8f0;
+  }
+  .code-block .cm  { color: #718096; }
+  .code-block .ck  { color: #f6ad55; }
+  .code-block .cs  { color: #68d391; }
+  .code-block .cn  { color: #90cdf4; }
+  .code-block .cv  { color: #fbb6ce; }
+  .code-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: block;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  /* ── TIMELINE ── */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 9px; top: 8px; bottom: 8px;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--blue), var(--purple));
+    border-radius: 2px;
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 24px;
+  }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -23px; top: 8px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 3px solid var(--blue);
+    background: #fff;
+  }
+  .tl-item:nth-child(even)::before { border-color: var(--purple); }
+  .tl-item h4 { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+  .tl-item p  { font-size: 14.5px; color: var(--text-secondary); }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .compare-table th {
+    background: var(--blue-light);
+    color: var(--blue-dark);
+    font-weight: 600;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 13.5px;
+    letter-spacing: .3px;
+    border-bottom: 2px solid var(--blue-mid);
+  }
+  .compare-table td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    vertical-align: top;
+  }
+  .compare-table tr:hover td { background: var(--surface-alt); }
+  .compare-table tr:last-child td { border-bottom: none; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill-blue   { background: var(--blue-light);   color: var(--blue-dark);   }
+  .pill-orange { background: var(--orange-light); color: var(--orange-dark); }
+  .pill-purple { background: var(--purple-light); color: var(--purple-dark); }
+  .pill-green  { background: var(--green-light);  color: var(--green-dark);  }
+  .pill-red    { background: var(--red-light);    color: var(--red);         }
+
+  /* ── CALLOUT ── */
+  .callout {
+    display: flex;
+    gap: 14px;
+    padding: 18px 22px;
+    border-radius: 12px;
+    margin: 16px 0;
+  }
+  .callout-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .callout-body { font-size: 15px; color: var(--text-secondary); line-height: 1.65; }
+  .callout-body strong { color: var(--text-primary); }
+  .callout-info    { background: var(--blue-light);   border-left: 3px solid var(--blue);   }
+  .callout-warn    { background: var(--orange-light); border-left: 3px solid var(--orange); }
+  .callout-danger  { background: var(--red-light);    border-left: 3px solid var(--red);    }
+  .callout-success { background: var(--green-light);  border-left: 3px solid var(--green);  }
+
+  /* ── FAILURE SCENARIO CARDS ── */
+  .fail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .fail-card:hover { transform: translateY(-3px); box-shadow: 0 10px 36px rgba(0,0,0,0.1); }
+  .fail-card-header {
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .fail-card-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .fail-card-header h3 { font-size: 16px; font-weight: 600; }
+  .fail-card-body { padding: 0 24px 22px; font-size: 14.5px; color: var(--text-secondary); line-height: 1.7; }
+  .fail-card-body ul { padding-left: 18px; margin-top: 8px; }
+  .fail-card-body li { margin-bottom: 5px; }
+  .fail-card-body h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 6px; }
+
+  /* ── STAT CHIPS ── */
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+  .stat-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 22px;
+    flex: 1;
+    min-width: 140px;
+    text-align: center;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  }
+  .stat-chip .stat-val { font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-chip .stat-lbl { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ── ACCORDION ── */
+  .accordion-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+  .accordion-item:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.07); }
+  .accordion-trigger {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 18px 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Inter', sans-serif;
+    font-size: 15.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: left;
+  }
+  .accordion-trigger span.acc-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: transform .25s;
+    flex-shrink: 0;
+  }
+  .accordion-trigger.open .acc-icon { transform: rotate(180deg); }
+  .accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .35s ease;
+  }
+  .accordion-body.open { max-height: 600px; }
+  .accordion-inner { padding: 0 24px 20px; font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+  .accordion-inner ul { padding-left: 20px; }
+  .accordion-inner li { margin-bottom: 6px; }
+
+  /* ── CONSENSUS DIAGRAM ── */
+  .node-viz {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+  }
+  .node-box {
+    width: 90px;
+    border-radius: 12px;
+    padding: 14px 8px;
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: default;
+    transition: transform .2s;
+    border: 2px solid transparent;
+  }
+  .node-box:hover { transform: scale(1.05); }
+  .node-box .node-icon { font-size: 22px; display: block; margin-bottom: 6px; }
+  .node-box .node-role { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+
+  .node-leader  { background: var(--blue-light); border-color: var(--blue); color: var(--blue-dark); }
+  .node-follower{ background: var(--green-light); border-color: var(--green); color: var(--green-dark); }
+  .node-dead    { background: var(--red-light); border-color: var(--red); color: var(--red); opacity: .7; }
+  .node-isolated{ background: var(--orange-light); border-color: var(--orange); color: var(--orange-dark); }
+  .node-candidate{ background: var(--purple-light); border-color: var(--purple); color: var(--purple-dark); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 48px 0;
+  }
+
+  .full-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+  }
+  .full-card h3 {
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .full-card p { font-size: 15.5px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.7; }
+
+  footer {
+    text-align: center;
+    padding: 32px;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⚡ DistSys</div>
+  <a href="#dss"       class="nav-pill">💾 Storage Systems</a>
+  <a href="#dfs"       class="nav-pill">📁 File Systems</a>
+  <a href="#cap"       class="nav-pill">⚖️ CAP Theorem</a>
+  <a href="#failures"  class="nav-pill">🔥 Failure Modes</a>
+  <a href="#splitbrain"class="nav-pill">🧠 Split Brain</a>
+  <a href="#recovery"  class="nav-pill">🔄 Recovery</a>
+  <a href="#comparison"class="nav-pill">📊 Comparison</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-tag">System Design Deep Dive</div>
+  <h1>Distributed Storage &amp;<br>File Systems</h1>
+  <p>A comprehensive guide to distributed storage architecture, file systems, failure modes, split-brain scenarios, and recovery strategies.</p>
+  <div class="hero-badges">
+    <span class="hero-badge">🗃️ DSS Architecture</span>
+    <span class="hero-badge">📂 DFS Internals</span>
+    <span class="hero-badge">⚖️ CAP Theorem</span>
+    <span class="hero-badge">🔥 Failure Models</span>
+    <span class="hero-badge">🧠 Split-Brain</span>
+    <span class="hero-badge">🔄 Consensus Algorithms</span>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 1 — DISTRIBUTED STORAGE SYSTEMS
+══════════════════════════════════════════════════════════ -->
+<div id="dss" class="section-header">
+  <div class="section-icon" style="background:var(--blue-light);">💾</div>
+  <div>
+    <h2>Distributed Storage Systems (DSS)</h2>
+    <p>How data is spread, replicated and managed across multiple nodes as a unified system</p>
+  </div>
+</div>
+
+<div class="full-card">
+  <h3>🌐 What is a Distributed Storage System?</h3>
+  <p>A Distributed Storage System (DSS) stores data across multiple physical or virtual devices connected through a network, while presenting applications with a <strong>unified storage interface</strong>. Unlike centralized storage, data is broken into smaller components, replicated for redundancy, and spread across nodes that communicate to serve read and write requests.</p>
+  <p>Each storage node has its own processing power and memory, enabling parallel operations. A central control plane manages data distribution, replication, and fault tolerance. The result: unprecedented scalability, performance, and resilience.</p>
+
+  <div class="callout callout-info">
+    <span class="callout-icon">📊</span>
+    <div class="callout-body"><strong>Why it matters:</strong> Research indicates 85% of organizations experienced data loss incidents in 2024, and 93% of businesses suffering prolonged data loss (10+ days) face bankruptcy within a year — underscoring the critical importance of robust distributed storage.</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card card-blue">
+    <span class="tag tag-blue">Core Operation</span>
+    <h3>How Data Flows</h3>
+    <div class="timeline">
+      <div class="tl-item">
+        <h4>1. Data Partitioning</h4>
+        <p>Incoming data is divided into smaller manageable chunks or blocks for distributed placement.</p>
+      </div>
+      <div class="tl-item">
+        <h4>2. Replication</h4>
+        <p>Each chunk is typically replicated 3× across different nodes or availability zones to ensure fault tolerance.</p>
+      </div>
+      <div class="tl-item">
+        <h4>3. Metadata Tracking</h4>
+        <p>A central metadata service maps each block to its physical location(s) across the cluster.</p>
+      </div>
+      <div class="tl-item">
+        <h4>4. Access &amp; Retrieval</h4>
+        <p>Clients query metadata to find block locations, then retrieve directly from data nodes — avoiding central bottlenecks.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-orange">
+    <span class="tag tag-orange">Architecture</span>
+    <h3>Key Roles &amp; Components</h3>
+    <ul>
+      <li><strong>Storage Nodes:</strong> Store actual data blocks; handle read/write ops; report health &amp; capacity</li>
+      <li><strong>Metadata Server / NameNode:</strong> Manages file-system metadata, namespace, and block-location maps — does not store file content</li>
+      <li><strong>Coordination Nodes:</strong> Oversee data replication, cluster state, and leader election</li>
+      <li><strong>Control Plane:</strong> Manages data distribution, replication factor enforcement, and fault tolerance policies</li>
+      <li><strong>Client Interface:</strong> Unified API that hides underlying complexity from applications</li>
+    </ul>
+    <div class="callout callout-info" style="margin-top:14px;">
+      <span class="callout-icon">💡</span>
+      <div class="callout-body" style="font-size:13.5px;">When a data node fails, the system automatically redistributes its data to maintain the configured replication factor without manual intervention.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Architecture SVG Diagram -->
+<div class="arch-diagram" style="margin-top:20px;">
+  <h3>🏗️ Distributed Storage — Master–Slave Architecture (HDFS-style)</h3>
+  <div class="diagram-svg-wrap">
+    <svg width="960" height="340" viewBox="0 0 960 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Background zones -->
+      <rect x="10" y="10" width="940" height="320" rx="14" fill="#f0f4fa" stroke="#e2e8f4" stroke-width="1.5"/>
+
+      <!-- Client -->
+      <rect x="40" y="130" width="130" height="80" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="105" y="162" text-anchor="middle" font-family="Inter" font-size="22" fill="#3b82f6">👤</text>
+      <text x="105" y="183" text-anchor="middle" font-family="Inter" font-size="13" font-weight="600" fill="#1d4ed8">Client</text>
+      <text x="105" y="200" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Application</text>
+
+      <!-- Arrow client → namenode -->
+      <line x1="172" y1="170" x2="245" y2="170" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5,3"/>
+      <polygon points="245,165 255,170 245,175" fill="#3b82f6"/>
+      <text x="210" y="162" text-anchor="middle" font-family="Inter" font-size="11" fill="#718096">metadata req</text>
+
+      <!-- NameNode (master) -->
+      <rect x="258" y="110" width="150" height="120" rx="12" fill="#fff7ed" stroke="#f97316" stroke-width="2.5"/>
+      <text x="333" y="148" text-anchor="middle" font-family="Inter" font-size="24" fill="#f97316">🗂</text>
+      <text x="333" y="170" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#c2410c">NameNode</text>
+      <text x="333" y="186" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Metadata + Namespace</text>
+      <text x="333" y="200" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Block Location Map</text>
+      <text x="333" y="220" text-anchor="middle" font-family="Inter" font-size="10" fill="#f97316" font-weight="600">FsImage + EditLog</text>
+
+      <!-- Arrow namenode → client return -->
+      <line x1="257" y1="182" x2="172" y2="200" stroke="#f97316" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <polygon points="172,196 166,206 176,205" fill="#f97316"/>
+      <text x="208" y="210" text-anchor="middle" font-family="Inter" font-size="11" fill="#718096">block locs</text>
+
+      <!-- Arrow namenode → data nodes -->
+      <line x1="410" y1="155" x2="500" y2="90" stroke="#f97316" stroke-width="1.5"/>
+      <line x1="410" y1="170" x2="500" y2="170" stroke="#f97316" stroke-width="1.5"/>
+      <line x1="410" y1="190" x2="500" y2="260" stroke="#f97316" stroke-width="1.5"/>
+
+      <!-- DataNode 1 -->
+      <rect x="502" y="44" width="130" height="90" rx="12" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="567" y="75" text-anchor="middle" font-family="Inter" font-size="20" fill="#22c55e">💿</text>
+      <text x="567" y="95" text-anchor="middle" font-family="Inter" font-size="13" font-weight="600" fill="#15803d">DataNode 1</text>
+      <text x="567" y="112" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Blocks A, B, D</text>
+      <text x="567" y="126" text-anchor="middle" font-family="Inter" font-size="10" fill="#22c55e">Zone A</text>
+
+      <!-- DataNode 2 -->
+      <rect x="502" y="125" width="130" height="90" rx="12" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="567" y="156" text-anchor="middle" font-family="Inter" font-size="20" fill="#22c55e">💿</text>
+      <text x="567" y="176" text-anchor="middle" font-family="Inter" font-size="13" font-weight="600" fill="#15803d">DataNode 2</text>
+      <text x="567" y="193" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Blocks B, C, E</text>
+      <text x="567" y="207" text-anchor="middle" font-family="Inter" font-size="10" fill="#22c55e">Zone A</text>
+
+      <!-- DataNode 3 -->
+      <rect x="502" y="216" width="130" height="90" rx="12" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="567" y="247" text-anchor="middle" font-family="Inter" font-size="20" fill="#22c55e">💿</text>
+      <text x="567" y="267" text-anchor="middle" font-family="Inter" font-size="13" font-weight="600" fill="#15803d">DataNode 3</text>
+      <text x="567" y="284" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Blocks A, C, D</text>
+      <text x="567" y="298" text-anchor="middle" font-family="Inter" font-size="10" fill="#22c55e">Zone B</text>
+
+      <!-- Arrows DataNode → Replica DataNode -->
+      <line x1="634" y1="89" x2="700" y2="89" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="634" y1="170" x2="700" y2="170" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="634" y1="261" x2="700" y2="261" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+      <!-- Replica DataNodes -->
+      <rect x="702" y="55" width="110" height="68" rx="12" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="757" y="80" text-anchor="middle" font-family="Inter" font-size="15" fill="#8b5cf6">🔄</text>
+      <text x="757" y="97" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#6d28d9">Replica 1</text>
+      <text x="757" y="113" text-anchor="middle" font-family="Inter" font-size="10" fill="#4a5568">Zone C</text>
+
+      <rect x="702" y="137" width="110" height="68" rx="12" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="757" y="162" text-anchor="middle" font-family="Inter" font-size="15" fill="#8b5cf6">🔄</text>
+      <text x="757" y="179" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#6d28d9">Replica 2</text>
+      <text x="757" y="195" text-anchor="middle" font-family="Inter" font-size="10" fill="#4a5568">Zone C</text>
+
+      <rect x="702" y="227" width="110" height="68" rx="12" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="757" y="252" text-anchor="middle" font-family="Inter" font-size="15" fill="#8b5cf6">🔄</text>
+      <text x="757" y="269" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#6d28d9">Replica 3</text>
+      <text x="757" y="285" text-anchor="middle" font-family="Inter" font-size="10" fill="#4a5568">Zone D</text>
+
+      <!-- Heartbeat arrows -->
+      <line x1="567" y1="136" x2="567" y2="125" stroke="#22c55e" stroke-width="1" stroke-dasharray="2,2"/>
+      <line x1="567" y1="215" x2="567" y2="216" stroke="#22c55e" stroke-width="1" stroke-dasharray="2,2"/>
+
+      <!-- Legend -->
+      <rect x="820" y="44" width="118" height="148" rx="10" fill="white" stroke="#e2e8f4" stroke-width="1.5"/>
+      <text x="879" y="64" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="#1e2a3b">LEGEND</text>
+      <line x1="831" y1="76" x2="855" y2="76" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5,3"/>
+      <text x="861" y="80" font-family="Inter" font-size="11" fill="#4a5568">Metadata</text>
+      <line x1="831" y1="95" x2="855" y2="95" stroke="#f97316" stroke-width="1.5"/>
+      <text x="861" y="99" font-family="Inter" font-size="11" fill="#4a5568">Management</text>
+      <line x1="831" y1="114" x2="855" y2="114" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="861" y="118" font-family="Inter" font-size="11" fill="#4a5568">Replication</text>
+      <rect x="831" y="127" width="14" height="10" rx="3" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="861" y="137" font-family="Inter" font-size="11" fill="#4a5568">DataNode</text>
+      <rect x="831" y="148" width="14" height="10" rx="3" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="861" y="158" font-family="Inter" font-size="11" fill="#4a5568">Replica</text>
+      <rect x="831" y="169" width="14" height="10" rx="3" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+      <text x="861" y="179" font-family="Inter" font-size="11" fill="#4a5568">Master</text>
+    </svg>
+  </div>
+</div>
+
+<div class="grid-3" style="margin-top:0;">
+  <div class="card card-green">
+    <span class="tag tag-green">Storage Types</span>
+    <h3>Block Storage</h3>
+    <p>Divides data into fixed-size blocks, each with a unique address. Ideal for databases and random I/O with low latency (e.g., NVMe-oF volumes, AWS EBS).</p>
+  </div>
+  <div class="card card-orange">
+    <span class="tag tag-orange">Storage Types</span>
+    <h3>Object Storage</h3>
+    <p>Stores data as objects with metadata and unique identifiers in a flat namespace. Highly scalable for unstructured data (e.g., Amazon S3, Ceph RADOS).</p>
+  </div>
+  <div class="card card-purple">
+    <span class="tag tag-purple">Storage Types</span>
+    <h3>File Storage (DFS)</h3>
+    <p>Presents files in hierarchical namespaces across distributed nodes, appearing as a single logical filesystem (e.g., HDFS, GFS, GlusterFS).</p>
+  </div>
+</div>
+
+<!-- REPLICATION MODELS -->
+<div class="full-card" style="margin-top:20px;">
+  <h3>🔁 Replication Models</h3>
+  <div class="grid-2">
+    <div>
+      <div class="tag tag-blue">Synchronous</div>
+      <p style="font-size:15px;color:var(--text-secondary);margin-top:8px;">Data is copied to <em>all</em> replicas before write is acknowledged to the client. Guarantees strong consistency but increases write latency. Used in financial systems.</p>
+      <span class="code-label">pseudocode</span>
+      <div class="code-block">
+<pre><span class="cm">// Synchronous write path</span>
+<span class="ck">function</span> <span class="cn">write</span>(data):
+  primary.write(data)
+  replica1.write(data)  <span class="cm">// await</span>
+  replica2.write(data)  <span class="cm">// await</span>
+  <span class="cs">return</span> ACK  <span class="cm">// only after ALL replicas confirm</span></pre>
+      </div>
+    </div>
+    <div>
+      <div class="tag tag-orange">Asynchronous</div>
+      <p style="font-size:15px;color:var(--text-secondary);margin-top:8px;">Write is acknowledged immediately after the primary stores data. Replicas are updated asynchronously. Lower latency, eventual consistency risk. Used in content delivery.</p>
+      <span class="code-label">pseudocode</span>
+      <div class="code-block">
+<pre><span class="cm">// Asynchronous write path</span>
+<span class="ck">function</span> <span class="cn">write</span>(data):
+  primary.write(data)
+  <span class="cs">return</span> ACK  <span class="cm">// immediate acknowledgment</span>
+  <span class="cm">// replicas updated in background</span>
+  replicate_async(data, [r1, r2])</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 2 — DISTRIBUTED FILE SYSTEMS
+══════════════════════════════════════════════════════════ -->
+<div id="dfs" class="section-header">
+  <div class="section-icon" style="background:var(--orange-light);">📁</div>
+  <div>
+    <h2>Distributed File Systems (DFS)</h2>
+    <p>Hierarchical file abstractions spanning multiple nodes — HDFS, GFS, Ceph, and beyond</p>
+  </div>
+</div>
+
+<div class="full-card">
+  <h3>📂 What is a Distributed File System?</h3>
+  <p>A Distributed File System (DFS) allows data to be stored across multiple storage nodes and locations while appearing to users and applications as a <strong>single, unified system</strong>. Multiple clients access data stored on different servers, with each server holding primary copies and replicas to ensure fault tolerance and availability.</p>
+  <div class="grid-2" style="margin-top:16px;">
+    <div>
+      <h4 style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Core Characteristics</h4>
+      <ul style="font-size:15px;color:var(--text-secondary);padding-left:18px;">
+        <li><strong>Transparency:</strong> Users see one logical storage system</li>
+        <li><strong>Replication:</strong> Multiple copies of each data block</li>
+        <li><strong>Scalability:</strong> Horizontal expansion by adding nodes</li>
+        <li><strong>Fault Tolerance:</strong> Automatic re-replication on node failure</li>
+        <li><strong>Consistency Models:</strong> Configurable from strong to eventual</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:10px;">Engineering Challenges</h4>
+      <ul style="font-size:15px;color:var(--text-secondary);padding-left:18px;">
+        <li>Keeping replicas synchronized under high write loads</li>
+        <li>Network overhead for every data transfer</li>
+        <li>Intelligent load balancing to avoid hotspots</li>
+        <li>Continuous health monitoring and automatic re-replication</li>
+        <li>Security across multiple nodes and regions</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- DFS Systems Cards -->
+<div class="grid-3">
+  <div class="card card-blue">
+    <span class="tag tag-blue">Google</span>
+    <h3>GFS / Colossus</h3>
+    <p>GFS pioneered the pattern: single master + chunk servers. Colossus evolved this with a <strong>distributed metadata model</strong>, eliminating the single-master bottleneck and enabling parallelized metadata operations across multiple servers.</p>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">Use case: Large sequential reads, batch analytics, search indexing</div>
+  </div>
+  <div class="card card-orange">
+    <span class="tag tag-orange">Apache</span>
+    <h3>HDFS</h3>
+    <p>Master-slave: single <strong>NameNode</strong> manages FsImage (namespace tree) + EditLog (change journal). DataNodes store actual blocks and send heartbeats. Designed for enormous sequential file reads (MapReduce).</p>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">Use case: Hadoop ecosystem, big data batch processing</div>
+  </div>
+  <div class="card card-purple">
+    <span class="tag tag-purple">Meta</span>
+    <h3>Haystack / f4</h3>
+    <p>Haystack solved massive photo storage by reducing metadata I/O: each photo stored in large <em>volumes</em> with an in-memory index. f4 added erasure coding for warm storage, reducing storage footprint by ~50%.</p>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">Use case: Billions of small files (photos, media blobs)</div>
+  </div>
+</div>
+
+<!-- HDFS Write Path -->
+<div class="arch-diagram" style="margin-top:20px;">
+  <h3>📝 HDFS Write Path — How a File Gets Written</h3>
+  <div class="diagram-svg-wrap">
+    <svg width="900" height="220" viewBox="0 0 900 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="880" height="200" rx="14" fill="#f8faff" stroke="#e2e8f4" stroke-width="1.5"/>
+
+      <!-- Steps -->
+      <!-- Step 1 -->
+      <rect x="30" y="70" width="120" height="80" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="90" y="97" text-anchor="middle" font-family="Inter" font-size="18">👤</text>
+      <text x="90" y="115" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#1d4ed8">1. Client</text>
+      <text x="90" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Initiates write</text>
+      <text x="90" y="143" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">to NameNode</text>
+
+      <polygon points="155,110 172,103 172,117" fill="#f97316"/>
+      <line x1="152" y1="110" x2="172" y2="110" stroke="#f97316" stroke-width="2"/>
+
+      <!-- Step 2 -->
+      <rect x="175" y="70" width="130" height="80" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+      <text x="240" y="97" text-anchor="middle" font-family="Inter" font-size="18">🗂</text>
+      <text x="240" y="115" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#c2410c">2. NameNode</text>
+      <text x="240" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Splits file → blocks</text>
+      <text x="240" y="143" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Assigns DataNodes</text>
+
+      <polygon points="310,110 327,103 327,117" fill="#22c55e"/>
+      <line x1="307" y1="110" x2="327" y2="110" stroke="#22c55e" stroke-width="2"/>
+
+      <!-- Step 3 -->
+      <rect x="330" y="70" width="130" height="80" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="395" y="97" text-anchor="middle" font-family="Inter" font-size="18">💿</text>
+      <text x="395" y="115" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#15803d">3. DataNode 1</text>
+      <text x="395" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Stores block</text>
+      <text x="395" y="143" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Pipelines to DN2</text>
+
+      <polygon points="465,110 482,103 482,117" fill="#8b5cf6"/>
+      <line x1="462" y1="110" x2="482" y2="110" stroke="#8b5cf6" stroke-width="2"/>
+
+      <!-- Step 4 -->
+      <rect x="485" y="70" width="130" height="80" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="550" y="97" text-anchor="middle" font-family="Inter" font-size="18">💿</text>
+      <text x="550" y="115" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#6d28d9">4. DataNode 2</text>
+      <text x="550" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Replicates block</text>
+      <text x="550" y="143" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Pipelines to DN3</text>
+
+      <polygon points="620,110 637,103 637,117" fill="#22c55e"/>
+      <line x1="617" y1="110" x2="637" y2="110" stroke="#22c55e" stroke-width="2"/>
+
+      <!-- Step 5 -->
+      <rect x="640" y="70" width="130" height="80" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="705" y="97" text-anchor="middle" font-family="Inter" font-size="18">💿</text>
+      <text x="705" y="115" text-anchor="middle" font-family="Inter" font-size="12" font-weight="600" fill="#15803d">5. DataNode 3</text>
+      <text x="705" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Final replica</text>
+      <text x="705" y="143" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">ACK back up chain</text>
+
+      <!-- Return ACK arrow -->
+      <path d="M 760 158 Q 830 190 840 170 Q 850 155 810 155 Q 760 155 90 155 Q 60 155 60 158" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+      <polygon points="60,155 52,161 68,163" fill="#3b82f6"/>
+      <text x="450" y="190" text-anchor="middle" font-family="Inter" font-size="12" fill="#3b82f6" font-weight="600">✅ Write ACK propagates back to Client</text>
+
+      <!-- Header labels -->
+      <text x="450" y="38" text-anchor="middle" font-family="Inter" font-size="13" font-weight="600" fill="#718096">Pipeline Replication: 3 replicas written in a chain for fault tolerance</text>
+    </svg>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 3 — CAP THEOREM
+══════════════════════════════════════════════════════════ -->
+<div id="cap" class="section-header">
+  <div class="section-icon" style="background:var(--purple-light);">⚖️</div>
+  <div>
+    <h2>CAP Theorem</h2>
+    <p>The fundamental trade-off governing all distributed storage design decisions</p>
+  </div>
+</div>
+
+<div class="full-card">
+  <h3>⚖️ You Can Only Pick Two</h3>
+  <p>The CAP theorem (proved 2002) states that a distributed system cannot simultaneously guarantee all three of: <strong>Consistency</strong>, <strong>Availability</strong>, and <strong>Partition Tolerance</strong>. This theorem guides every distributed storage architecture decision.</p>
+
+  <div style="display:flex;justify-content:center;margin:28px 0 24px;">
+    <svg width="480" height="340" viewBox="0 0 480 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Triangle -->
+      <polygon points="240,30 60,300 420,300" fill="none" stroke="#e2e8f4" stroke-width="2"/>
+      <!-- Filled regions -->
+      <polygon points="240,30 150,165 60,300" fill="#eff6ff" opacity="0.6"/>
+      <polygon points="240,30 330,165 420,300" fill="#f5f3ff" opacity="0.6"/>
+      <polygon points="60,300 240,300 420,300 330,165 150,165" fill="#f0fdf4" opacity="0.6"/>
+      <!-- Triangle outline redraw -->
+      <polygon points="240,30 60,300 420,300" fill="none" stroke="#e2e8f4" stroke-width="2"/>
+
+      <!-- Vertices -->
+      <circle cx="240" cy="30" r="30" fill="#3b82f6"/>
+      <text x="240" y="24" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="white">CONSISTENCY</text>
+      <text x="240" y="38" text-anchor="middle" font-family="Inter" font-size="10" fill="white">C</text>
+
+      <circle cx="60" cy="300" r="30" fill="#22c55e"/>
+      <text x="60" y="296" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="white">AVAILABILITY</text>
+      <text x="60" y="308" text-anchor="middle" font-family="Inter" font-size="10" fill="white">A</text>
+
+      <circle cx="420" cy="300" r="30" fill="#8b5cf6"/>
+      <text x="420" y="296" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="white">PARTITION</text>
+      <text x="420" y="308" text-anchor="middle" font-family="Inter" font-size="10" fill="white">P</text>
+
+      <!-- Zone labels -->
+      <text x="150" y="155" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#1d4ed8">CA</text>
+      <text x="150" y="172" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">PostgreSQL</text>
+      <text x="150" y="188" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">MySQL Cluster</text>
+
+      <text x="330" y="155" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#6d28d9">CP</text>
+      <text x="330" y="172" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">MongoDB</text>
+      <text x="330" y="188" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">HBase, Zookeeper</text>
+
+      <text x="240" y="258" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#15803d">AP</text>
+      <text x="240" y="275" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Cassandra</text>
+      <text x="240" y="291" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">DynamoDB, CouchDB</text>
+
+      <!-- Center note -->
+      <circle cx="240" cy="210" r="22" fill="white" stroke="#e2e8f4" stroke-width="1.5"/>
+      <text x="240" y="207" text-anchor="middle" font-family="Inter" font-size="11" fill="#718096">pick</text>
+      <text x="240" y="220" text-anchor="middle" font-family="Inter" font-size="10" font-weight="700" fill="#1e2a3b">2 of 3</text>
+    </svg>
+  </div>
+
+  <div class="grid-3">
+    <div style="text-align:center;padding:16px;background:var(--blue-light);border-radius:12px;">
+      <div style="font-size:22px;margin-bottom:8px;">🔵</div>
+      <div style="font-weight:700;color:var(--blue-dark);font-size:15px;">Consistency</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);margin-top:6px;">All replicas return the same data at any given time</div>
+    </div>
+    <div style="text-align:center;padding:16px;background:var(--green-light);border-radius:12px;">
+      <div style="font-size:22px;margin-bottom:8px;">🟢</div>
+      <div style="font-weight:700;color:var(--green-dark);font-size:15px;">Availability</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);margin-top:6px;">System always responds to requests, even under failure</div>
+    </div>
+    <div style="text-align:center;padding:16px;background:var(--purple-light);border-radius:12px;">
+      <div style="font-size:22px;margin-bottom:8px;">🟣</div>
+      <div style="font-weight:700;color:var(--purple-dark);font-size:15px;">Partition Tolerance</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);margin-top:6px;">System operates despite network partitions between nodes</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 4 — FAILURE MODES
+══════════════════════════════════════════════════════════ -->
+<div id="failures" class="section-header">
+  <div class="section-icon" style="background:var(--red-light);">🔥</div>
+  <div>
+    <h2>Distributed System Failure Modes</h2>
+    <p>The taxonomy of how and why distributed systems fail — and what each failure pattern means for recovery</p>
+  </div>
+</div>
+
+<div class="callout callout-warn">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-body"><strong>Failure is the default, not the exception.</strong> In large distributed systems with hundreds of nodes, hardware failures occur daily. The system must be architected to detect, isolate, and recover from each failure category automatically — without operator intervention.</div>
+</div>
+
+<div class="grid-2" style="margin-top:20px;">
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--blue-light);">
+      <div class="fail-card-icon" style="background:var(--blue-mid);">🛑</div>
+      <div>
+        <span class="tag tag-blue" style="margin-bottom:4px;">Fail-Stop</span>
+        <h3 style="color:var(--blue-dark);">Fail-Stop Failure</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>The node simply stops functioning and the rest of the system quickly detects it is gone. The clearest, easiest failure to handle.</p>
+      <h4 style="color:var(--blue-dark);">Behavior</h4>
+      <ul>
+        <li>Node halts all operations immediately</li>
+        <li>Failure is detectable via missed heartbeats</li>
+        <li>No corrupted state propagated</li>
+      </ul>
+      <h4 style="color:var(--blue-dark);">Recovery</h4>
+      <ul>
+        <li>Leader election to reassign responsibilities</li>
+        <li>Re-replication of blocks from the failed node</li>
+        <li>Apache Kafka &amp; Kubernetes use health checks + timeouts</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--orange-light);">
+      <div class="fail-card-icon" style="background:var(--orange-mid);">💥</div>
+      <div>
+        <span class="tag tag-orange" style="margin-bottom:4px;">Crash Failure</span>
+        <h3 style="color:var(--orange-dark);">Crash Failure</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>Similar to fail-stop, but the component fails silently — its failure may not be immediately obvious to the rest of the system.</p>
+      <h4 style="color:var(--orange-dark);">Behavior</h4>
+      <ul>
+        <li>Node crashes without alerting peers</li>
+        <li>Detection requires waiting for timeouts</li>
+        <li>Transient failures (GC pause, network hiccup) can look identical</li>
+      </ul>
+      <h4 style="color:var(--orange-dark);">Recovery</h4>
+      <ul>
+        <li>Timeout-based failure detection with exponential backoff</li>
+        <li>Heartbeat monitoring with careful tuning to avoid false positives</li>
+        <li>Leader election after confirmed timeout</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--red-light);">
+      <div class="fail-card-icon" style="background:var(--red-mid);">🕸️</div>
+      <div>
+        <span class="tag tag-red" style="margin-bottom:4px;">Network Partition</span>
+        <h3 style="color:var(--red);">Network Partition</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>Communication between components is interrupted, but each component continues to operate independently — leading to divergent state.</p>
+      <h4 style="color:var(--red);">Causes</h4>
+      <ul>
+        <li>Network outages, switch failures, firewall misconfiguration</li>
+        <li>Each partition believes the other has failed</li>
+        <li>Both sides may promote themselves to leader → <strong>split-brain</strong></li>
+      </ul>
+      <h4 style="color:var(--red);">Recovery</h4>
+      <ul>
+        <li>Quorum-based consensus (only majority partition acts)</li>
+        <li>Eventual consistency + conflict resolution when healed</li>
+        <li>CRDTs (Conflict-free Replicated Data Types)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--purple-light);">
+      <div class="fail-card-icon" style="background:var(--purple-mid);">☠️</div>
+      <div>
+        <span class="tag tag-purple" style="margin-bottom:4px;">Byzantine Failure</span>
+        <h3 style="color:var(--purple-dark);">Byzantine Failure</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>Nodes exhibit arbitrary or malicious behavior — sending conflicting, incorrect, or inconsistent information to different peers.</p>
+      <h4 style="color:var(--purple-dark);">Behavior</h4>
+      <ul>
+        <li>Compromised or buggy node sends different data to different peers</li>
+        <li>Extremely difficult to detect and diagnose</li>
+        <li>E.g., a voting node sending different tallies to different replicas</li>
+      </ul>
+      <h4 style="color:var(--purple-dark);">Recovery</h4>
+      <ul>
+        <li>Byzantine Fault Tolerance (BFT) algorithms — PBFT</li>
+        <li>Majority consensus to filter malicious components</li>
+        <li>Blockchain systems use BFT-inspired techniques</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--green-light);">
+      <div class="fail-card-icon" style="background:var(--green-mid);">⚡</div>
+      <div>
+        <span class="tag tag-green" style="margin-bottom:4px;">Transient Failure</span>
+        <h3 style="color:var(--green-dark);">Transient Failure</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>Failures that occur temporarily and may resolve on their own — caused by transient environmental conditions or network glitches.</p>
+      <h4 style="color:var(--green-dark);">Behavior</h4>
+      <ul>
+        <li>Temporary unavailability (GC pause, CPU spike)</li>
+        <li>Challenging to reproduce and diagnose</li>
+        <li>Risk: system may incorrectly treat as permanent failure</li>
+      </ul>
+      <h4 style="color:var(--green-dark);">Recovery</h4>
+      <ul>
+        <li>Retry mechanisms with exponential backoff</li>
+        <li>Careful timeout tuning to distinguish from real failures</li>
+        <li>Monitoring and logging for pattern identification</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fail-card">
+    <div class="fail-card-header" style="background:var(--orange-light);">
+      <div class="fail-card-icon" style="background:var(--orange-mid);">🐌</div>
+      <div>
+        <span class="tag tag-orange" style="margin-bottom:4px;">Performance Failure</span>
+        <h3 style="color:var(--orange-dark);">Performance Degradation</h3>
+      </div>
+    </div>
+    <div class="fail-card-body">
+      <p>Nodes degrade in performance, leading to slower response times or reduced throughput — a "gray failure" that's hard to detect.</p>
+      <h4 style="color:var(--orange-dark);">Behavior</h4>
+      <ul>
+        <li>Resource contention, bottlenecks, hardware degradation</li>
+        <li>Node is still "alive" but responds slowly</li>
+        <li>Can cascade to affect dependent services</li>
+      </ul>
+      <h4 style="color:var(--orange-dark);">Recovery</h4>
+      <ul>
+        <li>Circuit breakers to shed load from slow nodes</li>
+        <li>Load balancing to redistribute traffic</li>
+        <li>Prometheus/Grafana for continuous performance monitoring</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 5 — SPLIT BRAIN
+══════════════════════════════════════════════════════════ -->
+<div id="splitbrain" class="section-header">
+  <div class="section-icon" style="background:var(--red-light);">🧠</div>
+  <div>
+    <h2>Split-Brain Scenarios</h2>
+    <p>When a cluster divides into isolated groups that each believe they are the sole authority</p>
+  </div>
+</div>
+
+<div class="full-card">
+  <h3>🧠 What is Split-Brain?</h3>
+  <p>Split-brain occurs when a distributed system has <strong>two or more active leaders</strong> simultaneously. It is caused by a network partition or communication failure that divides cluster nodes into isolated groups, each unaware of the other — and each believing it is the only active set of nodes.</p>
+  <p>The result: servers may record the same data inconsistently, compete for resources, or make conflicting decisions. This can shut down the cluster or, worse, cause <strong>silent data corruption</strong>.</p>
+
+  <div class="callout callout-danger">
+    <span class="callout-icon">🚨</span>
+    <div class="callout-body"><strong>The Zombie Leader Problem:</strong> A leader node experiencing an intermittent failure (e.g., a stop-the-world GC pause) gets declared dead, and a new leader is elected. When the original leader recovers, it doesn't know it was replaced. The system now has two active leaders issuing conflicting commands.</div>
+  </div>
+</div>
+
+<!-- Split Brain Diagram -->
+<div class="arch-diagram">
+  <h3>🕸️ Split-Brain Scenario — 5-Node Cluster During Network Partition</h3>
+  <div class="diagram-svg-wrap">
+    <svg width="900" height="280" viewBox="0 0 900 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="10" width="880" height="260" rx="14" fill="#f8faff" stroke="#e2e8f4" stroke-width="1.5"/>
+
+      <!-- Zone A (majority) -->
+      <rect x="30" y="30" width="360" height="220" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2" stroke-dasharray="0"/>
+      <text x="210" y="54" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#1d4ed8">Zone A — Majority Partition (3 nodes → QUORUM ✅)</text>
+
+      <!-- Zone A Nodes -->
+      <rect x="50" y="70" width="90" height="80" rx="10" fill="white" stroke="#3b82f6" stroke-width="2"/>
+      <text x="95" y="98" text-anchor="middle" font-family="Inter" font-size="20">👑</text>
+      <text x="95" y="116" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="#1d4ed8">Node 1</text>
+      <text x="95" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">NEW Leader</text>
+      <text x="95" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#3b82f6">gen=2</text>
+
+      <rect x="165" y="70" width="90" height="80" rx="10" fill="white" stroke="#22c55e" stroke-width="2"/>
+      <text x="210" y="98" text-anchor="middle" font-family="Inter" font-size="20">📦</text>
+      <text x="210" y="116" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="#15803d">Node 2</text>
+      <text x="210" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Follower</text>
+      <text x="210" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#22c55e">gen=2</text>
+
+      <rect x="280" y="70" width="90" height="80" rx="10" fill="white" stroke="#22c55e" stroke-width="2"/>
+      <text x="325" y="98" text-anchor="middle" font-family="Inter" font-size="20">📦</text>
+      <text x="325" y="116" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="#15803d">Node 3</text>
+      <text x="325" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Follower</text>
+      <text x="325" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#22c55e">gen=2</text>
+
+      <!-- Zone A - serving writes -->
+      <text x="210" y="195" text-anchor="middle" font-family="Inter" font-size="12" fill="#15803d" font-weight="600">✅ Accepts reads &amp; writes (has quorum)</text>
+      <text x="210" y="212" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Elects new leader, increments generation</text>
+
+      <!-- Partition wall -->
+      <rect x="404" y="30" width="92" height="220" rx="0" fill="none"/>
+      <line x1="450" y1="30" x2="450" y2="250" stroke="#ef4444" stroke-width="3" stroke-dasharray="8,4"/>
+      <rect x="415" y="120" width="70" height="30" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="450" y="131" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="#ef4444">NETWORK</text>
+      <text x="450" y="145" text-anchor="middle" font-family="Inter" font-size="11" font-weight="700" fill="#ef4444">PARTITION</text>
+      <text x="450" y="80" text-anchor="middle" font-family="Inter" font-size="20">🚫</text>
+
+      <!-- Zone B (minority) -->
+      <rect x="510" y="30" width="360" height="220" rx="12" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+      <text x="690" y="54" text-anchor="middle" font-family="Inter" font-size="13" font-weight="700" fill="#c2410c">Zone B — Minority Partition (2 nodes → NO QUORUM ❌)</text>
+
+      <!-- Zone B Nodes -->
+      <rect x="530" y="70" width="90" height="80" rx="10" fill="white" stroke="#f97316" stroke-width="2"/>
+      <text x="575" y="98" text-anchor="middle" font-family="Inter" font-size="20">👻</text>
+      <text x="575" y="116" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="#c2410c">Node 4</text>
+      <text x="575" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Old Leader?</text>
+      <text x="575" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#f97316">gen=1</text>
+
+      <rect x="650" y="70" width="90" height="80" rx="10" fill="white" stroke="#f97316" stroke-width="2"/>
+      <text x="695" y="98" text-anchor="middle" font-family="Inter" font-size="20">📦</text>
+      <text x="695" y="116" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="#c2410c">Node 5</text>
+      <text x="695" y="131" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Follower</text>
+      <text x="695" y="143" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#f97316">gen=1</text>
+
+      <!-- Zone B - read only -->
+      <text x="690" y="195" text-anchor="middle" font-family="Inter" font-size="12" fill="#c2410c" font-weight="600">🚫 Should reject writes (no quorum)</text>
+      <text x="690" y="212" text-anchor="middle" font-family="Inter" font-size="11" fill="#4a5568">Or risk data inconsistency / corruption</text>
+    </svg>
+  </div>
+</div>
+
+<!-- Generation Clock -->
+<div class="full-card" style="margin-top:20px;">
+  <h3>🕰️ Generation Clocks — Detecting Zombie Leaders</h3>
+  <p>Every time a new leader is elected, the <strong>generation number</strong> (also called "epoch" or "term" in Raft) is incremented. This generation number is included in every request the leader sends to followers. When an old leader reconnects, its stale generation number immediately identifies it as a zombie leader — allowing all nodes to ignore its requests.</p>
+  <span class="code-label">Raft-style generation clock logic</span>
+  <div class="code-block">
+<pre><span class="cm">// When a node receives a request from a leader:</span>
+<span class="ck">function</span> <span class="cn">handle_leader_request</span>(request, node_state):
+  <span class="ck">if</span> request.generation &lt; node_state.current_generation:
+    <span class="cm">// Stale leader — zombie detected!</span>
+    <span class="cs">reject</span>(request, reason=<span class="cv">"STALE_GENERATION"</span>)
+    send_current_term(request.sender, node_state.current_generation)
+    <span class="cs">return</span>
+
+  <span class="ck">if</span> request.generation &gt; node_state.current_generation:
+    <span class="cm">// We are behind — step down from any leadership role</span>
+    node_state.current_generation = request.generation
+    node_state.role = <span class="cv">FOLLOWER</span>
+
+  <span class="cm">// Normal processing: valid leader with current generation</span>
+  process(request)</pre>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 6 — RECOVERY STRATEGIES
+══════════════════════════════════════════════════════════ -->
+<div id="recovery" class="section-header">
+  <div class="section-icon" style="background:var(--green-light);">🔄</div>
+  <div>
+    <h2>Failure Handling &amp; Recovery Strategies</h2>
+    <p>Consensus algorithms, quorum systems, fencing, and self-healing mechanisms</p>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="stat-chip">
+    <div class="stat-val" style="color:var(--blue);">N/2+1</div>
+    <div class="stat-lbl">Quorum formula for N nodes</div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-val" style="color:var(--orange);">3×</div>
+    <div class="stat-lbl">Default replication factor (HDFS)</div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-val" style="color:var(--purple);">2f+1</div>
+    <div class="stat-lbl">Nodes needed to tolerate f failures</div>
+  </div>
+  <div class="stat-chip">
+    <div class="stat-val" style="color:var(--green);">Odd</div>
+    <div class="stat-lbl">Node count prevents tie votes</div>
+  </div>
+</div>
+
+<!-- Raft consensus visual -->
+<div class="full-card" style="margin-top:20px;">
+  <h3>⚙️ Raft Consensus Algorithm — Leader Election</h3>
+  <p>Raft is the most widely-used consensus protocol for leader election. To elect a leader, a candidate must receive votes from a <strong>majority (quorum)</strong> of nodes. In a 5-node system, at least 3 nodes must agree. This guarantees only one leader can exist at any time.</p>
+
+  <div style="background:var(--blue-light);border-radius:12px;padding:20px;margin:16px 0;">
+    <h4 style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:14px;">Normal Operation → Leader Fails → New Election</h4>
+
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
+      <!-- Phase 1 -->
+      <div style="flex:1;min-width:180px;text-align:center;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">Phase 1: Normal</div>
+        <div class="node-viz">
+          <div class="node-box node-leader">
+            <span class="node-icon">👑</span>
+            N1
+            <div class="node-role">Leader</div>
+          </div>
+          <div class="node-box node-follower">
+            <span class="node-icon">📦</span>
+            N2
+            <div class="node-role">Follower</div>
+          </div>
+          <div class="node-box node-follower">
+            <span class="node-icon">📦</span>
+            N3
+            <div class="node-role">Follower</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:28px;color:var(--text-muted);">→</div>
+
+      <!-- Phase 2 -->
+      <div style="flex:1;min-width:180px;text-align:center;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">Phase 2: N1 Fails</div>
+        <div class="node-viz">
+          <div class="node-box node-dead">
+            <span class="node-icon">💀</span>
+            N1
+            <div class="node-role">DEAD</div>
+          </div>
+          <div class="node-box node-candidate">
+            <span class="node-icon">🗳️</span>
+            N2
+            <div class="node-role">Candidate</div>
+          </div>
+          <div class="node-box node-follower">
+            <span class="node-icon">📦</span>
+            N3
+            <div class="node-role">Voted</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:28px;color:var(--text-muted);">→</div>
+
+      <!-- Phase 3 -->
+      <div style="flex:1;min-width:180px;text-align:center;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">Phase 3: N2 Elected</div>
+        <div class="node-viz">
+          <div class="node-box node-dead">
+            <span class="node-icon">⚫</span>
+            N1
+            <div class="node-role">Gone</div>
+          </div>
+          <div class="node-box node-leader">
+            <span class="node-icon">👑</span>
+            N2
+            <div class="node-role">NEW Leader</div>
+          </div>
+          <div class="node-box node-follower">
+            <span class="node-icon">📦</span>
+            N3
+            <div class="node-role">Follower</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Prevention Strategies -->
+<div style="margin-top:20px;">
+  <h3 style="font-size:20px;font-weight:700;margin-bottom:16px;color:var(--text-primary);">🛡️ Split-Brain Prevention Strategies</h3>
+
+  <div class="accordion-item">
+    <button class="accordion-trigger" onclick="toggleAcc(this)">
+      <span>⚖️ &nbsp;Quorum-Based Consensus</span>
+      <span class="acc-icon" style="background:var(--blue-light);color:var(--blue);">▾</span>
+    </button>
+    <div class="accordion-body">
+      <div class="accordion-inner">
+        <p>Require a majority (N/2 + 1) of nodes to agree before any write or leadership decision. Only the partition with quorum continues operating. The minority partition rejects writes and waits for reconnection.</p>
+        <ul>
+          <li><strong>etcd + Raft:</strong> 5-node cluster requires 3 votes. If Zone A has 3 nodes and Zone B has 2, only Zone A proceeds.</li>
+          <li><strong>ZooKeeper:</strong> Ensemble of servers uses leader election with quorum to prevent dual-leader scenarios.</li>
+          <li><strong>DynamoDB Global Tables:</strong> Uses quorum-based techniques across regions to determine the authoritative source for updates.</li>
+          <li>Deploy clusters with <em>odd numbers</em> of nodes (3, 5, 7) to always guarantee a quorum majority.</li>
+        </ul>
+        <div class="callout callout-info" style="margin-top:12px;">
+          <span class="callout-icon">💡</span>
+          <div class="callout-body" style="font-size:13.5px;">A node that cannot reach quorum (N/2 + 1) knows it is in the minority and stops making decisions — even if it's otherwise healthy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <button class="accordion-trigger" onclick="toggleAcc(this)">
+      <span>🔪 &nbsp;Fencing (STONITH)</span>
+      <span class="acc-icon" style="background:var(--red-light);color:var(--red);">▾</span>
+    </button>
+    <div class="accordion-body">
+      <div class="accordion-inner">
+        <p>Fencing forcefully isolates or shuts down the other partition to guarantee only one active node can modify data at any time. <strong>STONITH = "Shoot The Other Node In The Head."</strong></p>
+        <ul>
+          <li>Power switches or management cards physically power off the presumed-dead node</li>
+          <li>Cuts network access to shared storage from the fenced node</li>
+          <li>Guarantees no zombie leader can continue issuing commands</li>
+          <li>Combined with quorum in enterprise cluster managers (Pacemaker/Corosync)</li>
+          <li>Used in high-availability database clusters to prevent dual-primary scenarios</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <button class="accordion-trigger" onclick="toggleAcc(this)">
+      <span>💓 &nbsp;Heartbeat Monitoring &amp; Timeout Tuning</span>
+      <span class="acc-icon" style="background:var(--green-light);color:var(--green);">▾</span>
+    </button>
+    <div class="accordion-body">
+      <div class="accordion-inner">
+        <p>Nodes send periodic heartbeat signals to prove they are alive. Missing heartbeats trigger failure detection — but heartbeat intervals must be carefully tuned to avoid false positives from transient network lag.</p>
+        <ul>
+          <li>Set heartbeat intervals based on measured network latency characteristics</li>
+          <li>Use adaptive timeouts that account for known transient conditions (GC pauses, high CPU)</li>
+          <li>Combine with short timeouts + robust failure detection mechanisms</li>
+          <li>etcd: configure <code>heartbeat-interval</code> and <code>election-timeout</code> for your environment</li>
+          <li>Avoid declaring nodes dead due to a single missed heartbeat — use a threshold (e.g., 3 consecutive misses)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <button class="accordion-trigger" onclick="toggleAcc(this)">
+      <span>🔀 &nbsp;Eventual Consistency &amp; CRDTs</span>
+      <span class="acc-icon" style="background:var(--purple-light);color:var(--purple);">▾</span>
+    </button>
+    <div class="accordion-body">
+      <div class="accordion-inner">
+        <p>For AP systems that prioritize availability, allow divergence during partition and reconcile state when the partition heals using conflict resolution mechanisms.</p>
+        <ul>
+          <li><strong>CRDTs</strong> (Conflict-free Replicated Data Types) are data structures designed for automatic conflict-free merging</li>
+          <li><strong>Vector clocks</strong> track causality to determine which updates happened before others</li>
+          <li><strong>Last-Write-Wins (LWW):</strong> Simplest strategy — most recent timestamp wins on conflict</li>
+          <li><strong>Application-level resolution:</strong> Expose conflicts to the application for domain-specific merging</li>
+          <li>Amazon DynamoDB, Apache Cassandra's Lightweight Transactions (LWT) use this approach</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item">
+    <button class="accordion-trigger" onclick="toggleAcc(this)">
+      <span>🧱 &nbsp;Paxos &amp; Raft — Consensus Protocol Details</span>
+      <span class="acc-icon" style="background:var(--orange-light);color:var(--orange);">▾</span>
+    </button>
+    <div class="accordion-body">
+      <div class="accordion-inner">
+        <p>Consensus algorithms like Paxos and Raft mathematically guarantee that only one leader can be elected in any given "term" or "epoch," preventing split-brain at the protocol level.</p>
+        <ul>
+          <li><strong>Raft:</strong> Simpler and more understandable than Paxos. Used in etcd, CockroachDB, TiKV. Leader holds authority for a "term"; election requires majority.</li>
+          <li><strong>Paxos:</strong> Academic gold standard. More complex; variations include Multi-Paxos (used in Chubby, Google Spanner).</li>
+          <li><strong>Term/Epoch number:</strong> Monotonically increasing — a node with a higher term automatically supersedes one with a lower term.</li>
+          <li>Candidates campaign for votes; a vote can only be cast once per term per node.</li>
+          <li>Mathematical proof: it is impossible for two leaders to win a majority in the same term.</li>
+        </ul>
+        <span class="code-label">Raft leader election — simplified</span>
+        <div class="code-block">
+<pre><span class="cm">// Candidate node starts election:</span>
+candidate.term += 1          <span class="cm">// increment term</span>
+candidate.vote_for_self()
+votes = broadcast_vote_request(candidate.term, candidate.log_index)
+
+<span class="ck">if</span> votes >= quorum(cluster.size):
+  become_leader()            <span class="cm">// won majority → safe to lead</span>
+  broadcast_heartbeat()      <span class="cm">// suppress other elections</span>
+<span class="ck">else</span>:
+  revert_to_follower()       <span class="cm">// lost → wait for next timeout</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Node Failure Recovery: Step by Step -->
+<div class="full-card" style="margin-top:24px;">
+  <h3>🔧 Node Failure — Complete Recovery Playbook</h3>
+  <div class="timeline" style="margin-top:16px;">
+    <div class="tl-item">
+      <h4>① Failure Detection</h4>
+      <p>Heartbeat monitor detects missed responses. After configured threshold (e.g., 3 consecutive misses), the node is marked as suspected failed. Monitoring tools (Prometheus, Grafana) alert operators.</p>
+    </div>
+    <div class="tl-item">
+      <h4>② Confirmation &amp; Fencing</h4>
+      <p>Cluster confirms failure via quorum check. Fencing isolates the failed node from shared storage or powers it down (STONITH). Prevents zombie leader from causing damage.</p>
+    </div>
+    <div class="tl-item">
+      <h4>③ Leader Election (if failed node was leader)</h4>
+      <p>Remaining nodes initiate election using Raft/Paxos. Candidate with most up-to-date log and fresh term number campaigns. Majority vote → new leader promoted. Generation/term number incremented.</p>
+    </div>
+    <div class="tl-item">
+      <h4>④ Re-Replication</h4>
+      <p>Metadata server (NameNode) detects under-replicated blocks. Schedules re-replication to bring blocks back to desired replication factor (e.g., 3×). Re-replication prioritized by urgency (blocks with only 1 copy first).</p>
+    </div>
+    <div class="tl-item">
+      <h4>⑤ Load Rebalancing</h4>
+      <p>Data from the failed node is redistributed across healthy nodes. Load balancer updates routing tables to exclude the failed node. Traffic seamlessly redirected — clients experience no downtime.</p>
+    </div>
+    <div class="tl-item">
+      <h4>⑥ Node Recovery (optional)</h4>
+      <p>When the failed node comes back online, it rejoins with a clean state. It syncs missed updates from the current leader using its generation number to verify it's rejoining safely (not as a zombie).</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 7 — COMPARISON TABLE
+══════════════════════════════════════════════════════════ -->
+<div id="comparison" class="section-header">
+  <div class="section-icon" style="background:var(--green-light);">📊</div>
+  <div>
+    <h2>Systems Comparison</h2>
+    <p>Key distributed storage and file systems compared across architecture, consistency model, and use case</p>
+  </div>
+</div>
+
+<div class="full-card" style="padding:0;overflow:hidden;">
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>System</th>
+        <th>Type</th>
+        <th>Architecture</th>
+        <th>Consistency</th>
+        <th>CAP</th>
+        <th>Best For</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>HDFS</strong></td>
+        <td><span class="pill pill-orange">DFS</span></td>
+        <td>Single NameNode + DataNodes (master-slave)</td>
+        <td>Strong</td>
+        <td><span class="pill pill-blue">CP</span></td>
+        <td>Large sequential batch reads (MapReduce)</td>
+      </tr>
+      <tr>
+        <td><strong>GFS / Colossus</strong></td>
+        <td><span class="pill pill-orange">DFS</span></td>
+        <td>Distributed metadata servers + chunk servers</td>
+        <td>Strong</td>
+        <td><span class="pill pill-blue">CP</span></td>
+        <td>Google-scale search, analytics</td>
+      </tr>
+      <tr>
+        <td><strong>Amazon S3</strong></td>
+        <td><span class="pill pill-blue">Object</span></td>
+        <td>Distributed key-value (NoSQL-style)</td>
+        <td>Eventual → Strong</td>
+        <td><span class="pill pill-green">AP</span></td>
+        <td>Unstructured data, media, backups</td>
+      </tr>
+      <tr>
+        <td><strong>Apache Cassandra</strong></td>
+        <td><span class="pill pill-purple">DB / KV</span></td>
+        <td>Leaderless P2P ring (consistent hashing)</td>
+        <td>Tunable / Eventual</td>
+        <td><span class="pill pill-green">AP</span></td>
+        <td>High-write, globally distributed apps</td>
+      </tr>
+      <tr>
+        <td><strong>etcd</strong></td>
+        <td><span class="pill pill-purple">KV Store</span></td>
+        <td>Raft consensus cluster (odd nodes)</td>
+        <td>Strong (linearizable)</td>
+        <td><span class="pill pill-blue">CP</span></td>
+        <td>Config, service discovery, coordination</td>
+      </tr>
+      <tr>
+        <td><strong>MongoDB</strong></td>
+        <td><span class="pill pill-orange">Document</span></td>
+        <td>Replica sets + sharding (primary-secondary)</td>
+        <td>Strong primary / Eventual secondaries</td>
+        <td><span class="pill pill-blue">CP</span></td>
+        <td>Flexible schema applications</td>
+      </tr>
+      <tr>
+        <td><strong>GlusterFS</strong></td>
+        <td><span class="pill pill-orange">DFS</span></td>
+        <td>Distributed hash (brick-based, no master)</td>
+        <td>Eventual (with sync risk)</td>
+        <td><span class="pill pill-green">AP</span></td>
+        <td>NAS-style shared storage, VMs</td>
+      </tr>
+      <tr>
+        <td><strong>Ceph</strong></td>
+        <td><span class="pill pill-blue">Unified</span></td>
+        <td>RADOS (object) + RBD (block) + CephFS (file)</td>
+        <td>Strong</td>
+        <td><span class="pill pill-blue">CP</span></td>
+        <td>Cloud infrastructure, OpenStack, Kubernetes</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Key Takeaways -->
+<div class="full-card" style="margin-top:20px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+  <h3>🎯 Key Design Takeaways</h3>
+  <div class="grid-2" style="margin-top:12px;">
+    <div>
+      <ul style="font-size:15.5px;color:var(--text-secondary);padding-left:20px;line-height:1.8;">
+        <li>Always deploy cluster nodes in <strong>odd numbers</strong> (3, 5, 7) to guarantee quorum majority</li>
+        <li>Choose <strong>CP</strong> (Consistency + Partition Tolerance) for financial transactions, config stores, and coordination services</li>
+        <li>Choose <strong>AP</strong> (Availability + Partition Tolerance) for content delivery, social feeds, and systems that tolerate stale reads</li>
+        <li>Design <strong>failure detection</strong> to distinguish transient from permanent failures using tuned timeouts</li>
+      </ul>
+    </div>
+    <div>
+      <ul style="font-size:15.5px;color:var(--text-secondary);padding-left:20px;line-height:1.8;">
+        <li>Use <strong>generation clocks / term numbers</strong> to prevent zombie leaders from causing split-brain</li>
+        <li>Implement <strong>fencing (STONITH)</strong> in high-availability systems where data correctness is critical</li>
+        <li>Maintain at least <strong>3× replication</strong> across independent failure domains (racks, zones, data centers)</li>
+        <li>Monitor with Prometheus/Grafana; automate re-replication and leader election — humans are too slow</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<footer>
+  <p>Distributed Systems Reference Guide — Storage Systems · File Systems · Failure Modes · Split-Brain · Recovery Strategies</p>
+  <p style="margin-top:6px;font-size:12px;">Inter &amp; JetBrains Mono · Researched and compiled for system design study</p>
+</footer>
+
+<script>
+  // Accordion
+  function toggleAcc(btn) {
+    const body = btn.nextElementSibling;
+    const icon = btn.querySelector('.acc-icon');
+    const isOpen = body.classList.contains('open');
+    // close all
+    document.querySelectorAll('.accordion-body.open').forEach(b => b.classList.remove('open'));
+    document.querySelectorAll('.accordion-trigger.open').forEach(b => b.classList.remove('open'));
+    if (!isOpen) {
+      body.classList.add('open');
+      btn.classList.add('open');
+    }
+  }
+
+  // Nav active highlighting on scroll
+  const sections = ['dss','dfs','cap','failures','splitbrain','recovery','comparison'];
+  const navLinks = document.querySelectorAll('.nav-pill');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.nav-pill[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.25 });
+  sections.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      // Observe the section header element
+      const parent = el.closest('.section-header') || el;
+      observer.observe(el);
+    }
+  });
+</script>
+
+</body>
+</html>

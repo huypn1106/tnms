@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture Deep Dive: Resilience, Fault-Tolerance, HA & Scalability</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface-2: #f7f9fd;
+    --border: #e2e8f3;
+    --text: #1a2035;
+    --text-2: #4a5568;
+    --text-3: #718096;
+
+    --blue: #3b82f6;
+    --blue-light: #dbeafe;
+    --blue-mid: #93c5fd;
+    --orange: #f97316;
+    --orange-light: #ffedd5;
+    --orange-mid: #fdba74;
+    --purple: #8b5cf6;
+    --purple-light: #ede9fe;
+    --purple-mid: #c4b5fd;
+    --green: #22c55e;
+    --green-light: #dcfce7;
+    --green-mid: #86efac;
+    --red: #ef4444;
+    --red-light: #fee2e2;
+    --teal: #14b8a6;
+    --teal-light: #ccfbf1;
+    --yellow: #eab308;
+    --yellow-light: #fef9c3;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow: 0 4px 16px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04);
+    --shadow-lg: 0 10px 40px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.05);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --radius-lg: 20px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+  }
+
+  /* ── TOP NAV ── */
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 60px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topnav::-webkit-scrollbar { display: none; }
+
+  .nav-brand {
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--blue);
+    white-space: nowrap;
+    margin-right: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .nav-pill {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    text-decoration: none;
+    color: var(--text-2);
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .nav-pill:hover, .nav-pill.active {
+    background: var(--blue-light);
+    color: var(--blue);
+    border-color: var(--blue-mid);
+  }
+  .nav-pill.orange:hover, .nav-pill.orange.active { background: var(--orange-light); color: var(--orange); border-color: var(--orange-mid); }
+  .nav-pill.purple:hover, .nav-pill.purple.active { background: var(--purple-light); color: var(--purple); border-color: var(--purple-mid); }
+  .nav-pill.green:hover, .nav-pill.green.active { background: var(--green-light); color: var(--green); border-color: var(--green-mid); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1a2e50 40%, #2d1b5e 100%);
+    padding: 80px 60px 70px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.18) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(139,92,246,0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 60% 80%, rgba(34,197,94,0.1) 0%, transparent 50%);
+  }
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .hero-content { position: relative; max-width: 1100px; margin: 0 auto; }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue-mid);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.15;
+    letter-spacing: -1.5px;
+    margin-bottom: 20px;
+  }
+  .hero h1 span { color: var(--blue-mid); }
+  .hero-sub {
+    font-size: 17px;
+    color: rgba(255,255,255,0.65);
+    max-width: 680px;
+    line-height: 1.7;
+    margin-bottom: 40px;
+  }
+  .hero-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+  .hero-tag {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid;
+  }
+  .hero-tag.blue { background: rgba(59,130,246,0.15); color: #93c5fd; border-color: rgba(59,130,246,0.3); }
+  .hero-tag.orange { background: rgba(249,115,22,0.15); color: #fdba74; border-color: rgba(249,115,22,0.3); }
+  .hero-tag.purple { background: rgba(139,92,246,0.15); color: #c4b5fd; border-color: rgba(139,92,246,0.3); }
+  .hero-tag.green { background: rgba(34,197,94,0.15); color: #86efac; border-color: rgba(34,197,94,0.3); }
+
+  /* ── LAYOUT ── */
+  .main { max-width: 1200px; margin: 0 auto; padding: 60px 40px 100px; }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 80px; }
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 36px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+  }
+  .section-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .section-title-block h2 {
+    font-family: 'Sora', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+  .section-title-block p { font-size: 15px; color: var(--text-3); line-height: 1.5; }
+
+  /* ── CARDS GRID ── */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+  .cards-grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  .cards-grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 20px; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 28px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: transparent;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .card:hover::before { opacity: 1; }
+  .card.blue::before { background: linear-gradient(90deg, var(--blue), var(--blue-mid)); }
+  .card.orange::before { background: linear-gradient(90deg, var(--orange), var(--orange-mid)); }
+  .card.purple::before { background: linear-gradient(90deg, var(--purple), var(--purple-mid)); }
+  .card.green::before { background: linear-gradient(90deg, var(--green), var(--green-mid)); }
+  .card.teal::before { background: linear-gradient(90deg, var(--teal), #5eead4); }
+  .card.red::before { background: linear-gradient(90deg, var(--red), #fca5a5); }
+
+  .card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .card-badge.blue { background: var(--blue-light); color: var(--blue); }
+  .card-badge.orange { background: var(--orange-light); color: var(--orange); }
+  .card-badge.purple { background: var(--purple-light); color: var(--purple); }
+  .card-badge.green { background: var(--green-light); color: var(--green); }
+  .card-badge.teal { background: var(--teal-light); color: var(--teal); }
+  .card-badge.red { background: var(--red-light); color: var(--red); }
+  .card-badge.yellow { background: var(--yellow-light); color: var(--yellow); }
+
+  .card h3 {
+    font-family: 'Sora', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+    line-height: 1.3;
+  }
+  .card p { font-size: 15px; color: var(--text-2); line-height: 1.65; margin-bottom: 14px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: #1a2035;
+    border-radius: var(--radius-sm);
+    padding: 16px 18px;
+    margin: 14px 0;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #e2e8f0;
+  }
+  .code-block .kw { color: #93c5fd; }
+  .code-block .str { color: #86efac; }
+  .code-block .num { color: #fdba74; }
+  .code-block .cmt { color: #64748b; font-style: italic; }
+  .code-block .fn { color: #c4b5fd; }
+  .code-block .cls { color: #f9a8d4; }
+
+  /* ── DIAGRAM ── */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin: 24px 0;
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+  }
+  .diagram-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  /* ── FLOW DIAGRAM (SVG-like with divs) ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 10px 0;
+  }
+  .flow-node {
+    flex-shrink: 0;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 110px;
+    font-family: 'Inter', sans-serif;
+    border: 2px solid;
+  }
+  .flow-arrow {
+    flex-shrink: 0;
+    width: 40px;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 18px;
+    font-weight: 300;
+    position: relative;
+  }
+  .flow-arrow::before { content: '→'; }
+  .flow-arrow.dashed { color: var(--red); }
+  .flow-arrow.dashed::before { content: '⟶'; }
+
+  .fn-blue { background: var(--blue-light); color: #1d4ed8; border-color: var(--blue-mid); }
+  .fn-orange { background: var(--orange-light); color: #c2410c; border-color: var(--orange-mid); }
+  .fn-green { background: var(--green-light); color: #15803d; border-color: var(--green-mid); }
+  .fn-purple { background: var(--purple-light); color: #6d28d9; border-color: var(--purple-mid); }
+  .fn-red { background: var(--red-light); color: #b91c1c; border-color: #fca5a5; }
+  .fn-teal { background: var(--teal-light); color: #0f766e; border-color: #5eead4; }
+  .fn-yellow { background: var(--yellow-light); color: #a16207; border-color: #fde047; }
+
+  /* ── LIST ── */
+  .detail-list { list-style: none; margin: 10px 0; }
+  .detail-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    font-size: 15px;
+    color: var(--text-2);
+    border-bottom: 1px solid var(--bg);
+    line-height: 1.55;
+  }
+  .detail-list li:last-child { border-bottom: none; }
+  .detail-list li .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  /* ── TABLE ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 16px 0;
+  }
+  .data-table th {
+    background: var(--surface-2);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
+    border-bottom: 2px solid var(--border);
+  }
+  .data-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .data-table tr:hover td { background: var(--surface-2); }
+  .data-table tr:last-child td { border-bottom: none; }
+
+  /* ── FORMULA / HIGHLIGHT BOX ── */
+  .highlight-box {
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin: 14px 0;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .highlight-box.blue { background: var(--blue-light); border-left: 3px solid var(--blue); color: #1e40af; }
+  .highlight-box.orange { background: var(--orange-light); border-left: 3px solid var(--orange); color: #9a3412; }
+  .highlight-box.green { background: var(--green-light); border-left: 3px solid var(--green); color: #14532d; }
+  .highlight-box.purple { background: var(--purple-light); border-left: 3px solid var(--purple); color: #4c1d95; }
+  .highlight-box strong { font-weight: 700; }
+  .highlight-box code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: rgba(0,0,0,0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* ── ARCH DIAGRAM ── */
+  .arch-diagram {
+    background: #f8faff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 30px;
+    margin: 20px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    overflow-x: auto;
+  }
+  .arch-layer {
+    border: 1.5px dashed;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 10px 0;
+    position: relative;
+  }
+  .arch-layer-label {
+    position: absolute;
+    top: -11px;
+    left: 14px;
+    background: var(--surface);
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 4px;
+  }
+  .arch-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .arch-box {
+    padding: 8px 14px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 100px;
+  }
+  .arch-connector {
+    flex: 1;
+    height: 1.5px;
+    background: repeating-linear-gradient(90deg, var(--border) 0, var(--border) 6px, transparent 6px, transparent 12px);
+    min-width: 20px;
+    align-self: center;
+  }
+  .arch-arrow {
+    color: var(--text-3);
+    font-size: 18px;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  /* ── METRICS STRIP ── */
+  .metrics-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s;
+  }
+  .metric-card:hover { transform: translateY(-2px); }
+  .metric-num {
+    font-family: 'Sora', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .metric-label { font-size: 12px; color: var(--text-3); font-weight: 500; letter-spacing: 0.3px; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 60px 0;
+  }
+
+  /* ── SUBSECTION ── */
+  .subsec-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 21px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    margin-top: 36px;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .subsec-title::before {
+    content: '';
+    width: 4px;
+    height: 22px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .subsec-title.blue::before { background: var(--blue); }
+  .subsec-title.orange::before { background: var(--orange); }
+  .subsec-title.purple::before { background: var(--purple); }
+  .subsec-title.green::before { background: var(--green); }
+  .subsec-title.teal::before { background: var(--teal); }
+  .subsec-title.red::before { background: var(--red); }
+
+  /* ── TAG PILL ── */
+  .tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 2px;
+  }
+  .tp-blue { background: var(--blue-light); color: #1d4ed8; }
+  .tp-orange { background: var(--orange-light); color: #c2410c; }
+  .tp-purple { background: var(--purple-light); color: #6d28d9; }
+  .tp-green { background: var(--green-light); color: #15803d; }
+  .tp-teal { background: var(--teal-light); color: #0f766e; }
+  .tp-red { background: var(--red-light); color: #b91c1c; }
+
+  /* ── WIDE CARD ── */
+  .wide-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 30px 34px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s;
+  }
+  .wide-card:hover { box-shadow: var(--shadow); border-color: var(--blue-mid); }
+
+  .wide-card-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .wide-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .wide-card h3 {
+    font-family: 'Sora', sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: -0.3px;
+  }
+  .wide-card .sub { font-size: 14px; color: var(--text-3); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    margin: 20px 0;
+  }
+
+  /* ── DECISION TREE ── */
+  .decision-box {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-block;
+    cursor: default;
+    transition: all 0.2s;
+  }
+  .decision-box:hover { transform: scale(1.02); box-shadow: var(--shadow); }
+
+  /* ── FOOTER ── */
+  .footer {
+    background: #1a2035;
+    padding: 40px 60px;
+    text-align: center;
+    color: rgba(255,255,255,0.4);
+    font-size: 13px;
+  }
+  .footer strong { color: rgba(255,255,255,0.7); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .section { animation: fadeInUp 0.5s ease both; }
+  .section:nth-child(1) { animation-delay: 0.05s; }
+  .section:nth-child(2) { animation-delay: 0.1s; }
+  .section:nth-child(3) { animation-delay: 0.15s; }
+  .section:nth-child(4) { animation-delay: 0.2s; }
+  .section:nth-child(5) { animation-delay: 0.25s; }
+
+  .card { animation: fadeInUp 0.4s ease both; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .hero { padding: 50px 24px; }
+    .main { padding: 40px 20px 80px; }
+    .cards-grid, .cards-grid-2, .cards-grid-3 { grid-template-columns: 1fr; }
+    .topnav { padding: 0 16px; }
+    .flow { flex-wrap: wrap; gap: 8px; }
+    .flow-arrow { width: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="nav-brand">⬡ ArchPatterns</div>
+  <a href="#resilience" class="nav-pill active">Resilience</a>
+  <a href="#fault-tolerance" class="nav-pill orange">Fault Tolerance</a>
+  <a href="#high-availability" class="nav-pill purple">High Availability</a>
+  <a href="#scalability" class="nav-pill green">Scalability</a>
+  <a href="#big-data" class="nav-pill">Big Data</a>
+  <a href="#distributed" class="nav-pill">Distributed Systems</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <div class="hero-eyebrow">// Architecture Deep Dive</div>
+    <h1>Resilience, Fault-Tolerance,<br><span>High Availability & Scalability</span></h1>
+    <p class="hero-sub">
+      Comprehensive patterns, design principles, and implementation strategies for building production-grade distributed systems — covering everything from circuit breakers to petabyte-scale data pipelines.
+    </p>
+    <div class="hero-tags">
+      <span class="hero-tag blue">☁ Cloud-Native Patterns</span>
+      <span class="hero-tag orange">⚡ Big Data Architecture</span>
+      <span class="hero-tag purple">⬡ Distributed Systems</span>
+      <span class="hero-tag green">∞ Infinite Scalability</span>
+    </div>
+  </div>
+</section>
+
+<main class="main">
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 1: RESILIENCE
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="resilience">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--blue-light)">🛡️</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--blue)">Resilience Patterns</h2>
+      <p>Systems that recover gracefully from failures — absorbing shocks and returning to normal operation without data loss or prolonged outages.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title blue">Core Concepts</div>
+
+  <div class="metrics-strip">
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--blue)">RTO</div>
+      <div class="metric-label">Recovery Time Objective — max acceptable downtime</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--orange)">RPO</div>
+      <div class="metric-label">Recovery Point Objective — max acceptable data loss</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--purple)">MTTR</div>
+      <div class="metric-label">Mean Time to Recovery — avg time to restore service</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--green)">MTBF</div>
+      <div class="metric-label">Mean Time Between Failures — avg uptime between incidents</div>
+    </div>
+  </div>
+
+  <div class="subsec-title blue">Circuit Breaker Pattern</div>
+  <p style="font-size:16px;color:var(--text-2);margin-bottom:20px;max-width:860px;">The circuit breaker wraps calls to external dependencies. After a threshold of failures, it "opens" and fast-fails requests instead of waiting for timeouts — protecting the caller from cascade failures.</p>
+
+  <div class="diagram">
+    <div class="diagram-title">// Circuit Breaker State Machine</div>
+    <div class="flow">
+      <div class="flow-node fn-green">CLOSED<br><small style="font-weight:400">Normal ops</small></div>
+      <div class="flow-arrow" style="color:var(--red)"></div>
+      <div class="flow-node fn-red">OPEN<br><small style="font-weight:400">Fast fail</small></div>
+      <div class="flow-arrow"></div>
+      <div class="flow-node fn-yellow">HALF-OPEN<br><small style="font-weight:400">Probe</small></div>
+      <div class="flow-arrow" style="color:var(--green)"></div>
+      <div class="flow-node fn-green">CLOSED<br><small style="font-weight:400">Recovered</small></div>
+    </div>
+    <div style="margin-top:16px;font-size:13px;color:var(--text-3)">
+      <span style="color:var(--red)">●</span> Threshold exceeded → OPEN &nbsp;&nbsp;
+      <span style="color:var(--yellow)">●</span> After timeout → HALF-OPEN (try one request) &nbsp;&nbsp;
+      <span style="color:var(--green)">●</span> Success → back to CLOSED
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card blue">
+      <div class="card-badge blue">Pattern</div>
+      <h3>Circuit Breaker</h3>
+      <p>Prevent cascading failures by short-circuiting calls to failing services after a configurable error threshold. Three states: Closed (normal), Open (fail fast), Half-Open (probe).</p>
+      <div class="code-block"><span class="cls">CircuitBreaker</span> cb = <span class="cls">CircuitBreaker</span>.<span class="fn">builder</span>()
+  .<span class="fn">failureRateThreshold</span>(<span class="num">50</span>)   <span class="cmt">// % failures</span>
+  .<span class="fn">waitDurationInOpenState</span>(
+    <span class="cls">Duration</span>.<span class="fn">ofSeconds</span>(<span class="num">30</span>))
+  .<span class="fn">slidingWindowSize</span>(<span class="num">10</span>)
+  .<span class="fn">permittedCallsInHalfOpenState</span>(<span class="num">3</span>)
+  .<span class="fn">build</span>();</div>
+      <div class="detail-list">
+        <li><span class="dot" style="background:var(--blue)"></span>Count-based or time-based sliding window</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Slow call detection alongside errors</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Event listeners for state transitions</li>
+      </div>
+    </div>
+
+    <div class="card orange">
+      <div class="card-badge orange">Pattern</div>
+      <h3>Retry with Exponential Backoff</h3>
+      <p>Retry transient failures with increasing wait times between attempts, plus jitter to prevent thundering herd. Combine with circuit breaker for compound protection.</p>
+      <div class="code-block"><span class="kw">const</span> retry = <span class="kw">async</span> (fn, opts) => {
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; opts.maxAttempts; i++) {
+    <span class="kw">try</span> { <span class="kw">return await</span> fn(); }
+    <span class="kw">catch</span>(e) {
+      <span class="kw">if</span> (i === opts.maxAttempts - <span class="num">1</span>) <span class="kw">throw</span> e;
+      <span class="kw">const</span> delay = opts.base * <span class="num">2</span>**i
+        + Math.<span class="fn">random</span>() * <span class="num">1000</span>; <span class="cmt">// jitter</span>
+      <span class="kw">await</span> <span class="fn">sleep</span>(delay);
+    }
+  }
+};</div>
+      <div class="highlight-box orange"><strong>Jitter</strong> prevents thundering herd: multiple clients don't retry simultaneously after an outage, spreading load over time.</div>
+    </div>
+
+    <div class="card purple">
+      <div class="card-badge purple">Pattern</div>
+      <h3>Bulkhead Isolation</h3>
+      <p>Isolate components into separate thread pools, connection pools, or processes. A failure or saturation in one bulkhead cannot exhaust resources in another.</p>
+      <div class="arch-diagram" style="margin:12px 0">
+        <div class="arch-layer" style="border-color:var(--purple-mid)">
+          <div class="arch-layer-label" style="color:var(--purple)">Thread Pool Bulkheads</div>
+          <div class="arch-row">
+            <div class="arch-box fn-blue">Payment<br><small>Pool: 20</small></div>
+            <div class="arch-box fn-orange">Search<br><small>Pool: 50</small></div>
+            <div class="arch-box fn-green">Report<br><small>Pool: 5</small></div>
+          </div>
+        </div>
+      </div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--purple)"></span>Separate connection pools per downstream service</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Semaphore-based bulkhead for lightweight isolation</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Resource quota enforcement per tenant</li>
+      </ul>
+    </div>
+
+    <div class="card green">
+      <div class="card-badge green">Pattern</div>
+      <h3>Timeout & Deadline Propagation</h3>
+      <p>Every outbound call must have a bounded deadline. In distributed systems, propagate context deadlines (gRPC context, HTTP headers) so all downstream services honor the same cut-off.</p>
+      <div class="code-block"><span class="cmt">// gRPC context propagation</span>
+ctx, cancel := context.<span class="fn">WithTimeout</span>(
+  parentCtx, <span class="num">2</span>*time.Second)
+<span class="kw">defer</span> <span class="fn">cancel</span>()
+
+resp, err := client.<span class="fn">GetUser</span>(ctx, req)
+<span class="kw">if</span> err == context.DeadlineExceeded {
+    <span class="fn">recordTimeout</span>(<span class="str">"GetUser"</span>)
+}</div>
+      <div class="highlight-box green"><strong>Budget approach:</strong> Total deadline = T. Allocate T×0.4 to first hop, T×0.3 to next, leaving slack for serialization.</div>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge teal">Pattern</div>
+      <h3>Fallback & Graceful Degradation</h3>
+      <p>When a service fails, return a cached value, a default, or a reduced-feature response — rather than returning an error to the end user.</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--teal)"></span><strong>Stale cache fallback:</strong> Serve last known good response</li>
+        <li><span class="dot" style="background:var(--teal)"></span><strong>Static default:</strong> Return empty list, zero count</li>
+        <li><span class="dot" style="background:var(--teal)"></span><strong>Feature flag:</strong> Disable non-critical features</li>
+        <li><span class="dot" style="background:var(--teal)"></span><strong>Local computation:</strong> Run simplified offline logic</li>
+      </ul>
+    </div>
+
+    <div class="card orange">
+      <div class="card-badge yellow">Pattern</div>
+      <h3>Idempotency & At-Least-Once Safety</h3>
+      <p>Design operations to be safe to execute multiple times. Use idempotency keys so that retried requests don't cause duplicate side effects.</p>
+      <div class="code-block"><span class="cmt">// Idempotency key in HTTP header</span>
+POST /payments
+Idempotency-Key: <span class="str">"uuid-abc-123"</span>
+
+<span class="cmt">// Server-side deduplication</span>
+<span class="kw">if</span> <span class="fn">seen</span>(key) {
+  <span class="kw">return</span> cachedResponse[key]
+}
+result := <span class="fn">processPayment</span>(req)
+<span class="fn">store</span>(key, result, ttl=<span class="num">24h</span>)
+<span class="kw">return</span> result</div>
+    </div>
+  </div>
+
+  <div class="subsec-title blue">Event Sourcing & CQRS for Resilience</div>
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--blue-light)">📋</div>
+      <div>
+        <h3>Event Sourcing</h3>
+        <div class="sub">Store state as an ordered log of immutable events, not mutable rows</div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div>
+        <p style="font-size:15px;color:var(--text-2)">Every state change is recorded as an event. State is derived by replaying the event log. This enables:</p>
+        <ul class="detail-list">
+          <li><span class="dot" style="background:var(--blue)"></span>Complete audit trail for debugging incidents</li>
+          <li><span class="dot" style="background:var(--blue)"></span>Point-in-time state reconstruction</li>
+          <li><span class="dot" style="background:var(--blue)"></span>Easy recovery by replaying from last snapshot</li>
+          <li><span class="dot" style="background:var(--blue)"></span>Temporal decoupling between write and read models</li>
+        </ul>
+      </div>
+      <div class="code-block" style="margin:0">
+<span class="cmt">// Event store append</span>
+events.append({
+  <span class="str">"id"</span>: <span class="str">"evt-001"</span>,
+  <span class="str">"type"</span>: <span class="str">"OrderPlaced"</span>,
+  <span class="str">"aggregate_id"</span>: <span class="str">"order-42"</span>,
+  <span class="str">"timestamp"</span>: <span class="str">"2024-01-15T10:30Z"</span>,
+  <span class="str">"data"</span>: { <span class="str">"items"</span>: [...], <span class="str">"total"</span>: <span class="num">99.99</span> }
+})
+
+<span class="cmt">// Rebuild state from events</span>
+order = events
+  .<span class="fn">filter</span>(e => e.aggregate_id == id)
+  .<span class="fn">reduce</span>(applyEvent, initialState)</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 2: FAULT TOLERANCE
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="fault-tolerance">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--orange-light)">⚡</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--orange)">Fault Tolerance</h2>
+      <p>Designing systems that continue operating correctly even when individual components fail — tolerating failures without impacting correctness or availability.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title orange">Failure Taxonomy</div>
+
+  <div class="compare-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Failure Type</th>
+          <th>Characteristics</th>
+          <th>Detection Strategy</th>
+          <th>Tolerance Approach</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag-pill tp-red">Crash Fault</span></td>
+          <td>Node stops responding entirely</td>
+          <td>Heartbeat timeout, health check failure</td>
+          <td>Replication, failover, leader election</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-orange">Omission Fault</span></td>
+          <td>Messages lost in transit (receive or send)</td>
+          <td>Acknowledgment timeout, seq number gaps</td>
+          <td>Reliable messaging, ACK + retransmit</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-purple">Byzantine Fault</span></td>
+          <td>Node sends incorrect/malicious data</td>
+          <td>Cross-validation across replicas</td>
+          <td>BFT consensus (needs 3f+1 nodes)</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-blue">Network Partition</span></td>
+          <td>Split-brain — nodes can't communicate</td>
+          <td>Quorum loss detection</td>
+          <td>CAP trade-offs, fencing tokens</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-teal">Timing Fault</span></td>
+          <td>Clock skew, delayed message delivery</td>
+          <td>Logical clocks, hybrid logical clocks</td>
+          <td>Vector clocks, Lamport timestamps</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="subsec-title orange">Replication Strategies</div>
+
+  <div class="cards-grid">
+    <div class="card orange">
+      <div class="card-badge orange">Replication</div>
+      <h3>Single-Leader (Primary-Replica)</h3>
+      <p>All writes go to one leader; replicas serve reads. Simple consistency model. Leader failure requires election (Raft, Paxos).</p>
+      <div class="arch-diagram" style="margin:12px 0; padding:16px">
+        <div class="arch-row" style="justify-content:center;gap:16px">
+          <div class="arch-box fn-orange" style="border:2px solid var(--orange)">👑 Leader</div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--orange);font-size:12px">→WAL sync→</span>
+              <div class="arch-box fn-blue" style="min-width:80px">Replica 1</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:var(--orange);font-size:12px">→WAL sync→</span>
+              <div class="arch-box fn-blue" style="min-width:80px">Replica 2</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--orange)"></span>Sync replication: strong consistency, higher latency</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Async replication: lower latency, risk of data loss on failover</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Semi-sync: at least one replica confirms before ack</li>
+      </ul>
+    </div>
+
+    <div class="card purple">
+      <div class="card-badge purple">Replication</div>
+      <h3>Multi-Leader (Multi-Master)</h3>
+      <p>Multiple nodes accept writes. Write conflicts must be resolved via Last-Write-Wins (LWW), CRDTs, or application-level merge.</p>
+      <div class="highlight-box purple"><strong>Conflict resolution strategies:</strong> LWW (Cassandra), CRDT merge functions (Riak), custom merge (Git), operational transformation (Google Docs).</div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--purple)"></span>Geo-distributed writes across regions</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Offline-first clients (CouchDB)</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Requires conflict detection (vector clocks)</li>
+      </ul>
+    </div>
+
+    <div class="card green">
+      <div class="card-badge green">Replication</div>
+      <h3>Leaderless (Quorum)</h3>
+      <p>No designated leader. Client reads from W nodes, writes to R nodes. Consistency tunable via quorum: <code>W + R &gt; N</code>.</p>
+      <div class="highlight-box green"><strong>Formula:</strong> <code>N = replicas, W = write quorum, R = read quorum</code><br>Strong consistency: W+R &gt; N. Availability: smaller W+R.</div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--green)"></span>Read repair: fix stale nodes on read</li>
+        <li><span class="dot" style="background:var(--green)"></span>Anti-entropy: background Merkle tree sync</li>
+        <li><span class="dot" style="background:var(--green)"></span>Hinted handoff: store writes for unavailable nodes</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsec-title orange">Consensus Algorithms</div>
+
+  <div class="cards-grid-2">
+    <div class="card orange">
+      <div class="card-badge orange">Consensus</div>
+      <h3>Raft Algorithm</h3>
+      <p>Understandable consensus with explicit leader election. Used in etcd, CockroachDB, TiKV, and most modern distributed databases.</p>
+      <div class="code-block"><span class="cmt">// Raft leader election phases</span>
+<span class="num">1.</span> Follower times out → becomes Candidate
+<span class="num">2.</span> Candidate increments term → sends RequestVote RPC
+<span class="num">3.</span> Majority vote received → becomes Leader
+<span class="num">4.</span> Leader sends heartbeats (AppendEntries)
+<span class="num">5.</span> Log entries committed when majority ack</div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--orange)"></span>Tolerates (N-1)/2 node failures</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Log matching property ensures consistency</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Leader completeness: elected leader has all committed entries</li>
+      </ul>
+    </div>
+
+    <div class="card purple">
+      <div class="card-badge purple">Consensus</div>
+      <h3>Paxos (Multi-Paxos)</h3>
+      <p>The foundational consensus protocol. Complex but proven. Multi-Paxos elects a stable proposer to skip Phase 1 for subsequent instances.</p>
+      <div class="code-block"><span class="cmt">// Multi-Paxos phases</span>
+Phase 1a: Prepare(n)     <span class="cmt">// proposer</span>
+Phase 1b: Promise(n,v)   <span class="cmt">// acceptor</span>
+Phase 2a: Accept(n,v)    <span class="cmt">// proposer</span>
+Phase 2b: Accepted(n,v)  <span class="cmt">// acceptor + learner notified</span>
+
+<span class="cmt">// Leader leasing avoids repeated phase 1</span></div>
+    </div>
+  </div>
+
+  <div class="subsec-title orange">Saga Pattern for Distributed Transactions</div>
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--orange-light)">🔄</div>
+      <div>
+        <h3>Saga — Distributed Transaction Coordinator</h3>
+        <div class="sub">Long-running transactions as a sequence of local transactions with compensating actions</div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div>
+        <p style="font-size:15px;color:var(--text-2);margin-bottom:12px"><strong>Choreography Saga:</strong> Each service publishes events and listens to others. Decentralized, no coordinator, but harder to track overall state.</p>
+        <p style="font-size:15px;color:var(--text-2)"><strong>Orchestration Saga:</strong> A central saga orchestrator sends commands and handles failures with explicit compensation logic.</p>
+        <div class="highlight-box orange" style="margin-top:14px"><strong>Compensating transactions</strong> must be idempotent and semantically correct — e.g., "reverse-charge" instead of "delete payment".</div>
+      </div>
+      <div class="code-block" style="margin:0">
+<span class="cmt">// Orchestration saga steps</span>
+<span class="kw">saga</span> OrderSaga {
+  steps: [
+    { action: <span class="fn">reserveInventory</span>,
+      compensate: <span class="fn">releaseInventory</span> },
+    { action: <span class="fn">chargePayment</span>,
+      compensate: <span class="fn">refundPayment</span> },
+    { action: <span class="fn">scheduleShipment</span>,
+      compensate: <span class="fn">cancelShipment</span> }
+  ]
+}
+<span class="cmt">// On step 3 fail → run</span>
+<span class="cmt">// refundPayment + releaseInventory</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 3: HIGH AVAILABILITY
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="high-availability">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--purple-light)">🔁</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--purple)">High Availability</h2>
+      <p>Designing systems to achieve maximum uptime through redundancy, automated failover, health checking, and elimination of single points of failure.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Availability Math</div>
+
+  <div class="cards-grid-3">
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--purple)">99.9%</div>
+      <div class="metric-label">Three Nines — 8.7 hrs/year downtime</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--blue)">99.99%</div>
+      <div class="metric-label">Four Nines — 52 min/year downtime</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-num" style="color:var(--green)">99.999%</div>
+      <div class="metric-label">Five Nines — 5.26 min/year downtime</div>
+    </div>
+  </div>
+
+  <div class="highlight-box purple" style="margin:20px 0">
+    <strong>Series availability:</strong> A(total) = A₁ × A₂ × A₃ ... (each dependency multiplies risk)<br>
+    <strong>Parallel availability:</strong> A(total) = 1 − (1−A₁)(1−A₂) ... (redundancy adds availability)
+  </div>
+
+  <div class="subsec-title purple">Deployment Topologies</div>
+
+  <div class="cards-grid">
+    <div class="card purple">
+      <div class="card-badge purple">Topology</div>
+      <h3>Active-Passive Failover</h3>
+      <p>One active node handles all traffic; a passive standby is ready to take over. Automatic failover via health check + DNS cutover or floating IP.</p>
+      <div class="arch-diagram" style="padding:18px;margin:10px 0">
+        <div class="arch-row" style="justify-content:center;gap:20px;flex-direction:column;align-items:center">
+          <div class="arch-box fn-blue">Load Balancer / VIP</div>
+          <div class="arch-row" style="gap:24px;justify-content:center">
+            <div style="text-align:center">
+              <div class="arch-box fn-green" style="border-width:2px">🟢 Active Node</div>
+              <div style="font-size:11px;color:var(--green);margin-top:4px">Serving Traffic</div>
+            </div>
+            <div style="text-align:center">
+              <div class="arch-box fn-yellow">🟡 Passive Node</div>
+              <div style="font-size:11px;color:var(--yellow);margin-top:4px">Standby / Syncing</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--purple)"></span>Hot standby: continuously syncing, fast failover (&lt;30s)</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Warm standby: periodic sync, slower failover (1-5 min)</li>
+        <li><span class="dot" style="background:var(--purple)"></span>Cold standby: restore from backup, minutes to hours</li>
+      </ul>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge blue">Topology</div>
+      <h3>Active-Active Clustering</h3>
+      <p>All nodes serve traffic simultaneously. Load balanced across the cluster. No wasted standby capacity. Requires shared state or distributed state management.</p>
+      <div class="arch-diagram" style="padding:18px;margin:10px 0">
+        <div class="arch-row" style="justify-content:center;gap:10px">
+          <div class="arch-box fn-blue">Node A<br><small>33%</small></div>
+          <div class="arch-box fn-blue">Node B<br><small>33%</small></div>
+          <div class="arch-box fn-blue">Node C<br><small>33%</small></div>
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text-3)">↕ Distributed state sync (Gossip / Raft)</div>
+      </div>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--blue)"></span>Full resource utilization — no idle standby</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Session affinity or distributed session store required</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Requires CAP trade-off decisions for shared state</li>
+      </ul>
+    </div>
+
+    <div class="card green">
+      <div class="card-badge green">Topology</div>
+      <h3>Multi-Region Active-Active</h3>
+      <p>Deploy across multiple geographic regions. Route users to nearest region. Regions replicate data asynchronously, with conflict resolution for writes.</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--green)"></span>Global Traffic Manager / Anycast routing</li>
+        <li><span class="dot" style="background:var(--green)"></span>Region-local writes with async cross-region replication</li>
+        <li><span class="dot" style="background:var(--green)"></span>Conflict-free replicated data types (CRDTs)</li>
+        <li><span class="dot" style="background:var(--green)"></span>Survives entire region failure transparently</li>
+      </ul>
+      <div class="highlight-box green"><strong>AWS pattern:</strong> Route 53 latency routing + DynamoDB Global Tables + Aurora Global Database.</div>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Health Checking & Load Balancing</div>
+
+  <div class="cards-grid-2">
+    <div class="card purple">
+      <div class="card-badge purple">Health Check</div>
+      <h3>Layered Health Probe Design</h3>
+      <p>Health checks should verify the actual ability to serve traffic, not just "the process is running."</p>
+      <div class="code-block"><span class="cmt">// Three-tier health check</span>
+GET /health/live    <span class="cmt">→ Is the process alive?</span>
+  <span class="str">"status": "up"</span>
+
+GET /health/ready   <span class="cmt">→ Can it serve traffic?</span>
+  checks: db.ping(), cache.ping(),
+  downstream.check()
+
+GET /health/startup <span class="cmt">→ Finished initializing?</span>
+  checks: migrations_complete,
+  config_loaded, warmup_done</div>
+      <div class="highlight-box purple"><strong>K8s probes:</strong> livenessProbe restarts pod; readinessProbe removes from service endpoints; startupProbe delays liveness checks.</div>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge blue">Load Balancing</div>
+      <h3>Load Balancing Algorithms</h3>
+      <table class="data-table" style="margin:10px 0">
+        <thead><tr><th>Algorithm</th><th>Best For</th></tr></thead>
+        <tbody>
+          <tr><td>Round Robin</td><td>Homogeneous, stateless</td></tr>
+          <tr><td>Least Connections</td><td>Long-lived connections</td></tr>
+          <tr><td>Least Response Time</td><td>Mixed workload latencies</td></tr>
+          <tr><td>IP Hash / Consistent</td><td>Session stickiness</td></tr>
+          <tr><td>Resource Based</td><td>CPU/memory-aware routing</td></tr>
+          <tr><td>Power of Two Choices</td><td>Large distributed systems</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Zero-Downtime Deployment Patterns</div>
+
+  <div class="cards-grid-3">
+    <div class="card purple">
+      <div class="card-badge purple">Deploy</div>
+      <h3>Blue-Green Deployment</h3>
+      <p>Maintain two identical production environments (blue = current, green = new). Switch traffic atomically at the load balancer. Instant rollback by switching back.</p>
+      <div class="flow" style="flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="flow-node fn-blue" style="min-width:80px">🔵 Blue v1.0</div>
+          <span style="font-size:12px;color:var(--green)">← Live traffic</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="flow-node fn-green" style="min-width:80px">🟢 Green v2.0</div>
+          <span style="font-size:12px;color:var(--text-3)">← Idle / testing</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card orange">
+      <div class="card-badge orange">Deploy</div>
+      <h3>Canary Release</h3>
+      <p>Gradually shift traffic to the new version. Start with 1%, monitor error rates and latency, then incrementally increase: 1% → 5% → 20% → 100%.</p>
+      <div class="highlight-box orange"><strong>Metrics to gate:</strong> error rate, p99 latency, business KPIs (conversion, revenue). Auto-rollback if threshold exceeded.</div>
+    </div>
+
+    <div class="card green">
+      <div class="card-badge green">Deploy</div>
+      <h3>Rolling Update</h3>
+      <p>Replace instances one by one (or in batches). Always have N-k healthy instances serving traffic. Works with immutable infrastructure.</p>
+      <div class="code-block"><span class="cmt"># Kubernetes rolling update</span>
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: <span class="num">1</span>
+    maxUnavailable: <span class="num">0</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 4: HIGH SCALABILITY
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="scalability">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--green-light)">📈</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--green)">High Scalability</h2>
+      <p>Designing systems that gracefully handle increasing load — from thousands to billions of requests — through horizontal scaling, partitioning, and async architectures.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title green">Scaling Dimensions</div>
+
+  <div class="cards-grid-3">
+    <div class="card green">
+      <div class="card-badge green">Axis X</div>
+      <h3>Horizontal Scaling</h3>
+      <p>Add more identical instances behind a load balancer. Stateless services scale linearly. The simplest and most common scaling technique for web tiers.</p>
+      <div class="highlight-box green"><strong>Requirement:</strong> Session state must be externalized (Redis, JWT) and all instances are functionally equivalent.</div>
+    </div>
+    <div class="card blue">
+      <div class="card-badge blue">Axis Y</div>
+      <h3>Functional Decomposition</h3>
+      <p>Split a monolith into microservices. Each service scales independently based on its own bottleneck — not every service needs 100 instances.</p>
+      <div class="highlight-box blue"><strong>Conway's Law:</strong> System structure reflects organizational communication structure. Align service boundaries with team boundaries.</div>
+    </div>
+    <div class="card orange">
+      <div class="card-badge orange">Axis Z</div>
+      <h3>Data Partitioning</h3>
+      <p>Shard data across nodes so each node owns a subset. Lookups route to the appropriate shard. Scale-out data layer for read and write throughput.</p>
+      <div class="highlight-box orange"><strong>Shard key choice</strong> is critical: avoid hot spots, ensure even distribution, minimize cross-shard queries.</div>
+    </div>
+  </div>
+
+  <div class="subsec-title green">Caching Architecture</div>
+
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--green-light)">⚡</div>
+      <div>
+        <h3>Multi-Level Caching Hierarchy</h3>
+        <div class="sub">Latency: L1 CPU 1ns → L2 0.1μs → L3 10μs → DRAM 100μs → SSD 1ms → Network 10ms → HDD 10ms</div>
+      </div>
+    </div>
+    <div class="arch-diagram" style="margin:0">
+      <div class="arch-layer" style="border-color:var(--blue-mid)">
+        <div class="arch-layer-label" style="color:var(--blue)">Client-Side</div>
+        <div class="arch-row">
+          <div class="arch-box fn-blue">Browser Cache<br><small>HTTP Cache-Control</small></div>
+          <div class="arch-box fn-blue">Service Worker<br><small>Offline cache</small></div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--text-3);font-size:12px;margin:4px 0">↓ Cache miss flows downstream ↓</div>
+      <div class="arch-layer" style="border-color:var(--orange-mid)">
+        <div class="arch-layer-label" style="color:var(--orange)">Edge / CDN</div>
+        <div class="arch-row">
+          <div class="arch-box fn-orange">CDN Edge Node<br><small>Varnish / CloudFront</small></div>
+          <div class="arch-box fn-orange">API Gateway Cache<br><small>Redis @ edge</small></div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--text-3);font-size:12px;margin:4px 0">↓</div>
+      <div class="arch-layer" style="border-color:var(--purple-mid)">
+        <div class="arch-layer-label" style="color:var(--purple)">Application-Side</div>
+        <div class="arch-row">
+          <div class="arch-box fn-purple">In-Process L1<br><small>Caffeine / LRU Map</small></div>
+          <div class="arch-box fn-purple">Distributed L2<br><small>Redis Cluster</small></div>
+          <div class="arch-box fn-purple">DB Query Cache<br><small>Materialized views</small></div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--text-3);font-size:12px;margin:4px 0">↓ Final cache miss ↓</div>
+      <div class="arch-layer" style="border-color:var(--green-mid)">
+        <div class="arch-layer-label" style="color:var(--green)">Storage</div>
+        <div class="arch-row">
+          <div class="arch-box fn-green">Primary DB</div>
+          <div class="arch-box fn-green">Object Store</div>
+          <div class="arch-box fn-green">Search Index</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="subsec-title green">Database Sharding</div>
+
+  <div class="cards-grid">
+    <div class="card green">
+      <div class="card-badge green">Sharding</div>
+      <h3>Consistent Hashing</h3>
+      <p>Map both data keys and nodes onto a virtual ring. Each key belongs to the nearest node clockwise. Adding/removing a node only migrates keys from adjacent neighbors — not a full reshuffle.</p>
+      <div class="code-block"><span class="cmt">// Consistent hash ring</span>
+ring = SortedMap()
+<span class="kw">for</span> node <span class="kw">in</span> nodes:
+  <span class="kw">for</span> v <span class="kw">in</span> range(VIRTUAL_NODES):
+    h = <span class="fn">hash</span>(f<span class="str">"{node}:{v}"</span>)
+    ring[h] = node
+
+<span class="kw">def</span> <span class="fn">get_node</span>(key):
+  h = <span class="fn">hash</span>(key)
+  <span class="kw">return</span> ring.<span class="fn">ceiling</span>(h) or ring.<span class="fn">min</span>()</div>
+      <p style="font-size:14px;color:var(--text-3)">Virtual nodes (vnodes) balance load when node capacities differ.</p>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge blue">Sharding</div>
+      <h3>Range-Based Sharding</h3>
+      <p>Assign contiguous key ranges to shards. Simple to implement and supports range queries within a shard. Risk: hot spots if keys are temporally skewed (e.g., all writes go to the "latest" shard).</p>
+      <div class="highlight-box blue"><strong>Mitigation:</strong> Add a random prefix or suffix to time-based keys to distribute writes. Alternatively, use reverse-timestamp ordering.</div>
+    </div>
+
+    <div class="card orange">
+      <div class="card-badge orange">Sharding</div>
+      <h3>Directory-Based Sharding</h3>
+      <p>A lookup service (directory) maps each key to its shard. Maximum flexibility — can rebalance or migrate shards without rehashing. The directory itself is a bottleneck; cache it aggressively.</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--orange)"></span>Supports arbitrary partition reassignment</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Directory must be highly available (replicated)</li>
+        <li><span class="dot" style="background:var(--orange)"></span>Used by MongoDB (config servers), Vitess</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsec-title green">Async & Queue-Based Decoupling</div>
+
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--green-light)">📬</div>
+      <div>
+        <h3>Message Queue Patterns</h3>
+        <div class="sub">Decouple producers from consumers — absorb traffic spikes, enable independent scaling</div>
+      </div>
+    </div>
+    <div class="cards-grid-3" style="margin:0">
+      <div>
+        <div class="card-badge blue" style="margin-bottom:10px">Competing Consumers</div>
+        <p style="font-size:14px;color:var(--text-2)">Multiple workers pull from the same queue. Each message processed once. Scale workers by queue depth. Used in Celery, SQS, RabbitMQ work queues.</p>
+      </div>
+      <div>
+        <div class="card-badge orange" style="margin-bottom:10px">Pub/Sub Fan-Out</div>
+        <p style="font-size:14px;color:var(--text-2)">Each subscriber receives every message. Topics → subscriptions. Used for event broadcasting, cache invalidation, audit logging.</p>
+      </div>
+      <div>
+        <div class="card-badge purple" style="margin-bottom:10px">Event Streaming</div>
+        <p style="font-size:14px;color:var(--text-2)">Ordered, durable log of events (Kafka, Kinesis). Consumers maintain offsets. Replay, backfill, and multiple independent consumers from same log.</p>
+      </div>
+    </div>
+    <div class="code-block" style="margin-top:16px"><span class="cmt">// Kafka consumer group scaling</span>
+partitions = <span class="num">12</span>   <span class="cmt">// max parallel consumers</span>
+consumers  = <span class="num">4</span>    <span class="cmt">// each handles 3 partitions</span>
+<span class="cmt">// Scale consumers up to partition count</span>
+<span class="cmt">// Beyond that → pre-increase partition count</span></div>
+  </div>
+
+  <div class="subsec-title green">Auto-Scaling Strategies</div>
+
+  <div class="cards-grid-2">
+    <div class="card green">
+      <div class="card-badge green">Scaling</div>
+      <h3>Reactive Scaling</h3>
+      <p>Scale based on observed metrics: CPU utilization, memory, request queue depth, custom metrics.</p>
+      <div class="code-block"><span class="cmt"># K8s HPA — scale on CPU</span>
+spec:
+  scaleTargetRef:
+    name: api-deployment
+  minReplicas: <span class="num">2</span>
+  maxReplicas: <span class="num">50</span>
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target: <span class="num">60</span>% utilization
+  - type: External       <span class="cmt"># queue depth</span>
+    external:
+      metric: sqs_queue_length
+      target: <span class="num">100</span></div>
+    </div>
+    <div class="card blue">
+      <div class="card-badge blue">Scaling</div>
+      <h3>Predictive Scaling</h3>
+      <p>Pre-scale based on historical patterns (time-of-day, day-of-week), ML forecasts, or scheduled events (sale launches).</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--blue)"></span>AWS Predictive Scaling uses ML on CloudWatch history</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Pre-warm instance pools before expected traffic spikes</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Combine with reactive for best of both worlds</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Cold start mitigation: keep min instances warm</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 5: BIG DATA ARCHITECTURE
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="big-data">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--teal-light)">🏗️</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--teal)">Big Data Architecture</h2>
+      <p>Architectures for processing, storing, and serving data at petabyte scale — from ingestion pipelines to analytical query engines.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title teal">Lambda vs Kappa Architecture</div>
+
+  <div class="cards-grid-2">
+    <div class="card blue">
+      <div class="card-badge blue">Architecture</div>
+      <h3>Lambda Architecture</h3>
+      <p>Combines a <strong>batch layer</strong> (accurate, high-latency), <strong>speed layer</strong> (approximate, low-latency), and a <strong>serving layer</strong> that merges both views.</p>
+      <div class="arch-diagram" style="padding:16px;margin:10px 0">
+        <div style="text-align:center;margin-bottom:12px">
+          <div class="arch-box fn-blue" style="display:inline-block">Raw Data Store (immutable)</div>
+        </div>
+        <div class="arch-row" style="justify-content:center;gap:20px">
+          <div style="text-align:center">
+            <div class="arch-box fn-orange">Batch Layer<br><small>Spark / Hadoop</small></div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:4px">Hours/days latency</div>
+          </div>
+          <div style="text-align:center">
+            <div class="arch-box fn-green">Speed Layer<br><small>Flink / Storm</small></div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:4px">Seconds latency</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <div class="arch-box fn-purple" style="display:inline-block">Serving Layer (merge views)<br><small>Druid / Cassandra</small></div>
+        </div>
+      </div>
+      <div class="highlight-box blue"><strong>Con:</strong> Two code paths (batch + streaming) are complex to maintain and keep in sync.</div>
+    </div>
+
+    <div class="card teal">
+      <div class="card-badge teal">Architecture</div>
+      <h3>Kappa Architecture</h3>
+      <p>Simplifies Lambda by using <strong>only a streaming layer</strong> (Kafka + Flink). Reprocessing is done by replaying the Kafka log with a new consumer group.</p>
+      <div class="arch-diagram" style="padding:16px;margin:10px 0">
+        <div class="arch-row" style="flex-direction:column;gap:10px;align-items:center">
+          <div class="arch-box fn-teal">Immutable Event Log (Kafka)</div>
+          <div style="color:var(--text-3);font-size:12px">↓ stream processing (Flink / Spark Structured Streaming)</div>
+          <div class="arch-row" style="gap:12px;justify-content:center">
+            <div class="arch-box fn-blue">Real-time View</div>
+            <div class="arch-box fn-green">Historical View<br><small>(reprocessed)</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="highlight-box green"><strong>Pro:</strong> One code path, simpler ops. <strong>Con:</strong> Requires Kafka retention to be long enough for full reprocessing.</div>
+    </div>
+  </div>
+
+  <div class="subsec-title teal">Modern Data Lakehouse Architecture</div>
+
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--teal-light)">🗄️</div>
+      <div>
+        <h3>Data Lakehouse</h3>
+        <div class="sub">Combines the cheap storage of a data lake with the ACID guarantees and performance of a data warehouse</div>
+      </div>
+    </div>
+    <div class="arch-diagram" style="margin:0">
+      <div class="arch-layer" style="border-color:#5eead4">
+        <div class="arch-layer-label" style="color:var(--teal)">Ingestion</div>
+        <div class="arch-row">
+          <div class="arch-box fn-blue">Kafka Streams</div>
+          <div class="arch-box fn-orange">CDC (Debezium)</div>
+          <div class="arch-box fn-green">Batch ETL</div>
+          <div class="arch-box fn-purple">API Connectors</div>
+        </div>
+      </div>
+      <div class="arch-layer" style="border-color:var(--blue-mid)">
+        <div class="arch-layer-label" style="color:var(--blue)">Storage (S3 / GCS / ADLS)</div>
+        <div class="arch-row">
+          <div class="arch-box fn-blue">Bronze<br><small>Raw / landing</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-box fn-orange">Silver<br><small>Cleaned / dedupe</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-box fn-green">Gold<br><small>Aggregated / enriched</small></div>
+        </div>
+      </div>
+      <div class="arch-layer" style="border-color:var(--purple-mid)">
+        <div class="arch-layer-label" style="color:var(--purple)">Table Format (ACID layer)</div>
+        <div class="arch-row">
+          <div class="arch-box fn-purple">Delta Lake</div>
+          <div class="arch-box fn-purple">Apache Iceberg</div>
+          <div class="arch-box fn-purple">Apache Hudi</div>
+        </div>
+      </div>
+      <div class="arch-layer" style="border-color:var(--green-mid)">
+        <div class="arch-layer-label" style="color:var(--green)">Query Engines</div>
+        <div class="arch-row">
+          <div class="arch-box fn-green">Spark SQL</div>
+          <div class="arch-box fn-teal">Trino / Presto</div>
+          <div class="arch-box fn-blue">Databricks SQL</div>
+          <div class="arch-box fn-orange">BigQuery Omni</div>
+        </div>
+      </div>
+    </div>
+    <div class="two-col" style="margin-top:16px">
+      <div>
+        <p style="font-size:15px;color:var(--text-2);margin-bottom:8px"><strong>Delta Lake / Iceberg ACID Guarantees:</strong></p>
+        <ul class="detail-list">
+          <li><span class="dot" style="background:var(--teal)"></span>Serializable ACID transactions on object storage</li>
+          <li><span class="dot" style="background:var(--teal)"></span>Schema evolution without rewriting all data</li>
+          <li><span class="dot" style="background:var(--teal)"></span>Time travel: query data as of any past timestamp</li>
+          <li><span class="dot" style="background:var(--teal)"></span>UPSERT / MERGE / DELETE via snapshot isolation</li>
+        </ul>
+      </div>
+      <div class="code-block" style="margin:0">
+<span class="cmt">-- Iceberg time travel</span>
+SELECT * FROM orders
+  FOR VERSION AS OF <span class="num">12345</span>;
+
+SELECT * FROM orders
+  FOR TIMESTAMP AS OF
+  TIMESTAMP <span class="str">'2024-01-15 10:00:00'</span>;
+
+<span class="cmt">-- Incremental read (CDC)</span>
+SELECT * FROM iceberg.orders
+  CHANGES BETWEEN SNAPSHOT
+  <span class="num">12340</span> AND <span class="num">12345</span>;</div>
+    </div>
+  </div>
+
+  <div class="subsec-title teal">Stream Processing Patterns</div>
+
+  <div class="cards-grid">
+    <div class="card teal">
+      <div class="card-badge teal">Streaming</div>
+      <h3>Windowing Strategies</h3>
+      <p>Group stream events into finite windows for aggregation. Choice of window type directly affects accuracy and latency.</p>
+      <table class="data-table">
+        <thead><tr><th>Window Type</th><th>Description</th><th>Use Case</th></tr></thead>
+        <tbody>
+          <tr><td>Tumbling</td><td>Fixed, non-overlapping intervals</td><td>Hourly metrics</td></tr>
+          <tr><td>Sliding</td><td>Fixed size, rolling every T</td><td>Moving averages</td></tr>
+          <tr><td>Session</td><td>Gap-based, user activity scoped</td><td>User sessions</td></tr>
+          <tr><td>Global</td><td>All events since beginning</td><td>Running totals</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge blue">Streaming</div>
+      <h3>Watermarks & Late Data</h3>
+      <p>In event-time processing, watermarks tell the engine "we won't see events older than T anymore." They allow emitting window results while handling some late-arriving data.</p>
+      <div class="code-block"><span class="cmt">// Flink watermark strategy</span>
+WatermarkStrategy
+  .forBoundedOutOfOrderness(
+    Duration.ofSeconds(<span class="num">10</span>))  <span class="cmt">// 10s late</span>
+  .withTimestampAssigner(
+    (event, ts) -> event.eventTime)
+
+<span class="cmt">// Handle very late events</span>
+.sideOutputLateData(lateTag)
+.allowedLateness(Duration.ofMinutes(<span class="num">1</span>))</div>
+    </div>
+
+    <div class="card orange">
+      <div class="card-badge orange">Streaming</div>
+      <h3>Exactly-Once Semantics</h3>
+      <p>Guaranteeing that each event is processed exactly once — not lost (at-least-once) and not duplicated (at-most-once).</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--orange)"></span><strong>Flink:</strong> Distributed snapshots (Chandy-Lamport) + transactional sinks</li>
+        <li><span class="dot" style="background:var(--orange)"></span><strong>Kafka:</strong> Idempotent producers + transactions (atomic write across partitions + offsets)</li>
+        <li><span class="dot" style="background:var(--orange)"></span><strong>Spark:</strong> Structured Streaming write-ahead log + idempotent sinks</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SECTION 6: DISTRIBUTED SYSTEMS
+═══════════════════════════════════════════════════════════ -->
+<section class="section" id="distributed">
+  <div class="section-header">
+    <div class="section-icon" style="background:#ede9fe">⬡</div>
+    <div class="section-title-block">
+      <h2 style="color:var(--purple)">Distributed Systems Design</h2>
+      <p>Fundamental theory and practical patterns for building correct, performant distributed systems — from CAP theorem trade-offs to service mesh observability.</p>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">CAP Theorem & PACELC</div>
+
+  <div class="cards-grid-3">
+    <div class="card purple">
+      <div class="card-badge purple">CAP</div>
+      <h3>Consistency</h3>
+      <p>Every read receives the most recent write or an error. All nodes see the same data at the same time. Requires coordination on writes.</p>
+      <div class="tag-pill tp-purple">HBase</div>
+      <div class="tag-pill tp-purple">Zookeeper</div>
+      <div class="tag-pill tp-purple">etcd</div>
+      <div class="tag-pill tp-purple">CockroachDB</div>
+    </div>
+    <div class="card blue">
+      <div class="card-badge blue">CAP</div>
+      <h3>Availability</h3>
+      <p>Every request gets a response (not necessarily the latest data). System remains operational even during node failures. No single point of failure.</p>
+      <div class="tag-pill tp-blue">Cassandra</div>
+      <div class="tag-pill tp-blue">CouchDB</div>
+      <div class="tag-pill tp-blue">DynamoDB*</div>
+      <div class="tag-pill tp-blue">Riak</div>
+    </div>
+    <div class="card orange">
+      <div class="card-badge orange">CAP</div>
+      <h3>Partition Tolerance</h3>
+      <p>System continues operating despite network partitions. In distributed systems, network partitions are inevitable — so you must choose between C and A when a partition occurs.</p>
+      <div class="highlight-box orange"><strong>PACELC:</strong> extends CAP — even without partitions, there is a trade-off between latency and consistency.</div>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Consistency Models (Spectrum)</div>
+
+  <div class="compare-table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Model</th><th>Guarantee</th><th>Latency</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tag-pill tp-red">Linearizable</span></td>
+          <td>Real-time ordering — strongest. Reads always see latest write globally.</td>
+          <td>High (synchronous coordination)</td>
+          <td>Zookeeper, etcd, Spanner</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-orange">Sequential</span></td>
+          <td>Operations appear in some sequential order consistent with program order per process.</td>
+          <td>Moderate</td>
+          <td>Single-leader MySQL</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-purple">Causal</span></td>
+          <td>Causally related operations are seen in order. Concurrent ops can differ across nodes.</td>
+          <td>Low-Moderate</td>
+          <td>MongoDB causal sessions, COPS</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-blue">Read-Your-Writes</span></td>
+          <td>A process always sees its own writes. Other processes may still be stale.</td>
+          <td>Low</td>
+          <td>MySQL GTID sticky routing</td>
+        </tr>
+        <tr>
+          <td><span class="tag-pill tp-green">Eventual</span></td>
+          <td>If no new updates, all replicas eventually converge. No timing guarantee.</td>
+          <td>Very Low</td>
+          <td>Cassandra, DynamoDB (default)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="subsec-title purple">Distributed Coordination Primitives</div>
+
+  <div class="cards-grid">
+    <div class="card purple">
+      <div class="card-badge purple">Coordination</div>
+      <h3>Distributed Locking</h3>
+      <p>Mutual exclusion across nodes. Use fencing tokens to prevent the "zombie write" problem where a lock holder that paused for GC believes it still holds the lock.</p>
+      <div class="code-block"><span class="cmt">-- Redis Redlock algorithm</span>
+<span class="num">1.</span> Get current timestamp T₀
+<span class="num">2.</span> Try SET lock:key random_val
+   NX PX {ttl} on N/2+1 nodes
+<span class="num">3.</span> If acquired majority AND
+   (T_now - T₀) &lt; TTL → lock held
+<span class="num">4.</span> On use: include fencing token
+   (monotonic counter from lock svc)
+<span class="num">5.</span> Storage checks token is latest</div>
+    </div>
+
+    <div class="card blue">
+      <div class="card-badge blue">Coordination</div>
+      <h3>Leader Election</h3>
+      <p>One node is designated leader to coordinate work. Raft, ZAB (ZooKeeper), and bully algorithm are common approaches.</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--blue)"></span>Epoch numbers prevent split-brain (old leader must respect new epoch)</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Lease-based leadership: leader holds time-bounded lease from majority</li>
+        <li><span class="dot" style="background:var(--blue)"></span>Watch mechanism (ZK) for followers to detect leader failure instantly</li>
+      </ul>
+    </div>
+
+    <div class="card green">
+      <div class="card-badge green">Coordination</div>
+      <h3>Distributed Barrier & Semaphore</h3>
+      <p>Coordinate a group of processes to a synchronization point. All workers wait at a barrier until all have reached it (e.g., all map tasks complete before reduce).</p>
+      <div class="code-block"><span class="cmt">// ZooKeeper double barrier</span>
+<span class="kw">enter</span>(barrierNode, processId):
+  create(barrierNode/processId)
+  <span class="kw">while</span> childCount(barrierNode) &lt; N:
+    wait(watch=barrierNode)
+
+<span class="kw">leave</span>(barrierNode, processId):
+  delete(barrierNode/processId)
+  <span class="kw">while</span> childCount(barrierNode) &gt; <span class="num">0</span>:
+    wait(watch=barrierNode)</div>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Observability in Distributed Systems</div>
+
+  <div class="wide-card">
+    <div class="wide-card-header">
+      <div class="wide-card-icon" style="background:var(--purple-light)">🔭</div>
+      <div>
+        <h3>Three Pillars of Observability</h3>
+        <div class="sub">Metrics, Logs, and Distributed Traces — each answers different questions about system behaviour</div>
+      </div>
+    </div>
+    <div class="cards-grid-3" style="margin:0">
+      <div>
+        <div class="card-badge blue" style="margin-bottom:10px">📊 Metrics</div>
+        <p style="font-size:14px;color:var(--text-2)"><strong>What:</strong> Numeric time-series (counters, gauges, histograms). <strong>Tools:</strong> Prometheus + Grafana. <strong>Patterns:</strong> RED (Rate, Errors, Duration) for services; USE (Utilization, Saturation, Errors) for resources.</p>
+        <div class="code-block" style="margin-top:8px;font-size:12px"><span class="cmt"># Histogram for p99</span>
+http_request_duration_seconds_bucket{
+  le="0.1"} = <span class="num">9500</span>
+le="1.0"  = <span class="num">9950</span>
+le="+Inf" = <span class="num">10000</span></div>
+      </div>
+      <div>
+        <div class="card-badge orange" style="margin-bottom:10px">📜 Logs</div>
+        <p style="font-size:14px;color:var(--text-2)"><strong>What:</strong> Structured event records with context. <strong>Tools:</strong> ELK stack, Loki + Grafana. <strong>Patterns:</strong> Structured JSON logging, correlation IDs, log levels with sampling.</p>
+        <div class="code-block" style="margin-top:8px;font-size:12px">{
+  <span class="str">"level"</span>: <span class="str">"error"</span>,
+  <span class="str">"trace_id"</span>: <span class="str">"abc-123"</span>,
+  <span class="str">"service"</span>: <span class="str">"payment"</span>,
+  <span class="str">"user_id"</span>: <span class="num">42</span>,
+  <span class="str">"msg"</span>: <span class="str">"charge failed"</span>
+}</div>
+      </div>
+      <div>
+        <div class="card-badge purple" style="margin-bottom:10px">🔍 Traces</div>
+        <p style="font-size:14px;color:var(--text-2)"><strong>What:</strong> End-to-end request flows across services via spans with parent-child relationships. <strong>Tools:</strong> Jaeger, Zipkin, Tempo. <strong>Standard:</strong> OpenTelemetry.</p>
+        <div class="code-block" style="margin-top:8px;font-size:12px">span = tracer.<span class="fn">start</span>(
+  <span class="str">"db.query"</span>,
+  parent=httpSpan)
+span.<span class="fn">setTag</span>(<span class="str">"db.table"</span>, <span class="str">"orders"</span>)
+<span class="cmt">// propagated via headers:</span>
+<span class="cmt">// traceparent: 00-abc123-xyz789-01</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">Service Mesh & Network Resilience</div>
+
+  <div class="cards-grid-2">
+    <div class="card purple">
+      <div class="card-badge purple">Infra</div>
+      <h3>Service Mesh (Istio / Linkerd)</h3>
+      <p>Sidecar proxies intercept all inter-service traffic — providing resilience, observability, and security without code changes.</p>
+      <ul class="detail-list">
+        <li><span class="dot" style="background:var(--purple)"></span><strong>mTLS:</strong> Automatic mutual TLS between services</li>
+        <li><span class="dot" style="background:var(--purple)"></span><strong>Traffic management:</strong> Retries, timeouts, circuit breaking at proxy layer</li>
+        <li><span class="dot" style="background:var(--purple)"></span><strong>Canary:</strong> Traffic splitting by weight or header</li>
+        <li><span class="dot" style="background:var(--purple)"></span><strong>Telemetry:</strong> Automatic metrics and trace injection</li>
+      </ul>
+    </div>
+    <div class="card blue">
+      <div class="card-badge blue">Infra</div>
+      <h3>Rate Limiting & Backpressure</h3>
+      <p>Protect services from overload. Rate limiting at the edge; backpressure signals propagated through the system.</p>
+      <div class="code-block"><span class="cmt">// Token bucket algorithm</span>
+<span class="kw">class</span> <span class="cls">TokenBucket</span> {
+  capacity = <span class="num">1000</span>;   <span class="cmt">// burst</span>
+  rate     = <span class="num">100</span>/s;   <span class="cmt">// refill rate</span>
+  tokens   = capacity;
+
+  <span class="fn">allow</span>(cost=<span class="num">1</span>):
+    <span class="fn">refill</span>()
+    <span class="kw">if</span> tokens >= cost:
+      tokens -= cost
+      <span class="kw">return true</span>
+    <span class="kw">return false</span>  <span class="cmt">// 429 Too Many Requests</span>
+}</div>
+    </div>
+  </div>
+
+  <div class="subsec-title purple">CAP / Consistency Cheatsheet for Common Systems</div>
+
+  <div class="compare-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Type</th>
+          <th>Default Consistency</th>
+          <th>Replication</th>
+          <th>HA Strategy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>PostgreSQL</strong></td>
+          <td><span class="tag-pill tp-blue">RDBMS</span></td>
+          <td>Serializable (single node)</td>
+          <td>Streaming replication (sync/async)</td>
+          <td>Patroni, pgBouncer, Citus</td>
+        </tr>
+        <tr>
+          <td><strong>Cassandra</strong></td>
+          <td><span class="tag-pill tp-orange">Wide-column</span></td>
+          <td>Eventual (tunable)</td>
+          <td>Leaderless, N=3 typical</td>
+          <td>Multi-DC, RF≥3 per DC</td>
+        </tr>
+        <tr>
+          <td><strong>Kafka</strong></td>
+          <td><span class="tag-pill tp-purple">Log / Queue</span></td>
+          <td>Sequential per partition</td>
+          <td>ISR (In-Sync Replicas)</td>
+          <td>min.insync.replicas=2, acks=all</td>
+        </tr>
+        <tr>
+          <td><strong>Redis</strong></td>
+          <td><span class="tag-pill tp-red">In-memory</span></td>
+          <td>Strong (single node)</td>
+          <td>Async to replicas</td>
+          <td>Sentinel / Cluster mode</td>
+        </tr>
+        <tr>
+          <td><strong>Elasticsearch</strong></td>
+          <td><span class="tag-pill tp-green">Search</span></td>
+          <td>Near real-time (1s refresh)</td>
+          <td>Primary + replica shards</td>
+          <td>Cross-cluster replication (CCR)</td>
+        </tr>
+        <tr>
+          <td><strong>Apache Flink</strong></td>
+          <td><span class="tag-pill tp-teal">Streaming</span></td>
+          <td>Exactly-once (checkpoints)</td>
+          <td>State backend replication</td>
+          <td>Standby TaskManagers, JobManager HA via ZK</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</section>
+
+</main>
+
+<footer class="footer">
+  <strong>Architecture Deep Dive</strong> — Resilience · Fault Tolerance · High Availability · Scalability · Big Data · Distributed Systems<br>
+  <span style="margin-top:8px;display:block">Patterns and principles for production-grade distributed systems at scale</span>
+</footer>
+
+<script>
+  // Active nav highlighting on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navPills = document.querySelectorAll('.nav-pill');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navPills.forEach(p => p.classList.remove('active'));
+        const active = document.querySelector(`.nav-pill[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.2, rootMargin: '-60px 0px 0px 0px' });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Smooth scroll for nav pills
+  navPills.forEach(pill => {
+    pill.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(pill.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  // Card stagger animation on scroll
+  const cards = document.querySelectorAll('.card, .wide-card, .metric-card');
+  const cardObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }, i * 50);
+        cardObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.05 });
+
+  cards.forEach(card => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(16px)';
+    card.style.transition = 'opacity 0.4s ease, transform 0.4s ease, box-shadow 0.25s ease, border-color 0.25s ease';
+    cardObserver.observe(card);
+  });
+</script>
+</body>
+</html>

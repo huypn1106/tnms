@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StarRocks — Big Data Platform Design Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --bg-card: #ffffff;
+    --bg-soft: #e8edf5;
+    --blue: #3b82f6;
+    --blue-light: #dbeafe;
+    --blue-mid: #93c5fd;
+    --orange: #f97316;
+    --orange-light: #ffedd5;
+    --purple: #8b5cf6;
+    --purple-light: #ede9fe;
+    --green: #22c55e;
+    --green-light: #dcfce7;
+    --teal: #14b8a6;
+    --teal-light: #ccfbf1;
+    --red: #ef4444;
+    --red-light: #fee2e2;
+    --text: #1e2a3a;
+    --text-mid: #4a5568;
+    --text-soft: #718096;
+    --border: #e2e8f0;
+    --shadow: 0 2px 12px rgba(59,130,246,0.08);
+    --shadow-hover: 0 8px 30px rgba(59,130,246,0.15);
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    min-height: 100vh;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 60px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+
+  .nav-brand {
+    font-family: 'Sora', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--blue);
+    white-space: nowrap;
+    margin-right: 16px;
+    letter-spacing: -0.5px;
+  }
+  .nav-brand span { color: var(--orange); }
+
+  nav a {
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-mid);
+    padding: 5px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  nav a:hover { background: var(--blue-light); color: var(--blue); }
+
+  /* HERO */
+  .hero {
+    background: linear-gradient(135deg, #e8f0fe 0%, #f0f9ff 40%, #fef3e8 100%);
+    padding: 80px 40px 60px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: -60px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -40px; right: -40px;
+    width: 250px; height: 250px;
+    background: radial-gradient(circle, rgba(249,115,22,0.1) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .hero-badge {
+    display: inline-block;
+    background: var(--blue-light);
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 16px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .hero h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(36px, 5vw, 60px);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+  }
+  .hero h1 .accent-blue { color: var(--blue); }
+  .hero h1 .accent-orange { color: var(--orange); }
+
+  .hero-sub {
+    font-size: 18px;
+    color: var(--text-mid);
+    max-width: 640px;
+    margin: 0 auto 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+  .stat-pill {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .stat-pill:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .stat-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* MAIN LAYOUT */
+  main { max-width: 1200px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* SECTION */
+  .section { margin-bottom: 60px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .section-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+  .section-title span { color: var(--blue); }
+  .section-desc {
+    font-size: 15.5px;
+    color: var(--text-mid);
+    margin-bottom: 24px;
+    line-height: 1.7;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body { font-size: 15px; color: var(--text-mid); line-height: 1.7; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+  /* TAG */
+  .tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin: 3px;
+  }
+  .tag-blue { background: var(--blue-light); color: var(--blue); }
+  .tag-orange { background: var(--orange-light); color: var(--orange); }
+  .tag-purple { background: var(--purple-light); color: var(--purple); }
+  .tag-green { background: var(--green-light); color: var(--green); }
+  .tag-teal { background: var(--teal-light); color: var(--teal); }
+  .tag-red { background: var(--red-light); color: var(--red); }
+
+  /* CODE BLOCK */
+  .code-block {
+    background: #1e2a3a;
+    border-radius: 12px;
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.8;
+    overflow-x: auto;
+    margin: 16px 0;
+    position: relative;
+  }
+  .code-block .lang-label {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .code-block .kw { color: #79c0ff; }
+  .code-block .val { color: #ffa657; }
+  .code-block .str { color: #a5d6ff; }
+  .code-block .cmt { color: #8b949e; font-style: italic; }
+  .code-block .fn { color: #d2a8ff; }
+  .code-block .num { color: #f0883e; }
+  .code-block .txt { color: #e6edf3; }
+
+  /* ARCH DIAGRAM */
+  .arch-diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    box-shadow: var(--shadow);
+  }
+
+  .arch-layer {
+    margin-bottom: 16px;
+  }
+  .arch-layer-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    margin-bottom: 10px;
+    padding-left: 4px;
+  }
+  .arch-nodes {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .arch-node {
+    flex: 1;
+    min-width: 120px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s;
+    cursor: default;
+  }
+  .arch-node:hover { transform: scale(1.04); }
+  .arch-node .node-icon { font-size: 20px; margin-bottom: 4px; }
+  .arch-node .node-label { line-height: 1.3; }
+
+  .node-blue { background: var(--blue-light); color: #1d4ed8; border: 1.5px solid #93c5fd; }
+  .node-orange { background: var(--orange-light); color: #c2410c; border: 1.5px solid #fdba74; }
+  .node-purple { background: var(--purple-light); color: #6d28d9; border: 1.5px solid #c4b5fd; }
+  .node-green { background: var(--green-light); color: #15803d; border: 1.5px solid #86efac; }
+  .node-teal { background: var(--teal-light); color: #0f766e; border: 1.5px solid #5eead4; }
+  .node-gray { background: #f1f5f9; color: #475569; border: 1.5px solid #cbd5e1; }
+
+  .arch-arrow {
+    text-align: center;
+    color: var(--text-soft);
+    font-size: 20px;
+    margin: 4px 0;
+  }
+
+  /* FLOW */
+  .flow-steps {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .flow-step {
+    flex: 1;
+    min-width: 160px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 16px;
+    text-align: center;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .flow-step:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .flow-step:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: var(--text-soft);
+    z-index: 2;
+  }
+  .flow-step + .flow-step { margin-left: 12px; }
+  .flow-icon { font-size: 28px; margin-bottom: 8px; }
+  .flow-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .flow-desc { font-size: 12px; color: var(--text-soft); line-height: 1.4; }
+
+  /* TABLE */
+  .table-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #f8fafd; }
+  th {
+    padding: 14px 20px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 14px 20px;
+    font-size: 15px;
+    color: var(--text-mid);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafd; }
+
+  /* HIGHLIGHT BOX */
+  .highlight-box {
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    border-left: 4px solid;
+    font-size: 15.5px;
+    line-height: 1.7;
+  }
+  .hb-blue { background: var(--blue-light); border-color: var(--blue); color: #1e3a5f; }
+  .hb-orange { background: var(--orange-light); border-color: var(--orange); color: #7c2d12; }
+  .hb-green { background: var(--green-light); border-color: var(--green); color: #14532d; }
+  .hb-purple { background: var(--purple-light); border-color: var(--purple); color: #3b0764; }
+
+  .hb-icon { font-size: 18px; margin-right: 8px; }
+
+  /* FEATURE PILLS */
+  .feature-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .feature-pill {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 30px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: all 0.2s;
+    box-shadow: var(--shadow);
+  }
+  .feature-pill:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); transform: translateY(-1px); }
+
+  /* DIVIDER */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 48px 0;
+  }
+
+  /* FRAMEWORK CARDS */
+  .fw-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    transition: all 0.2s;
+    box-shadow: var(--shadow);
+  }
+  .fw-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .fw-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .fw-logo {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .fw-name { font-size: 16px; font-weight: 700; color: var(--text); }
+  .fw-role { font-size: 12px; font-weight: 600; color: var(--text-soft); }
+  .fw-desc { font-size: 14.5px; color: var(--text-mid); line-height: 1.65; }
+
+  /* PRODUCTION STEPS */
+  .prod-step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    gap: 20px;
+    transition: all 0.2s;
+  }
+  .prod-step:hover { transform: translateX(4px); box-shadow: var(--shadow-hover); }
+  .step-num {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-family: 'Sora', sans-serif;
+  }
+  .step-content { flex: 1; }
+  .step-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .step-body { font-size: 15px; color: var(--text-mid); line-height: 1.7; }
+
+  /* SCROLL ANIMATION */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    nav { padding: 0 16px; }
+    .hero { padding: 56px 20px 48px; }
+    main { padding: 32px 16px 60px; }
+    .flow-steps { flex-direction: column; }
+    .flow-step:not(:last-child)::after { content: '↓'; right: auto; left: 50%; bottom: -18px; top: auto; transform: translateX(-50%); }
+    .flow-step + .flow-step { margin-left: 0; margin-top: 20px; }
+  }
+
+  /* TOC Sidebar hint */
+  .toc-strip {
+    background: var(--blue-light);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 40px;
+    font-size: 14px;
+    color: #1d4ed8;
+    font-weight: 500;
+  }
+  .toc-strip strong { font-weight: 700; }
+  .toc-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .toc-link {
+    background: white;
+    color: var(--blue);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #93c5fd;
+    transition: all 0.2s;
+  }
+  .toc-link:hover { background: var(--blue); color: white; }
+
+  /* Full Architecture Diagram */
+  .full-arch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .fa-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    margin-bottom: 32px;
+    letter-spacing: -0.3px;
+  }
+  .fa-tier {
+    margin-bottom: 20px;
+  }
+  .fa-tier-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-soft);
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+  .fa-tier-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .fa-node {
+    flex: 1;
+    min-width: 130px;
+    padding: 13px 14px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+    line-height: 1.4;
+  }
+  .fa-node:hover { transform: scale(1.05); box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+  .fa-node .fn-icon { font-size: 18px; display: block; margin-bottom: 4px; }
+  .fa-node .fn-name { font-size: 12.5px; }
+  .fa-node .fn-tag { font-size: 10.5px; margin-top: 2px; opacity: 0.75; }
+  .fa-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 6px 0;
+    gap: 8px;
+    color: var(--text-soft);
+    font-size: 13px;
+  }
+  .fa-connector .arrow-line {
+    height: 1.5px;
+    flex: 1;
+    background: linear-gradient(to right, transparent, var(--border), transparent);
+  }
+  .fa-connector .arrow-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-soft);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">Star<span>Rocks</span> Guide</div>
+  <a href="#what">What is it?</a>
+  <a href="#how">How it works</a>
+  <a href="#arch">Architecture</a>
+  <a href="#why">Why StarRocks</a>
+  <a href="#production">Production Setup</a>
+  <a href="#ecosystem">Ecosystem</a>
+  <a href="#fullarch">Full Big Data Arch</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">⭐ Open-Source OLAP Engine</div>
+  <h1>
+    <span class="accent-blue">StarRocks</span><br>
+    Big Data Platform Design<br>
+    <span class="accent-orange">Complete Guide</span>
+  </h1>
+  <p class="hero-sub">
+    A next-generation, vectorized MPP OLAP database designed for sub-second analytics on petabyte-scale data — without pre-aggregation or data cubes.
+  </p>
+  <div class="hero-stats">
+    <div class="stat-pill"><div class="dot" style="background:var(--blue)"></div> Vectorized Engine</div>
+    <div class="stat-pill"><div class="dot" style="background:var(--orange)"></div> MPP Architecture</div>
+    <div class="stat-pill"><div class="dot" style="background:var(--green)"></div> Sub-second Queries</div>
+    <div class="stat-pill"><div class="dot" style="background:var(--purple)"></div> PB-scale Storage</div>
+    <div class="stat-pill"><div class="dot" style="background:var(--teal)"></div> Real-time + Batch</div>
+  </div>
+</div>
+
+<main>
+
+  <!-- TOC -->
+  <div class="toc-strip fade-in">
+    <strong>📋 Jump to section:</strong>
+    <div class="toc-links">
+      <a class="toc-link" href="#what">What is StarRocks</a>
+      <a class="toc-link" href="#how">How it Works</a>
+      <a class="toc-link" href="#arch">Internal Architecture</a>
+      <a class="toc-link" href="#why">Why Choose It</a>
+      <a class="toc-link" href="#production">Production at PB Scale</a>
+      <a class="toc-link" href="#ecosystem">Open-Source Ecosystem</a>
+      <a class="toc-link" href="#fullarch">Full Big Data Architecture</a>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 1: WHAT IS STARROCKS
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="what">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--blue-light)">⭐</div>
+      <div>
+        <div class="section-title">What is <span>StarRocks</span>?</div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      StarRocks (formerly DorisDB) is a next-generation, open-source, fully-vectorized MPP (Massively Parallel Processing) OLAP database engine. It was originally developed by the team behind Apache Doris at Baidu, later spun off as an independent project. It is now a graduated Apache Software Foundation top-level project known as <strong>Apache Doris</strong> (upstream), with StarRocks as its enterprise-grade fork with significant performance and feature improvements.
+    </p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">🏛️ Origin & Lineage</div>
+        <div class="card-body">
+          StarRocks originated from Apache Doris (previously Palo at Baidu). The core team forked it to build a more performant, cloud-native OLAP engine. StarRocks became open-source in 2021 under the Apache 2.0 license and has grown rapidly with enterprise adoption across Alibaba, JD.com, Meituan, and global tech companies.
+        </div>
+        <div style="margin-top:12px">
+          <span class="tag tag-blue">Apache 2.0</span>
+          <span class="tag tag-orange">MySQL Protocol</span>
+          <span class="tag tag-green">CBO Optimizer</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🎯 Core Purpose</div>
+        <div class="card-body">
+          StarRocks is purpose-built for high-concurrency, low-latency analytical queries on massive datasets. It supports <strong>OLAP</strong>, <strong>real-time analytics</strong>, and <strong>ad-hoc queries</strong> in a single unified engine — replacing the need for separate pre-computation layers like Kylin or Druid aggregation cubes.
+        </div>
+        <div style="margin-top:12px">
+          <span class="tag tag-purple">OLAP</span>
+          <span class="tag tag-teal">Real-time</span>
+          <span class="tag tag-blue">Ad-hoc</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box hb-blue" style="margin-top:20px">
+      <span class="hb-icon">💡</span>
+      <strong>One-line definition:</strong> StarRocks is a vectorized MPP OLAP database that delivers sub-second SQL analytics on petabytes of data — supporting both real-time streaming ingestion and batch processing — without pre-computed cubes or aggregation trees.
+    </div>
+
+    <div class="grid-3" style="margin-top:20px">
+      <div class="card">
+        <div class="card-title" style="color:var(--blue)">📊 Analytics Types</div>
+        <div class="card-body" style="font-size:14px">
+          • Interactive dashboard queries<br>
+          • Ad-hoc exploratory analytics<br>
+          • Real-time metrics monitoring<br>
+          • Multidimensional OLAP analysis<br>
+          • High-concurrency reporting
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--orange)">⚙️ Engine Type</div>
+        <div class="card-body" style="font-size:14px">
+          • Fully vectorized execution<br>
+          • Columnar storage format<br>
+          • Cost-Based Optimizer (CBO)<br>
+          • Pipeline execution engine<br>
+          • Adaptive query scheduling
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--green)">🔗 Compatibility</div>
+        <div class="card-body" style="font-size:14px">
+          • MySQL wire protocol (port 9030)<br>
+          • ANSI SQL-99 + extensions<br>
+          • JDBC/ODBC drivers<br>
+          • Spark/Flink connectors<br>
+          • BI tool native support
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 2: HOW IT WORKS
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="how">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--orange-light)">⚙️</div>
+      <div>
+        <div class="section-title">How it <span>Works</span></div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      StarRocks processes queries using a pipeline-based, fully vectorized MPP engine. A query enters through a Frontend (FE) node, gets parsed and optimized by the CBO, distributed as fragments to Backend (BE) nodes, executed in parallel with vectorized operators, and the results are merged and returned.
+    </p>
+
+    <!-- Query Flow -->
+    <div style="margin-bottom:28px">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">Query Execution Flow</div>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="flow-icon">🖥️</div>
+          <div class="flow-name">SQL Client</div>
+          <div class="flow-desc">Sends SQL via MySQL protocol</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon">🧠</div>
+          <div class="flow-name">FE Parser</div>
+          <div class="flow-desc">Parse + analyze SQL AST</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon">🔮</div>
+          <div class="flow-name">CBO Optimizer</div>
+          <div class="flow-desc">Choose optimal execution plan</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon">🗺️</div>
+          <div class="flow-name">Query Planner</div>
+          <div class="flow-desc">Split into plan fragments</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon">⚡</div>
+          <div class="flow-name">BE Executors</div>
+          <div class="flow-desc">Vectorized parallel execution</div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon">📦</div>
+          <div class="flow-name">Results</div>
+          <div class="flow-desc">Merge, return to client</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-title">🚀 Vectorized Execution Engine</div>
+        <div class="card-body">
+          Instead of processing one row at a time (like traditional engines), StarRocks processes data in <strong>batches (vectors)</strong> using SIMD (Single Instruction Multiple Data) CPU instructions. This means a single CPU instruction can process 4–16 values simultaneously, dramatically reducing overhead per row and maximizing cache efficiency. All operators — scan, filter, join, aggregation — are fully vectorized.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔢 Cost-Based Optimizer (CBO)</div>
+        <div class="card-body">
+          StarRocks uses a sophisticated CBO that collects table/column statistics (row counts, NDV, histograms) and uses these to evaluate the cost of alternative query plans. It chooses optimal join orders, join algorithms (hash join, broadcast join, shuffle join), and operator push-downs. The CBO is inspired by Cascades framework used in enterprise databases like SQL Server.
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-title">🔄 Pipeline Execution Model</div>
+        <div class="card-body">
+          StarRocks v2.0+ introduced a fully pipelined execution model. Query plan fragments are broken into <strong>pipeline operators</strong> that process data in a streaming fashion. Operators are non-blocking — data flows continuously from scan → filter → join → agg without waiting for each stage to complete. This removes pipeline stalls and dramatically reduces latency for complex multi-stage queries.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🗄️ Columnar Storage (Segment)</div>
+        <div class="card-body">
+          Data is stored in <strong>columnar format (Segment files)</strong>. Each segment contains multiple column files with zone maps, bitmap indexes, and Bloom filter indexes. During scan, only required columns are read. StarRocks also uses <strong>Short-circuit scan</strong> — when a query targets indexed columns, it skips irrelevant data pages entirely using per-page zone maps.
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">📂 Storage Models</div>
+      <div class="card-body" style="margin-bottom:14px">StarRocks offers four distinct table types optimized for different workloads:</div>
+      <div class="grid-4">
+        <div style="background:var(--blue-light);padding:14px;border-radius:10px">
+          <div style="font-weight:700;font-size:14px;color:#1d4ed8;margin-bottom:6px">🔑 Duplicate Key</div>
+          <div style="font-size:13px;color:#1e40af">All rows stored as-is. Best for log/event data with flexible queries. No dedup or aggregation.</div>
+        </div>
+        <div style="background:var(--green-light);padding:14px;border-radius:10px">
+          <div style="font-weight:700;font-size:14px;color:#15803d;margin-bottom:6px">📊 Aggregate Key</div>
+          <div style="font-size:13px;color:#166534">Pre-aggregates metrics at load time. Best for metrics/KPI tables. SUM, MAX, MIN, REPLACE supported.</div>
+        </div>
+        <div style="background:var(--orange-light);padding:14px;border-radius:10px">
+          <div style="font-weight:700;font-size:14px;color:#c2410c;margin-bottom:6px">🔄 Unique Key</div>
+          <div style="font-size:13px;color:#9a3412">Deduplicates rows by key (last-write-wins). Best for CDC/upsert workloads. Supports DELETE.</div>
+        </div>
+        <div style="background:var(--purple-light);padding:14px;border-radius:10px">
+          <div style="font-weight:700;font-size:14px;color:#6d28d9;margin-bottom:6px">🌐 Primary Key</div>
+          <div style="font-size:13px;color:#5b21b6">True UPDATE/DELETE support with row-level MVCC. Best for real-time upsert from CDC streams.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box hb-orange">
+      <span class="hb-icon">🔥</span>
+      <strong>Hot/Cold Tiering:</strong> StarRocks supports tiered storage. Hot data lives on local NVMe SSDs on BE nodes. Cold data can be offloaded to object storage (S3/HDFS) while remaining fully queryable. The engine uses Datacache (local disk/memory cache) to accelerate repeated queries on cold data.
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 3: INTERNAL ARCHITECTURE
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="arch">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--purple-light)">🏗️</div>
+      <div>
+        <div class="section-title">Internal <span>Architecture</span></div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      StarRocks uses a classic separation of <strong>Frontend (Metadata/Coordination)</strong> and <strong>Backend (Compute/Storage)</strong> nodes. In shared-nothing deployments, BE nodes own data locally. In shared-data (cloud-native) mode, storage is decoupled to object storage.
+    </p>
+
+    <div class="arch-diagram fade-in">
+      <div style="font-family:'Sora',sans-serif;font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:24px">StarRocks Internal Node Architecture</div>
+
+      <!-- Client Layer -->
+      <div class="arch-layer">
+        <div class="arch-layer-label">Client Layer</div>
+        <div class="arch-nodes">
+          <div class="arch-node node-gray"><div class="node-icon">💻</div><div class="node-label">MySQL Client<br><small style="font-weight:400;opacity:0.7">Port 9030</small></div></div>
+          <div class="arch-node node-gray"><div class="node-icon">📊</div><div class="node-label">BI Tools<br><small style="font-weight:400;opacity:0.7">Tableau / Superset</small></div></div>
+          <div class="arch-node node-gray"><div class="node-icon">🔧</div><div class="node-label">Spark / Flink<br><small style="font-weight:400;opacity:0.7">Connector</small></div></div>
+          <div class="arch-node node-gray"><div class="node-icon">🌐</div><div class="node-label">REST API<br><small style="font-weight:400;opacity:0.7">Stream Load</small></div></div>
+        </div>
+      </div>
+      <div class="arch-arrow">↕</div>
+
+      <!-- FE Layer -->
+      <div class="arch-layer">
+        <div class="arch-layer-label">Frontend (FE) Layer — Coordination & Metadata</div>
+        <div class="arch-nodes">
+          <div class="arch-node node-blue"><div class="node-icon">👑</div><div class="node-label">FE Leader<br><small style="font-weight:400">BDBJE Raft</small></div></div>
+          <div class="arch-node node-blue"><div class="node-icon">🤝</div><div class="node-label">FE Follower 1<br><small style="font-weight:400">Read replica</small></div></div>
+          <div class="arch-node node-blue"><div class="node-icon">🤝</div><div class="node-label">FE Follower 2<br><small style="font-weight:400">Read replica</small></div></div>
+          <div class="arch-node node-purple"><div class="node-icon">🔮</div><div class="node-label">CBO Optimizer<br><small style="font-weight:400">Inside FE</small></div></div>
+        </div>
+      </div>
+      <div class="arch-arrow">↕</div>
+
+      <!-- BE Layer -->
+      <div class="arch-layer">
+        <div class="arch-layer-label">Backend (BE) Layer — Compute & Storage</div>
+        <div class="arch-nodes">
+          <div class="arch-node node-orange"><div class="node-icon">⚡</div><div class="node-label">BE Node 1<br><small style="font-weight:400">Execute + Storage</small></div></div>
+          <div class="arch-node node-orange"><div class="node-icon">⚡</div><div class="node-label">BE Node 2<br><small style="font-weight:400">Execute + Storage</small></div></div>
+          <div class="arch-node node-orange"><div class="node-icon">⚡</div><div class="node-label">BE Node 3<br><small style="font-weight:400">Execute + Storage</small></div></div>
+          <div class="arch-node node-orange"><div class="node-icon">⚡</div><div class="node-label">BE Node N<br><small style="font-weight:400">Horizontal scale</small></div></div>
+        </div>
+      </div>
+      <div class="arch-arrow">↕</div>
+
+      <!-- Storage Layer -->
+      <div class="arch-layer">
+        <div class="arch-layer-label">Storage Layer</div>
+        <div class="arch-nodes">
+          <div class="arch-node node-green"><div class="node-icon">💾</div><div class="node-label">Local NVMe SSD<br><small style="font-weight:400">Hot data</small></div></div>
+          <div class="arch-node node-teal"><div class="node-icon">☁️</div><div class="node-label">S3 / HDFS<br><small style="font-weight:400">Cold / Shared data</small></div></div>
+          <div class="arch-node node-green"><div class="node-icon">🗂️</div><div class="node-label">Segment Files<br><small style="font-weight:400">Columnar format</small></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:24px">
+      <div class="card">
+        <div class="card-title">🧠 Frontend (FE) Responsibilities</div>
+        <div class="card-body">
+          <strong>SQL parsing & semantic analysis</strong> — builds AST and validates schema.<br><br>
+          <strong>Query optimization</strong> — CBO generates and selects optimal physical plan.<br><br>
+          <strong>Metadata management</strong> — stores all catalog, table, partition, and tablet metadata using BDB-JE (Berkeley DB Java Edition) with Raft-based consensus for HA.<br><br>
+          <strong>Load scheduling</strong> — coordinates data ingestion jobs (Broker Load, Routine Load, Stream Load).
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚡ Backend (BE) Responsibilities</div>
+        <div class="card-body">
+          <strong>Data storage</strong> — owns tablets (data shards) in columnar Segment files on local disk or object storage.<br><br>
+          <strong>Query execution</strong> — receives plan fragments from FE, executes vectorized operators (scan, filter, join, agg, sort).<br><br>
+          <strong>Data exchange</strong> — shuffles intermediate data between BEs during joins/aggregations over the internal network.<br><br>
+          <strong>Compaction</strong> — background merging of delta rowsets into base rowsets for read efficiency.
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-title">🗄️ Data Organization: Tablet → Rowset → Segment → Column</div>
+      <div class="card-body">
+        <div class="flow-steps">
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">🗂️</div>
+            <div class="flow-name">Table</div>
+            <div class="flow-desc">Partitioned by date/hash</div>
+          </div>
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">📋</div>
+            <div class="flow-name">Partition</div>
+            <div class="flow-desc">Range or List partition</div>
+          </div>
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">💊</div>
+            <div class="flow-name">Tablet</div>
+            <div class="flow-desc">Bucketed shard on BE</div>
+          </div>
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">📦</div>
+            <div class="flow-name">Rowset</div>
+            <div class="flow-desc">Write batch / delta</div>
+          </div>
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">📄</div>
+            <div class="flow-name">Segment</div>
+            <div class="flow-desc">Columnar .dat file</div>
+          </div>
+          <div class="flow-step" style="flex:1">
+            <div class="flow-icon">🔢</div>
+            <div class="flow-name">Column</div>
+            <div class="flow-desc">Encoded + indexed</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 4: WHY STARROCKS IS GOOD
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="why">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--green-light)">🏆</div>
+      <div>
+        <div class="section-title">Why <span>StarRocks</span> is Exceptional</div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      StarRocks consistently benchmarks at 3–10x faster than Hive, Presto/Trino, and ClickHouse on multi-table join analytics. Here's a deep look at its key strengths.
+    </p>
+
+    <div class="grid-2">
+
+      <div class="card">
+        <div class="card-title" style="color:var(--blue)">⚡ Performance: Sub-second at Scale</div>
+        <div class="card-body">
+          StarRocks achieves sub-second query latency on <strong>petabyte-scale data</strong> through multiple complementary techniques: full vectorization (SIMD), CBO-driven plan optimization, pipeline non-blocking execution, columnar scan with predicate pushdown, and intelligent data skipping via zone maps and bloom filters. In TPC-H and SSB benchmarks, StarRocks outperforms Presto/Trino by 3–10x.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--orange)">🔄 Unified Real-time + Batch</div>
+        <div class="card-body">
+          StarRocks is the rare OLAP engine that handles <strong>both streaming and batch analytics natively</strong>. Data can be ingested from Kafka via Routine Load (real-time, lag &lt;1s), from files via Broker Load/INSERT (batch), or via Flink/Spark connectors. The same table and query engine handles both freshly ingested real-time data and historical batch data seamlessly — no separate lambda architecture needed.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--purple)">🔗 External Table / Data Lakehouse</div>
+        <div class="card-body">
+          StarRocks can directly query data in <strong>Hive, Iceberg, Delta Lake, Hudi, JDBC, Elasticsearch, and S3/HDFS</strong> as External Catalogs — without copying data. This makes it a powerful Lakehouse query engine. It can join internal StarRocks tables with external Iceberg/Hive tables in a single SQL query, enabling federation across the data lake and data warehouse.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--green)">💰 Cost Efficiency</div>
+        <div class="card-body">
+          Compared to Snowflake, BigQuery, or Redshift, StarRocks is <strong>open-source and self-managed</strong>. No data egress fees, no per-query costs. The hot/cold tiering capability means you keep hot data on fast SSDs and cold data on cheap object storage (S3), dramatically reducing infrastructure cost while maintaining query performance via the Datacache layer.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--teal)">🔒 High Availability & No SPOF</div>
+        <div class="card-body">
+          FE nodes use <strong>Raft consensus (BDB-JE)</strong> for metadata replication (typically 3 FE nodes: 1 leader + 2 followers). BE data is replicated with a configurable replication factor (default 3). No external ZooKeeper or NameNode dependency. This shared-nothing, self-healing design means individual node failures are handled transparently with automatic re-routing and re-replication.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="color:var(--red)">📈 High Concurrency</div>
+        <div class="card-body">
+          StarRocks supports <strong>thousands of concurrent query sessions</strong>. For dashboard and BI scenarios, Materialized Views (MV) can be created to pre-aggregate common query patterns. Queries on the MV are automatically rewritten by the optimizer — users don't need to know about the MVs. This enables hundreds of concurrent BI users hitting the same table cluster without degradation.
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box hb-green" style="margin-top:24px">
+      <span class="hb-icon">📊</span>
+      <strong>Benchmark Facts:</strong> In Alibaba's internal benchmarks, StarRocks processed a 10TB TPC-DS benchmark ~5x faster than Presto. At JD.com, it serves 100,000+ daily queries on 10PB+ data with p99 latency under 3 seconds. Meituan migrated 80% of their Kylin OLAP workloads to StarRocks, reducing query time from minutes to seconds.
+    </div>
+
+    <div style="margin-top:24px">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px">Key Feature Highlights</div>
+      <div class="feature-list">
+        <div class="feature-pill">🧮 Fully Vectorized</div>
+        <div class="feature-pill">🔮 CBO Optimizer</div>
+        <div class="feature-pill">🔄 Pipeline Execution</div>
+        <div class="feature-pill">📊 Materialized Views</div>
+        <div class="feature-pill">🌐 External Catalogs</div>
+        <div class="feature-pill">☁️ Shared-Data Mode</div>
+        <div class="feature-pill">🔑 Primary Key Model</div>
+        <div class="feature-pill">📡 Routine Load (Kafka)</div>
+        <div class="feature-pill">🧊 Iceberg / Delta / Hudi</div>
+        <div class="feature-pill">🔐 RBAC / Row-Level Security</div>
+        <div class="feature-pill">📉 Tiered Hot/Cold Storage</div>
+        <div class="feature-pill">⚡ SIMD Vectorization</div>
+        <div class="feature-pill">🔗 Cross-Catalog JOIN</div>
+        <div class="feature-pill">📦 MySQL Protocol</div>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div style="margin-top:28px">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px">StarRocks vs. Alternatives</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>StarRocks</th>
+              <th>ClickHouse</th>
+              <th>Presto/Trino</th>
+              <th>Apache Druid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Multi-table JOINs</strong></td>
+              <td><span class="tag tag-green">✅ Excellent</span></td>
+              <td><span class="tag tag-orange">⚠️ Limited</span></td>
+              <td><span class="tag tag-green">✅ Good</span></td>
+              <td><span class="tag tag-red">❌ Poor</span></td>
+            </tr>
+            <tr>
+              <td><strong>Real-time Ingestion</strong></td>
+              <td><span class="tag tag-green">✅ &lt;1s latency</span></td>
+              <td><span class="tag tag-green">✅ Good</span></td>
+              <td><span class="tag tag-red">❌ Query only</span></td>
+              <td><span class="tag tag-green">✅ Sub-second</span></td>
+            </tr>
+            <tr>
+              <td><strong>Data Lake Query</strong></td>
+              <td><span class="tag tag-green">✅ Native Catalogs</span></td>
+              <td><span class="tag tag-orange">⚠️ Limited</span></td>
+              <td><span class="tag tag-green">✅ Excellent</span></td>
+              <td><span class="tag tag-red">❌ No</span></td>
+            </tr>
+            <tr>
+              <td><strong>UPDATE / DELETE</strong></td>
+              <td><span class="tag tag-green">✅ Primary Key</span></td>
+              <td><span class="tag tag-orange">⚠️ Mutation</span></td>
+              <td><span class="tag tag-red">❌ No</span></td>
+              <td><span class="tag tag-orange">⚠️ Segment</span></td>
+            </tr>
+            <tr>
+              <td><strong>Materialized Views</strong></td>
+              <td><span class="tag tag-green">✅ Auto-rewrite</span></td>
+              <td><span class="tag tag-green">✅ Manual</span></td>
+              <td><span class="tag tag-red">❌ No</span></td>
+              <td><span class="tag tag-orange">⚠️ Rollup only</span></td>
+            </tr>
+            <tr>
+              <td><strong>Open Source License</strong></td>
+              <td><span class="tag tag-green">✅ Apache 2.0</span></td>
+              <td><span class="tag tag-green">✅ Apache 2.0</span></td>
+              <td><span class="tag tag-green">✅ Apache 2.0</span></td>
+              <td><span class="tag tag-green">✅ Apache 2.0</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 5: PRODUCTION SETUP AT PB SCALE
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="production">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--teal-light)">🏭</div>
+      <div>
+        <div class="section-title">Production Setup at <span>Petabyte Scale</span></div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      Deploying StarRocks at PB scale requires careful hardware sizing, replication topology, partitioning strategy, and operational tooling. Below is a production-grade reference deployment.
+    </p>
+
+    <!-- Hardware Spec -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">💻 Hardware Sizing Reference (PB-scale)</div>
+      <div class="table-wrap" style="margin-top:14px">
+        <table>
+          <thead>
+            <tr><th>Role</th><th>Count</th><th>CPU</th><th>RAM</th><th>Storage</th><th>Network</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>FE Leader</strong></td>
+              <td>1</td>
+              <td>16–32 cores</td>
+              <td>64–128 GB</td>
+              <td>500GB SSD (meta)</td>
+              <td>25 GbE</td>
+            </tr>
+            <tr>
+              <td><strong>FE Follower</strong></td>
+              <td>2</td>
+              <td>16–32 cores</td>
+              <td>64–128 GB</td>
+              <td>500GB SSD (meta)</td>
+              <td>25 GbE</td>
+            </tr>
+            <tr>
+              <td><strong>BE Node (hot)</strong></td>
+              <td>20–100+</td>
+              <td>32–64 cores</td>
+              <td>256–512 GB</td>
+              <td>8x 3.8TB NVMe SSD</td>
+              <td>25–100 GbE</td>
+            </tr>
+            <tr>
+              <td><strong>S3 / HDFS</strong></td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>Unlimited (cold data)</td>
+              <td>10 GbE min</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Production Steps -->
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px">Step-by-Step Production Setup</div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--blue-light);color:var(--blue)">01</div>
+      <div class="step-content">
+        <div class="step-title">Deploy Frontend (FE) Cluster</div>
+        <div class="step-body">
+          Deploy 3 FE nodes with Raft consensus. One leader elected automatically. Use dedicated SSD for metadata (BDB-JE journal). Configure <code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg-soft);padding:2px 6px;border-radius:4px">priority_networks</code> to specify the right network interface.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">fe.conf</span>
+          <span class="cmt"># fe/conf/fe.conf</span><br>
+          <span class="kw">meta_dir</span> = <span class="str">/data/starrocks/fe/meta</span><br>
+          <span class="kw">priority_networks</span> = <span class="str">10.0.0.0/24</span><br>
+          <span class="kw">http_port</span> = <span class="num">8030</span><br>
+          <span class="kw">rpc_port</span> = <span class="num">9020</span><br>
+          <span class="kw">query_port</span> = <span class="num">9030</span><br>
+          <span class="kw">edit_log_port</span> = <span class="num">9010</span><br>
+          <span class="kw">sys_log_level</span> = <span class="str">INFO</span><br>
+          <span class="cmt"># Start leader first, then add followers via SQL:</span><br>
+          <span class="cmt"># ALTER SYSTEM ADD FOLLOWER "fe2:9010";</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--orange-light);color:var(--orange)">02</div>
+      <div class="step-content">
+        <div class="step-title">Deploy Backend (BE) Nodes</div>
+        <div class="step-body">
+          Deploy BE nodes with NVMe SSDs. Configure multiple storage paths for parallelism. BE nodes self-register with FE via heartbeat after you add them.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">be.conf</span>
+          <span class="cmt"># be/conf/be.conf</span><br>
+          <span class="kw">storage_root_path</span> = <span class="str">/nvme0/starrocks;/nvme1/starrocks;/nvme2/starrocks</span><br>
+          <span class="kw">priority_networks</span> = <span class="str">10.0.0.0/24</span><br>
+          <span class="kw">be_port</span> = <span class="num">9060</span><br>
+          <span class="kw">be_http_port</span> = <span class="num">8040</span><br>
+          <span class="kw">heartbeat_service_port</span> = <span class="num">9050</span><br>
+          <span class="kw">brpc_port</span> = <span class="num">8060</span><br>
+          <span class="kw">mem_limit</span> = <span class="str">80%</span><br>
+          <span class="cmt"># Register BE to FE cluster:</span><br>
+          <span class="cmt"># ALTER SYSTEM ADD BACKEND "be1:9050";</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--purple-light);color:var(--purple)">03</div>
+      <div class="step-content">
+        <div class="step-title">Design Table Schema with Partitioning</div>
+        <div class="step-body">
+          For PB-scale tables, use <strong>two-level partitioning</strong>: Range partition by date (enables partition pruning), then Hash bucket by high-cardinality dimension. Choose bucket count based on data size (target ~1–10 GB per tablet). Use Primary Key model for CDC data.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">SQL</span>
+          <span class="kw">CREATE TABLE</span> <span class="fn">events</span> (<br>
+          &nbsp;&nbsp;<span class="txt">event_date</span>  <span class="kw">DATE</span>         <span class="kw">NOT NULL</span>,<br>
+          &nbsp;&nbsp;<span class="txt">user_id</span>     <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,<br>
+          &nbsp;&nbsp;<span class="txt">event_type</span>  <span class="kw">VARCHAR</span>(<span class="num">64</span>),<br>
+          &nbsp;&nbsp;<span class="txt">properties</span>  <span class="kw">JSON</span>,<br>
+          &nbsp;&nbsp;<span class="txt">amount</span>      <span class="kw">DECIMAL</span>(<span class="num">18</span>,<span class="num">4</span>),<br>
+          &nbsp;&nbsp;<span class="txt">created_at</span>  <span class="kw">DATETIME</span><br>
+          ) <span class="kw">ENGINE</span>=<span class="str">OLAP</span><br>
+          <span class="kw">PRIMARY KEY</span> (<span class="txt">event_date</span>, <span class="txt">user_id</span>)<br>
+          <span class="kw">PARTITION BY RANGE</span>(<span class="txt">event_date</span>) (<br>
+          &nbsp;&nbsp;<span class="kw">START</span> (<span class="str">"2024-01-01"</span>) <span class="kw">END</span> (<span class="str">"2026-12-31"</span>)<br>
+          &nbsp;&nbsp;<span class="kw">EVERY INTERVAL</span> <span class="num">1</span> <span class="kw">MONTH</span><br>
+          )<br>
+          <span class="kw">DISTRIBUTED BY HASH</span>(<span class="txt">user_id</span>) <span class="kw">BUCKETS</span> <span class="num">128</span><br>
+          <span class="kw">PROPERTIES</span> (<br>
+          &nbsp;&nbsp;<span class="str">"replication_num"</span> = <span class="str">"3"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"storage_medium"</span> = <span class="str">"SSD"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"storage_cooldown_ttl"</span> = <span class="str">"30 day"</span><br>
+          );
+        </div>
+      </div>
+    </div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--green-light);color:var(--green)">04</div>
+      <div class="step-content">
+        <div class="step-title">Configure Real-time Kafka Ingestion (Routine Load)</div>
+        <div class="step-body">
+          StarRocks Routine Load creates a persistent consumer group on Kafka. It auto-commits offsets and handles failure/recovery internally. Throughput can be tuned with <code style="font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--bg-soft);padding:2px 6px;border-radius:4px">desired_concurrent_number</code>.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">SQL</span>
+          <span class="kw">CREATE ROUTINE LOAD</span> <span class="fn">events_kafka_load</span> <span class="kw">ON</span> <span class="txt">events</span><br>
+          <span class="kw">COLUMNS TERMINATED BY</span> <span class="str">","</span>,<br>
+          <span class="kw">COLUMNS</span> (<span class="txt">event_date, user_id, event_type, properties, amount, created_at</span>)<br>
+          <span class="kw">PROPERTIES</span> (<br>
+          &nbsp;&nbsp;<span class="str">"desired_concurrent_number"</span> = <span class="str">"8"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"max_batch_interval"</span> = <span class="str">"10"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"max_error_number"</span> = <span class="str">"1000"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"format"</span> = <span class="str">"json"</span><br>
+          )<br>
+          <span class="kw">FROM KAFKA</span> (<br>
+          &nbsp;&nbsp;<span class="str">"kafka_broker_list"</span> = <span class="str">"broker1:9092,broker2:9092"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"kafka_topic"</span> = <span class="str">"prod.events"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"kafka_partitions"</span> = <span class="str">"0,1,2,3,4,5,6,7"</span><br>
+          );
+        </div>
+      </div>
+    </div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--teal-light);color:var(--teal)">05</div>
+      <div class="step-content">
+        <div class="step-title">Create Async Materialized Views for High-Concurrency BI</div>
+        <div class="step-body">
+          For PB tables, create MVs on common aggregation patterns. Queries touching the base table will be <strong>automatically rewritten</strong> by the optimizer to hit the MV — giving 100x speedup for dashboard queries without changing application code.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">SQL</span>
+          <span class="kw">CREATE MATERIALIZED VIEW</span> <span class="fn">mv_daily_events</span><br>
+          <span class="kw">DISTRIBUTED BY HASH</span>(<span class="txt">event_date</span>) <span class="kw">BUCKETS</span> <span class="num">32</span><br>
+          <span class="kw">REFRESH ASYNC EVERY</span>(<span class="kw">INTERVAL</span> <span class="num">5</span> <span class="kw">MINUTE</span>)<br>
+          <span class="kw">AS</span><br>
+          <span class="kw">SELECT</span><br>
+          &nbsp;&nbsp;<span class="txt">event_date</span>,<br>
+          &nbsp;&nbsp;<span class="txt">event_type</span>,<br>
+          &nbsp;&nbsp;<span class="fn">COUNT</span>(*) <span class="kw">AS</span> <span class="txt">event_count</span>,<br>
+          &nbsp;&nbsp;<span class="fn">SUM</span>(<span class="txt">amount</span>) <span class="kw">AS</span> <span class="txt">total_amount</span>,<br>
+          &nbsp;&nbsp;<span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> <span class="txt">user_id</span>) <span class="kw">AS</span> <span class="txt">dau</span><br>
+          <span class="kw">FROM</span> <span class="txt">events</span><br>
+          <span class="kw">GROUP BY</span> <span class="txt">event_date</span>, <span class="txt">event_type</span>;
+        </div>
+      </div>
+    </div>
+
+    <div class="prod-step">
+      <div class="step-num" style="background:var(--red-light);color:var(--red)">06</div>
+      <div class="step-content">
+        <div class="step-title">Configure Resource Groups & Query Queuing</div>
+        <div class="step-body">
+          At PB scale with hundreds of concurrent users, use Resource Groups to isolate workloads. Assign ETL/batch jobs to low-priority groups and BI dashboards to high-priority groups. Configure concurrency limits and CPU quotas per group to prevent noisy-neighbor issues.
+        </div>
+        <div class="code-block" style="margin-top:10px">
+          <span class="lang-label">SQL</span>
+          <span class="kw">CREATE RESOURCE GROUP</span> <span class="fn">bi_group</span><br>
+          <span class="kw">TO</span> (<span class="str">user</span>=<span class="val">bi_user</span>, <span class="str">role</span>=<span class="val">analyst</span>)<br>
+          <span class="kw">WITH</span> (<br>
+          &nbsp;&nbsp;<span class="str">"cpu_core_limit"</span> = <span class="str">"32"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"mem_limit"</span> = <span class="str">"40%"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"concurrency_limit"</span> = <span class="str">"50"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"type"</span> = <span class="str">"normal"</span><br>
+          );<br><br>
+          <span class="kw">CREATE RESOURCE GROUP</span> <span class="fn">etl_group</span><br>
+          <span class="kw">TO</span> (<span class="str">user</span>=<span class="val">etl_user</span>)<br>
+          <span class="kw">WITH</span> (<br>
+          &nbsp;&nbsp;<span class="str">"cpu_core_limit"</span> = <span class="str">"8"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"mem_limit"</span> = <span class="str">"20%"</span>,<br>
+          &nbsp;&nbsp;<span class="str">"type"</span> = <span class="str">"slow_query"</span><br>
+          );
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box hb-blue" style="margin-top:8px">
+      <span class="hb-icon">☁️</span>
+      <strong>Shared-Data Mode (Cloud Native):</strong> In StarRocks 3.0+, the shared-data deployment separates Compute Nodes (CN) from storage. CNs are stateless and auto-scalable. Data lives on S3/GCS/HDFS. Local disk is used only as Datacache. This is ideal for cloud Kubernetes deployments where compute scales independently of storage.
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 6: OPEN-SOURCE ECOSYSTEM
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="ecosystem">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--orange-light)">🌐</div>
+      <div>
+        <div class="section-title">Open-Source <span>Ecosystem</span> Fit</div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      StarRocks does not operate in isolation — it's most powerful as the <strong>query and serving layer</strong> in a broader big data platform. Below are the best open-source frameworks for each layer of the data stack.
+    </p>
+
+    <!-- Batch -->
+    <div style="margin-bottom:28px">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="background:var(--blue-light);color:var(--blue);padding:4px 10px;border-radius:8px;font-size:13px">BATCH PROCESSING</span>
+      </div>
+      <div class="grid-3">
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--orange-light)">🌊</div>
+            <div>
+              <div class="fw-name">Apache Spark</div>
+              <div class="fw-role">Batch ETL Engine</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Best fit for large-scale batch transformations (ELT). Use StarRocks Spark Connector to write transformed results directly into StarRocks tables. Spark handles the heavy data shuffling; StarRocks serves the results.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-orange">ETL/ELT</span><span class="tag tag-blue">PySpark</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--blue-light)">🗂️</div>
+            <div>
+              <div class="fw-name">dbt (data build tool)</div>
+              <div class="fw-role">SQL Transformation</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            dbt-starrocks adapter allows SQL-based data modeling, testing, and documentation directly on StarRocks. Use dbt for in-warehouse ELT transformations with version-controlled models and lineage tracking.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-blue">SQL Models</span><span class="tag tag-green">Lineage</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--purple-light)">📅</div>
+            <div>
+              <div class="fw-name">Apache Airflow</div>
+              <div class="fw-role">Workflow Orchestration</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Orchestrates batch pipelines: trigger Spark jobs, wait for completion, load into StarRocks, run dbt models. The StarRocksHook connects directly via MySQL protocol. Use DAGs to schedule periodic bulk loads.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-purple">Scheduling</span><span class="tag tag-blue">DAGs</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Streaming -->
+    <div style="margin-bottom:28px">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="background:var(--orange-light);color:var(--orange);padding:4px 10px;border-radius:8px;font-size:13px">STREAMING</span>
+      </div>
+      <div class="grid-3">
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--orange-light)">⚡</div>
+            <div>
+              <div class="fw-name">Apache Flink</div>
+              <div class="fw-role">Stream Processing</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            <strong>Best pairing for StarRocks</strong>. The flink-connector-starrocks uses the StreamLoad protocol to sink data in micro-batches with exactly-once semantics. Flink handles complex CEP, windowing, enrichment; StarRocks stores and serves the output.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-orange">Exactly-Once</span><span class="tag tag-green">CEP</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--red-light)">📨</div>
+            <div>
+              <div class="fw-name">Apache Kafka</div>
+              <div class="fw-role">Message Bus</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Kafka acts as the streaming backbone. StarRocks consumes directly from Kafka via <strong>Routine Load</strong> (built-in consumer, no extra infra). Kafka decouples producers from StarRocks and provides buffering for burst traffic.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-red">Pub/Sub</span><span class="tag tag-blue">Routine Load</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--teal-light)">🔄</div>
+            <div>
+              <div class="fw-name">Debezium + Kafka</div>
+              <div class="fw-role">CDC (Change Data Capture)</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Debezium captures row-level changes from MySQL/PostgreSQL/MongoDB and publishes CDC events to Kafka. Flink or StarRocks Routine Load consumes the CDC stream into StarRocks Primary Key tables for real-time sync.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-teal">CDC</span><span class="tag tag-purple">Upsert</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storage -->
+    <div style="margin-bottom:28px">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="background:var(--green-light);color:var(--green);padding:4px 10px;border-radius:8px;font-size:13px">STORAGE / LAKE</span>
+      </div>
+      <div class="grid-3">
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--blue-light)">🧊</div>
+            <div>
+              <div class="fw-name">Apache Iceberg</div>
+              <div class="fw-role">Table Format (Lake)</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            <strong>Preferred lake table format for StarRocks</strong>. StarRocks can query Iceberg tables via External Catalog with full partition pruning and predicate pushdown. Supports time-travel queries. Spark/Flink write to Iceberg; StarRocks queries it directly.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-blue">ACID</span><span class="tag tag-teal">Time-travel</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--orange-light)">📁</div>
+            <div>
+              <div class="fw-name">Apache Hive / HDFS</div>
+              <div class="fw-role">Legacy Data Lake</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            StarRocks supports Hive Metastore and HDFS natively via Hive External Catalog. Query existing Hive ORC/Parquet tables without migration. Ideal for gradually migrating from Hive to StarRocks as the query engine.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-orange">ORC/Parquet</span><span class="tag tag-green">Federation</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--purple-light)">🌊</div>
+            <div>
+              <div class="fw-name">Apache Hudi</div>
+              <div class="fw-role">Incremental Table Format</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Hudi's MOR (Merge-On-Read) tables provide efficient upsert/delete in the data lake. StarRocks can query Hudi tables via its External Catalog, enabling unified lakehouse analytics across historical Hudi data and real-time StarRocks data.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-purple">MOR/COW</span><span class="tag tag-blue">Incremental</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BI -->
+    <div style="margin-bottom:28px">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="background:var(--purple-light);color:var(--purple);padding:4px 10px;border-radius:8px;font-size:13px">BI / VISUALIZATION</span>
+      </div>
+      <div class="grid-3">
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--red-light)">📊</div>
+            <div>
+              <div class="fw-name">Apache Superset</div>
+              <div class="fw-role">Open-Source BI</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            <strong>Best open-source BI for StarRocks</strong>. Superset connects via MySQL dialect or SQLAlchemy connector. Supports interactive dashboards, SQL Lab ad-hoc queries, alerts, and chart types. Native StarRocks dialect for partition-aware query optimization.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-red">Dashboards</span><span class="tag tag-blue">SQL Lab</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--orange-light)">📈</div>
+            <div>
+              <div class="fw-name">Grafana</div>
+              <div class="fw-role">Metrics & Monitoring</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Grafana connects to StarRocks via MySQL data source plugin. Ideal for operational dashboards and real-time metric monitoring. Works well for time-series metrics stored in StarRocks from Kafka streaming pipelines.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-orange">Time-series</span><span class="tag tag-green">Alerts</span></div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--blue-light)">🔍</div>
+            <div>
+              <div class="fw-name">Metabase</div>
+              <div class="fw-role">Self-serve Analytics</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            User-friendly self-serve BI tool. Connects via MySQL protocol. Non-technical users can build dashboards with drag-and-drop. Metabase's automatic query generation works well with StarRocks' fast response times.
+          </div>
+          <div style="margin-top:10px"><span class="tag tag-blue">Self-serve</span><span class="tag tag-purple">No-code</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Catalog / Governance -->
+    <div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="background:var(--teal-light);color:var(--teal);padding:4px 10px;border-radius:8px;font-size:13px">CATALOG / GOVERNANCE</span>
+      </div>
+      <div class="grid-3">
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--teal-light)">🗺️</div>
+            <div>
+              <div class="fw-name">Apache Atlas</div>
+              <div class="fw-role">Data Catalog & Lineage</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Tracks metadata, data lineage, and governance policies. Integrates with Hive Metastore (shared by StarRocks External Catalog). Enables end-to-end lineage from source systems through StarRocks to BI dashboards.
+          </div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--blue-light)">🔐</div>
+            <div>
+              <div class="fw-name">Apache Ranger</div>
+              <div class="fw-role">Security & Access Control</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Ranger provides centralized security policy management. StarRocks can integrate with Ranger for row/column-level security policies, RBAC, and audit logging — essential for enterprise PB-scale deployments.
+          </div>
+        </div>
+        <div class="fw-card">
+          <div class="fw-header">
+            <div class="fw-logo" style="background:var(--purple-light)">🎯</div>
+            <div>
+              <div class="fw-name">OpenMetadata</div>
+              <div class="fw-role">Modern Data Catalog</div>
+            </div>
+          </div>
+          <div class="fw-desc">
+            Modern open-source data catalog with native StarRocks connector. Discovers tables, columns, and generates data quality profiling reports. Enables self-serve data discovery for analysts.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ══════════════════════════════════════════
+       SECTION 7: FULL ARCHITECTURE DIAGRAM
+  ════════════════════════════════════════════ -->
+  <div class="section fade-in" id="fullarch">
+    <div class="section-header">
+      <div class="section-icon" style="background:var(--purple-light)">🗺️</div>
+      <div>
+        <div class="section-title">Full Big Data <span>Architecture</span> with StarRocks</div>
+      </div>
+    </div>
+
+    <p class="section-desc">
+      This is the recommended full-stack open-source big data architecture with StarRocks as the core analytical engine — covering data sources, ingestion, processing, storage, query, and BI layers.
+    </p>
+
+    <div class="full-arch fade-in">
+      <div class="fa-title">🏛️ Complete Open-Source Big Data Platform Architecture</div>
+
+      <!-- Data Sources -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">① Data Sources</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-gray"><span class="fn-icon">🗄️</span><span class="fn-name">RDBMS</span><span class="fn-tag">MySQL/PG</span></div>
+          <div class="fa-node node-gray"><span class="fn-icon">📱</span><span class="fn-name">App Events</span><span class="fn-tag">Mobile/Web</span></div>
+          <div class="fa-node node-gray"><span class="fn-icon">📡</span><span class="fn-name">IoT Sensors</span><span class="fn-tag">Devices</span></div>
+          <div class="fa-node node-gray"><span class="fn-icon">📂</span><span class="fn-name">File Uploads</span><span class="fn-tag">CSV/JSON</span></div>
+          <div class="fa-node node-gray"><span class="fn-icon">🌐</span><span class="fn-name">APIs / SaaS</span><span class="fn-tag">3rd Party</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Ingestion</div><div class="arrow-line"></div></div>
+
+      <!-- Ingestion -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">② Ingestion Layer</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-red"><span class="fn-icon">🔄</span><span class="fn-name">Debezium</span><span class="fn-tag">CDC</span></div>
+          <div class="fa-node node-orange"><span class="fn-icon">📨</span><span class="fn-name">Apache Kafka</span><span class="fn-tag">Stream Bus</span></div>
+          <div class="fa-node node-blue"><span class="fn-icon">🚀</span><span class="fn-name">Stream Load</span><span class="fn-tag">HTTP Direct</span></div>
+          <div class="fa-node node-green"><span class="fn-icon">📤</span><span class="fn-name">Broker Load</span><span class="fn-tag">Batch Files</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Processing</div><div class="arrow-line"></div></div>
+
+      <!-- Processing -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">③ Processing Layer</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-orange"><span class="fn-icon">⚡</span><span class="fn-name">Apache Flink</span><span class="fn-tag">Streaming ETL</span></div>
+          <div class="fa-node node-orange"><span class="fn-icon">🌊</span><span class="fn-name">Apache Spark</span><span class="fn-tag">Batch ETL</span></div>
+          <div class="fa-node node-blue"><span class="fn-icon">🔧</span><span class="fn-name">dbt</span><span class="fn-tag">SQL Transform</span></div>
+          <div class="fa-node node-purple"><span class="fn-icon">📅</span><span class="fn-name">Airflow</span><span class="fn-tag">Orchestration</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Store / Serve</div><div class="arrow-line"></div></div>
+
+      <!-- Storage -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">④ Storage Layer</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-blue"><span class="fn-icon">🧊</span><span class="fn-name">Apache Iceberg</span><span class="fn-tag">Data Lake</span></div>
+          <div class="fa-node node-green"><span class="fn-icon">☁️</span><span class="fn-name">S3 / HDFS</span><span class="fn-tag">Object Store</span></div>
+          <div class="fa-node node-orange"><span class="fn-icon">🗂️</span><span class="fn-name">Apache Hive</span><span class="fn-tag">Legacy Lake</span></div>
+          <div class="fa-node node-purple"><span class="fn-icon">🌊</span><span class="fn-name">Apache Hudi</span><span class="fn-tag">Incremental</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Query & Serve</div><div class="arrow-line"></div></div>
+
+      <!-- StarRocks — Core -->
+      <div class="fa-tier">
+        <div class="fa-tier-label" style="color:var(--blue);font-size:13px">⭐ CORE QUERY ENGINE (StarRocks)</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-blue" style="border-width:2px;font-size:14px"><span class="fn-icon">🧠</span><span class="fn-name">FE Nodes</span><span class="fn-tag">CBO + Metadata</span></div>
+          <div class="fa-node node-orange" style="border-width:2px;font-size:14px"><span class="fn-icon">⚡</span><span class="fn-name">BE Nodes</span><span class="fn-tag">Vectorized Exec</span></div>
+          <div class="fa-node node-green" style="border-width:2px;font-size:14px"><span class="fn-icon">📊</span><span class="fn-name">Materialized Views</span><span class="fn-tag">Auto-rewrite</span></div>
+          <div class="fa-node node-purple" style="border-width:2px;font-size:14px"><span class="fn-icon">🌐</span><span class="fn-name">External Catalogs</span><span class="fn-tag">Iceberg/Hive/Delta</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Consume</div><div class="arrow-line"></div></div>
+
+      <!-- BI -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">⑥ BI & Consumption Layer</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-red"><span class="fn-icon">📊</span><span class="fn-name">Apache Superset</span><span class="fn-tag">Dashboards</span></div>
+          <div class="fa-node node-orange"><span class="fn-icon">📈</span><span class="fn-name">Grafana</span><span class="fn-tag">Metrics</span></div>
+          <div class="fa-node node-blue"><span class="fn-icon">💻</span><span class="fn-name">Jupyter / Python</span><span class="fn-tag">Data Science</span></div>
+          <div class="fa-node node-green"><span class="fn-icon">🔌</span><span class="fn-name">APIs / Apps</span><span class="fn-tag">Downstream</span></div>
+        </div>
+      </div>
+
+      <div class="fa-connector"><div class="arrow-line"></div><div class="arrow-label">↓ Govern</div><div class="arrow-line"></div></div>
+
+      <!-- Governance -->
+      <div class="fa-tier">
+        <div class="fa-tier-label">⑦ Governance & Security Layer</div>
+        <div class="fa-tier-row">
+          <div class="fa-node node-teal"><span class="fn-icon">🗺️</span><span class="fn-name">Apache Atlas</span><span class="fn-tag">Data Catalog</span></div>
+          <div class="fa-node node-blue"><span class="fn-icon">🔐</span><span class="fn-name">Apache Ranger</span><span class="fn-tag">Security</span></div>
+          <div class="fa-node node-purple"><span class="fn-icon">🎯</span><span class="fn-name">OpenMetadata</span><span class="fn-tag">Discovery</span></div>
+          <div class="fa-node node-gray"><span class="fn-icon">📋</span><span class="fn-name">Audit Logs</span><span class="fn-tag">Compliance</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-box hb-purple" style="margin-top:24px">
+      <span class="hb-icon">🏆</span>
+      <strong>Why this architecture wins:</strong> StarRocks sits at the center as a <em>unified OLAP engine</em> — serving fresh streaming data from Kafka via Routine Load, querying historical data in Iceberg/Hive via External Catalogs, and serving hundreds of concurrent BI users via Materialized View auto-rewrite. Flink handles complex CEP streaming; Spark handles heavy batch; Airflow orchestrates; Superset/Grafana visualize — all without data silos or extra serving layers.
+    </div>
+
+    <!-- Summary Table -->
+    <div style="margin-top:28px">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:14px">Framework Role Summary</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Layer</th><th>Framework</th><th>Role in Platform</th><th>Interface with StarRocks</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="tag tag-orange">Batch</span></td><td><strong>Apache Spark</strong></td><td>Large-scale data transformation, ML feature prep</td><td>spark-connector-starrocks (Sink/Source)</td></tr>
+            <tr><td><span class="tag tag-orange">Batch</span></td><td><strong>dbt</strong></td><td>SQL-based in-warehouse ELT transformations</td><td>dbt-starrocks adapter (MySQL dialect)</td></tr>
+            <tr><td><span class="tag tag-orange">Batch</span></td><td><strong>Apache Airflow</strong></td><td>Pipeline orchestration, scheduling</td><td>StarRocksHook, MySQLOperator</td></tr>
+            <tr><td><span class="tag tag-red">Streaming</span></td><td><strong>Apache Flink</strong></td><td>Real-time ETL, CEP, windowed aggregation</td><td>flink-connector-starrocks (StreamLoad)</td></tr>
+            <tr><td><span class="tag tag-red">Streaming</span></td><td><strong>Apache Kafka</strong></td><td>Message bus, event streaming backbone</td><td>Routine Load (native consumer)</td></tr>
+            <tr><td><span class="tag tag-red">Streaming</span></td><td><strong>Debezium</strong></td><td>CDC from RDBMS to Kafka</td><td>Via Kafka → Routine Load / Flink</td></tr>
+            <tr><td><span class="tag tag-green">Storage</span></td><td><strong>Apache Iceberg</strong></td><td>Open table format for data lake</td><td>External Catalog (Iceberg Catalog)</td></tr>
+            <tr><td><span class="tag tag-green">Storage</span></td><td><strong>S3 / HDFS</strong></td><td>Raw file storage, cold data tier</td><td>Broker Load, Shared-data mode</td></tr>
+            <tr><td><span class="tag tag-green">Storage</span></td><td><strong>Apache Hudi</strong></td><td>Incremental upsert table format</td><td>External Catalog (Hudi Catalog)</td></tr>
+            <tr><td><span class="tag tag-blue">Query</span></td><td><strong>StarRocks FE</strong></td><td>CBO optimization, metadata, SQL parsing</td><td>Core engine</td></tr>
+            <tr><td><span class="tag tag-blue">Query</span></td><td><strong>StarRocks BE</strong></td><td>Vectorized execution, columnar storage</td><td>Core engine</td></tr>
+            <tr><td><span class="tag tag-purple">BI</span></td><td><strong>Apache Superset</strong></td><td>Self-serve dashboards, SQL Lab</td><td>MySQL connector / SQLAlchemy</td></tr>
+            <tr><td><span class="tag tag-purple">BI</span></td><td><strong>Grafana</strong></td><td>Real-time operational metrics dashboards</td><td>MySQL data source plugin</td></tr>
+            <tr><td><span class="tag tag-teal">Governance</span></td><td><strong>Apache Atlas</strong></td><td>Data lineage and catalog</td><td>Via Hive Metastore integration</td></tr>
+            <tr><td><span class="tag tag-teal">Governance</span></td><td><strong>Apache Ranger</strong></td><td>Centralized security and RBAC</td><td>Ranger StarRocks plugin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="text-align:center;padding:40px 0 20px;color:var(--text-soft);font-size:14px;border-top:1px solid var(--border);margin-top:20px">
+    <div style="font-family:'Sora',sans-serif;font-size:16px;font-weight:700;color:var(--blue);margin-bottom:8px">⭐ StarRocks Big Data Platform Guide</div>
+    Built for engineers designing petabyte-scale analytics platforms.<br>
+    StarRocks is licensed under Apache 2.0 — <a href="https://github.com/StarRocks/starrocks" style="color:var(--blue)">github.com/StarRocks/starrocks</a>
+  </div>
+
+</main>
+
+<script>
+  // Fade-in observer
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

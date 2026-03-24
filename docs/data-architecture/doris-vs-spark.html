@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Apache Doris vs Apache Spark — Deep Comparison</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ───────────────────────────────────────────────
+     DESIGN TOKENS
+  ─────────────────────────────────────────────── */
+  :root {
+    --bg:           #f0f4fb;
+    --bg-card:      #ffffff;
+    --bg-muted:     #f8faff;
+    --border:       #e2e8f5;
+
+    --doris:        #2563eb;        /* blue  */
+    --doris-light:  #dbeafe;
+    --doris-mid:    #93c5fd;
+
+    --spark:        #ea580c;        /* orange */
+    --spark-light:  #ffedd5;
+    --spark-mid:    #fdba74;
+
+    --purple:       #7c3aed;
+    --purple-light: #ede9fe;
+    --green:        #059669;
+    --green-light:  #d1fae5;
+    --yellow:       #d97706;
+    --yellow-light: #fef3c7;
+    --red:          #dc2626;
+    --red-light:    #fee2e2;
+
+    --text-primary: #0f172a;
+    --text-body:    #334155;
+    --text-muted:   #64748b;
+    --text-xmuted:  #94a3b8;
+
+    --shadow-sm:    0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    --shadow-md:    0 4px 16px rgba(15,23,42,.08), 0 2px 6px rgba(15,23,42,.04);
+    --shadow-lg:    0 12px 40px rgba(15,23,42,.10), 0 4px 12px rgba(15,23,42,.06);
+    --shadow-hover: 0 16px 48px rgba(15,23,42,.13), 0 6px 16px rgba(15,23,42,.08);
+
+    --radius:       14px;
+    --radius-sm:    8px;
+    --radius-lg:    20px;
+  }
+
+  /* ───────────────────────────────────────────────
+     RESET & BASE
+  ─────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--text-body);
+    background: var(--bg);
+    min-height: 100vh;
+  }
+  h1,h2,h3,h4 { font-family: 'Sora', sans-serif; color: var(--text-primary); line-height: 1.25; }
+  code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ───────────────────────────────────────────────
+     LAYOUT
+  ─────────────────────────────────────────────── */
+  .page { max-width: 1180px; margin: 0 auto; padding: 0 28px 80px; }
+
+  /* ───────────────────────────────────────────────
+     HERO HEADER
+  ─────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    padding: 64px 0 56px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 60%, rgba(37,99,235,.10) 0%, transparent 70%),
+      radial-gradient(ellipse 55% 45% at 80% 40%, rgba(234,88,12,.09) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 50% 100%, rgba(124,58,237,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 100px; padding: 6px 18px;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em;
+    color: var(--text-muted); text-transform: uppercase;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 28px;
+  }
+  .hero-eyebrow span { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 62px);
+    font-weight: 800; letter-spacing: -.02em;
+    margin-bottom: 10px;
+  }
+  .hero h1 .d { color: var(--doris); }
+  .hero h1 .s { color: var(--spark); }
+  .hero-sub {
+    font-size: 18px; color: var(--text-muted); max-width: 600px; margin: 0 auto 40px;
+    font-weight: 400;
+  }
+  .badge-row {
+    display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 18px; border-radius: 100px;
+    font-size: 14px; font-weight: 600;
+    border: 1.5px solid transparent;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .badge:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .badge-doris { background: var(--doris-light); color: var(--doris); border-color: var(--doris-mid); }
+  .badge-spark  { background: var(--spark-light);  color: var(--spark);  border-color: var(--spark-mid);  }
+  .badge-neutral{ background: var(--purple-light); color: var(--purple); border-color: #c4b5fd; }
+
+  /* ───────────────────────────────────────────────
+     SECTION HEADINGS
+  ─────────────────────────────────────────────── */
+  .section { margin-top: 64px; }
+  .section-label {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 28px;
+  }
+  .section-label .pill {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 4px 12px; border-radius: 100px;
+    background: var(--doris-light); color: var(--doris);
+  }
+  .section-label h2 {
+    font-size: 26px; font-weight: 700;
+  }
+  .section-label .line {
+    flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ───────────────────────────────────────────────
+     CARDS
+  ─────────────────────────────────────────────── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .25s ease, transform .25s ease;
+  }
+  .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+
+  .card-header {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+  }
+  .card-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0;
+  }
+  .card-title { font-size: 20px; font-weight: 700; }
+  .card-desc  { font-size: 15px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ───────────────────────────────────────────────
+     OVERVIEW SPLIT
+  ─────────────────────────────────────────────── */
+  .split-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:760px){ .split-2 { grid-template-columns: 1fr; } }
+
+  .overview-card { position: relative; overflow: hidden; }
+  .overview-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:4px;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .overview-card.doris::before { background: linear-gradient(90deg, var(--doris), #60a5fa); }
+  .overview-card.spark::before { background: linear-gradient(90deg, var(--spark), #fb923c); }
+
+  .overview-meta {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
+  }
+  .meta-tag {
+    font-size: 12px; font-weight: 600; padding: 4px 11px; border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: .02em;
+  }
+
+  /* ───────────────────────────────────────────────
+     ARCHITECTURE SECTION
+  ─────────────────────────────────────────────── */
+  .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:760px){ .arch-grid { grid-template-columns: 1fr; } }
+
+  .arch-block { border-radius: var(--radius); padding: 24px 26px; border: 1px solid var(--border); }
+  .arch-block.doris { background: linear-gradient(145deg, var(--doris-light), #f0f7ff); border-color: var(--doris-mid); }
+  .arch-block.spark { background: linear-gradient(145deg, var(--spark-light), #fff7f0); border-color: var(--spark-mid); }
+
+  .arch-block h3 {
+    font-size: 16px; font-weight: 700; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .arch-block ul { list-style: none; }
+  .arch-block li {
+    font-size: 15px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.05);
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .arch-block li:last-child { border-bottom: none; }
+  .arch-block li .dot {
+    width: 7px; height: 7px; border-radius: 50%; margin-top: 8px; flex-shrink: 0;
+  }
+  .dot-doris { background: var(--doris); }
+  .dot-spark  { background: var(--spark); }
+
+  /* ───────────────────────────────────────────────
+     COMPARISON TABLE
+  ─────────────────────────────────────────────── */
+  .table-wrap {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .comp-table { width: 100%; border-collapse: collapse; }
+  .comp-table thead tr {
+    background: linear-gradient(135deg, #f8faff 0%, #f1f5fd 100%);
+  }
+  .comp-table th {
+    padding: 18px 22px; text-align: left;
+    font-size: 13px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+  .comp-table th.th-doris { color: var(--doris); }
+  .comp-table th.th-spark { color: var(--spark); }
+  .comp-table td {
+    padding: 16px 22px; font-size: 15px; vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table tr:hover td { background: #f8faff; }
+  .comp-table .feature-cell {
+    font-weight: 600; color: var(--text-primary); font-size: 15px;
+  }
+  .comp-table .sub-feature {
+    font-size: 13px; color: var(--text-muted); font-weight: 400;
+    margin-top: 2px;
+  }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .chip-green  { background: var(--green-light);  color: var(--green); }
+  .chip-blue   { background: var(--doris-light);  color: var(--doris); }
+  .chip-orange { background: var(--spark-light);  color: var(--spark); }
+  .chip-purple { background: var(--purple-light); color: var(--purple); }
+  .chip-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .chip-red    { background: var(--red-light);    color: var(--red); }
+  .chip-gray   { background: #f1f5f9;             color: var(--text-muted); }
+
+  /* ───────────────────────────────────────────────
+     STRENGTHS / WEAKNESSES
+  ─────────────────────────────────────────────── */
+  .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:760px){ .sw-grid { grid-template-columns: 1fr; } }
+
+  .sw-card { border-radius: var(--radius); padding: 26px 28px; border: 1.5px solid; }
+  .sw-card h3 {
+    font-size: 17px; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .sw-card ul { list-style: none; }
+  .sw-card li {
+    font-size: 15px; line-height: 1.6; padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,.05);
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .sw-card li:last-child { border-bottom: none; }
+  .sw-card li .ico { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+
+  .sw-doris-str { background: #f0f8ff; border-color: var(--doris-mid); }
+  .sw-doris-wk  { background: #fff8f0; border-color: var(--spark-mid); }
+  .sw-spark-str { background: #fff7f0; border-color: var(--spark-mid); }
+  .sw-spark-wk  { background: #f5f0ff; border-color: #c4b5fd; }
+
+  /* ───────────────────────────────────────────────
+     USE-CASE DECISION CARDS
+  ─────────────────────────────────────────────── */
+  .use-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+  .use-card {
+    border-radius: var(--radius);
+    padding: 24px 26px; border: 1px solid var(--border);
+    background: var(--bg-card); box-shadow: var(--shadow-sm);
+    transition: box-shadow .2s, transform .2s;
+    position: relative; overflow: hidden;
+  }
+  .use-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); }
+  .use-card::after {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 80px; height: 80px; border-radius: 0 0 0 80px;
+    opacity: .08;
+  }
+  .use-card.winner-doris::after { background: var(--doris); }
+  .use-card.winner-spark::after  { background: var(--spark); }
+  .use-card.winner-both::after  { background: var(--purple); }
+
+  .use-card .scenario {
+    font-size: 13px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; margin-bottom: 8px; color: var(--text-muted);
+  }
+  .use-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+  .use-card p  { font-size: 15px; color: var(--text-body); line-height: 1.65; margin-bottom: 14px; }
+  .winner-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 700;
+    border: 1.5px solid;
+  }
+  .winner-badge.doris { background: var(--doris-light); color: var(--doris); border-color: var(--doris-mid); }
+  .winner-badge.spark { background: var(--spark-light); color: var(--spark); border-color: var(--spark-mid); }
+  .winner-badge.both  { background: var(--purple-light); color: var(--purple); border-color: #c4b5fd; }
+
+  /* ───────────────────────────────────────────────
+     PERFORMANCE BARS
+  ─────────────────────────────────────────────── */
+  .perf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:680px){ .perf-grid { grid-template-columns: 1fr; } }
+
+  .perf-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 26px; box-shadow: var(--shadow-sm); }
+  .perf-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+  .perf-row { margin-bottom: 14px; }
+  .perf-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
+  .perf-label .name  { font-weight: 600; color: var(--text-primary); }
+  .perf-label .score { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-muted); }
+  .bar-track {
+    height: 10px; background: var(--border); border-radius: 100px; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 100px;
+    transition: width 1.2s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  /* ───────────────────────────────────────────────
+     ECOSYSTEM MAP
+  ─────────────────────────────────────────────── */
+  .eco-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:760px){ .eco-split { grid-template-columns: 1fr; } }
+
+  .eco-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 26px; box-shadow: var(--shadow-sm); }
+  .eco-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .eco-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .eco-tag {
+    padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1.5px solid transparent;
+    transition: transform .15s ease;
+  }
+  .eco-tag:hover { transform: translateY(-2px); }
+
+  /* ───────────────────────────────────────────────
+     DECISION FLOWCHART (simple CSS)
+  ─────────────────────────────────────────────── */
+  .flow-box {
+    background: var(--bg-card); border: 2px solid var(--border);
+    border-radius: 12px; padding: 16px 22px;
+    text-align: center; font-size: 15px; font-weight: 600;
+    box-shadow: var(--shadow-sm); position: relative;
+  }
+  .flow-box.q { border-color: var(--purple); background: var(--purple-light); color: var(--purple); font-size: 15px; }
+  .flow-box.doris { border-color: var(--doris); background: var(--doris-light); color: var(--doris); }
+  .flow-box.spark { border-color: var(--spark); background: var(--spark-light); color: var(--spark); }
+  .flow-box.both  { border-color: var(--green); background: var(--green-light); color: var(--green); }
+  .flow-arrow { text-align: center; font-size: 22px; color: var(--text-xmuted); line-height: 1; padding: 6px 0; }
+  .flow-row { display: flex; gap: 14px; align-items: flex-start; margin: 6px 0; }
+  .flow-col { flex: 1; }
+  .flow-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-align: center; margin-bottom: 4px; letter-spacing: .04em; text-transform: uppercase; }
+
+  /* ───────────────────────────────────────────────
+     SUMMARY VERDICT
+  ─────────────────────────────────────────────── */
+  .verdict {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: var(--radius-lg); padding: 44px 48px;
+    color: #e2e8f0; margin-top: 20px;
+    box-shadow: 0 20px 60px rgba(15,23,42,.2);
+    position: relative; overflow: hidden;
+  }
+  .verdict::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 50% 60% at 10% 50%, rgba(37,99,235,.15) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 50% at 90% 50%, rgba(234,88,12,.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .verdict h2 { color: #fff; font-size: 26px; font-weight: 800; margin-bottom: 24px; }
+  .verdict p  { font-size: 16px; line-height: 1.75; color: #94a3b8; margin-bottom: 20px; }
+  .verdict-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .verdict-chip {
+    padding: 8px 18px; border-radius: 100px;
+    font-size: 13px; font-weight: 700; letter-spacing: .03em;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1.5px solid rgba(255,255,255,.15);
+    color: #e2e8f0; background: rgba(255,255,255,.07);
+    transition: background .2s, border-color .2s;
+  }
+  .verdict-chip:hover { background: rgba(255,255,255,.14); }
+  .verdict-chip.d { border-color: var(--doris); color: #93c5fd; }
+  .verdict-chip.s { border-color: var(--spark); color: #fdba74; }
+
+  /* ───────────────────────────────────────────────
+     NAV
+  ─────────────────────────────────────────────── */
+  .sticky-nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(240,244,251,.92); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 28px;
+    display: flex; gap: 0; justify-content: center;
+    flex-wrap: wrap;
+  }
+  .nav-link {
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    text-decoration: none; transition: background .15s, color .15s;
+  }
+  .nav-link:hover { background: var(--bg-card); color: var(--text-primary); }
+
+  /* ───────────────────────────────────────────────
+     ANIMATIONS
+  ─────────────────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(24px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp .6s ease forwards; }
+  .delay-1 { animation-delay: .1s; opacity: 0; }
+  .delay-2 { animation-delay: .2s; opacity: 0; }
+  .delay-3 { animation-delay: .3s; opacity: 0; }
+
+  /* ───────────────────────────────────────────────
+     DIVIDER
+  ─────────────────────────────────────────────── */
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* ───────────────────────────────────────────────
+     INLINE CODE
+  ─────────────────────────────────────────────── */
+  code.inline {
+    background: #f1f5f9; border: 1px solid var(--border);
+    border-radius: 5px; padding: 2px 7px;
+    font-size: 13px; color: var(--purple);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── STICKY NAV ─── -->
+<nav class="sticky-nav">
+  <a href="#overview"       class="nav-link">Overview</a>
+  <a href="#architecture"   class="nav-link">Architecture</a>
+  <a href="#comparison"     class="nav-link">Comparison</a>
+  <a href="#performance"    class="nav-link">Performance</a>
+  <a href="#strengths"      class="nav-link">Strengths</a>
+  <a href="#ecosystem"      class="nav-link">Ecosystem</a>
+  <a href="#use-cases"      class="nav-link">Use Cases</a>
+  <a href="#decision"       class="nav-link">Decision Guide</a>
+  <a href="#verdict"        class="nav-link">Verdict</a>
+</nav>
+
+<div class="page">
+
+  <!-- ─── HERO ─── -->
+  <header class="hero fade-up" id="top">
+    <div class="hero-eyebrow">
+      <span style="background:var(--doris)"></span>
+      Big Data · Query Engine Deep Dive
+      <span style="background:var(--spark)"></span>
+    </div>
+    <h1>Apache <span class="d">Doris</span> <span style="color:var(--border)">vs</span> Apache <span class="s">Spark</span></h1>
+    <p class="hero-sub">A thorough, no-fluff comparison of two powerhouses in the modern data stack.</p>
+    <div class="badge-row">
+      <span class="badge badge-doris">🔵 Real-Time OLAP</span>
+      <span class="badge badge-spark">🟠 Unified Analytics Engine</span>
+      <span class="badge badge-neutral">⚖️ Know When to Use Each</span>
+    </div>
+  </header>
+
+  <!-- ─── OVERVIEW ─── -->
+  <section class="section" id="overview">
+    <div class="section-label">
+      <div class="pill">01</div>
+      <h2>What Are They, Really?</h2>
+      <div class="line"></div>
+    </div>
+    <div class="split-2">
+      <!-- DORIS -->
+      <div class="card overview-card doris fade-up delay-1">
+        <div class="card-header">
+          <div class="card-icon" style="background:var(--doris-light)">🔵</div>
+          <div>
+            <div class="card-title">Apache Doris</div>
+            <div class="card-desc">Real-Time Analytical Database (MPP OLAP)</div>
+          </div>
+        </div>
+        <p style="font-size:15px; line-height:1.7">
+          Apache Doris is a <strong>modern MPP (Massively Parallel Processing) analytical database</strong>
+          built specifically for online analytical processing (OLAP). Originated at Baidu, open-sourced in 2017,
+          it presents itself as a <em>MySQL-compatible SQL database</em> that can ingest real-time data
+          and serve sub-second ad-hoc queries at scale.
+        </p>
+        <p style="font-size:15px; line-height:1.7; margin-top:12px;">
+          Think of it as a <strong>high-performance analytical database</strong> — data goes in, queries come out fast.
+          No Spark context, no JVM tuning for data scientists; just SQL over your warehouse data.
+        </p>
+        <div class="overview-meta">
+          <span class="meta-tag" style="background:var(--doris-light);color:var(--doris)">MPP Engine</span>
+          <span class="meta-tag" style="background:var(--doris-light);color:var(--doris)">MySQL Protocol</span>
+          <span class="meta-tag" style="background:var(--doris-light);color:var(--doris)">Real-Time Ingestion</span>
+          <span class="meta-tag" style="background:var(--doris-light);color:var(--doris)">Columnar Storage</span>
+          <span class="meta-tag" style="background:var(--doris-light);color:var(--doris)">Sub-second Queries</span>
+        </div>
+      </div>
+
+      <!-- SPARK -->
+      <div class="card overview-card spark fade-up delay-2">
+        <div class="card-header">
+          <div class="card-icon" style="background:var(--spark-light)">🟠</div>
+          <div>
+            <div class="card-title">Apache Spark</div>
+            <div class="card-desc">Unified Distributed Analytics Engine</div>
+          </div>
+        </div>
+        <p style="font-size:15px; line-height:1.7">
+          Apache Spark is a <strong>general-purpose distributed computing engine</strong> that handles batch,
+          streaming, machine learning, and graph processing under one unified API. Born at UC Berkeley's AMPLab
+          in 2009, it replaced MapReduce by doing everything in-memory — often 100× faster.
+        </p>
+        <p style="font-size:15px; line-height:1.7; margin-top:12px;">
+          Think of it as a <strong>programmable data processing fabric</strong> — you write transformations
+          (Python, Scala, Java, R), and Spark distributes them across a cluster. It is a <em>compute engine</em>,
+          not a database.
+        </p>
+        <div class="overview-meta">
+          <span class="meta-tag" style="background:var(--spark-light);color:var(--spark)">In-Memory DAG</span>
+          <span class="meta-tag" style="background:var(--spark-light);color:var(--spark)">Batch + Streaming</span>
+          <span class="meta-tag" style="background:var(--spark-light);color:var(--spark)">MLlib</span>
+          <span class="meta-tag" style="background:var(--spark-light);color:var(--spark)">PySpark API</span>
+          <span class="meta-tag" style="background:var(--spark-light);color:var(--spark)">Spark SQL</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── ARCHITECTURE ─── -->
+  <section class="section" id="architecture">
+    <div class="section-label">
+      <div class="pill" style="background:var(--spark-light);color:var(--spark)">02</div>
+      <h2>Architecture Deep-Dive</h2>
+      <div class="line"></div>
+    </div>
+
+    <!-- DORIS ARCH -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--doris-light)">🏗️</div>
+        <div>
+          <div class="card-title">Doris Architecture: Shared-Nothing MPP</div>
+          <div class="card-desc">Two process types, no external dependencies, pure SQL serving layer</div>
+        </div>
+      </div>
+      <div class="arch-grid">
+        <div class="arch-block doris">
+          <h3><span style="color:var(--doris)">⬡</span> FE — Frontend Node</h3>
+          <ul>
+            <li><span class="dot dot-doris"></span>Query planning, parsing & optimization (CBO + RBO)</li>
+            <li><span class="dot dot-doris"></span>Metadata management via BDB JE (no ZooKeeper needed)</li>
+            <li><span class="dot dot-doris"></span>MySQL-compatible protocol handler on port 9030</li>
+            <li><span class="dot dot-doris"></span>Manages tablet assignments and replication policies</li>
+            <li><span class="dot dot-doris"></span>Follower FEs provide HA via Paxos consensus</li>
+          </ul>
+        </div>
+        <div class="arch-block doris">
+          <h3><span style="color:var(--doris)">⬡</span> BE — Backend Node</h3>
+          <ul>
+            <li><span class="dot dot-doris"></span>Columnar storage in Apache ORC-like Doris-native format</li>
+            <li><span class="dot dot-doris"></span>Vectorized query execution engine (SIMD, AVX2)</li>
+            <li><span class="dot dot-doris"></span>Local data caching: hot/warm/cold tier support</li>
+            <li><span class="dot dot-doris"></span>Segment-based columnar files with zone maps & bitmap indexes</li>
+            <li><span class="dot dot-doris"></span>Handles data ingestion via Stream Load, Routine Load, Broker Load</li>
+          </ul>
+        </div>
+        <div class="arch-block doris" style="grid-column: 1 / -1">
+          <h3><span style="color:var(--doris)">⬡</span> Storage Models</h3>
+          <ul style="display:grid; grid-template-columns:1fr 1fr; gap:0 24px;">
+            <li><span class="dot dot-doris"></span><strong>Duplicate Key:</strong> raw event data, log storage, no deduplication</li>
+            <li><span class="dot dot-doris"></span><strong>Aggregate Key:</strong> pre-aggregated metrics (SUM, MAX, REPLACE)</li>
+            <li><span class="dot dot-doris"></span><strong>Unique Key:</strong> upsert semantics, CDC from MySQL/Kafka</li>
+            <li><span class="dot dot-doris"></span><strong>Primary Key (Merge-on-Read):</strong> high-frequency updates with MoR compaction</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPARK ARCH -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--spark-light)">🏗️</div>
+        <div>
+          <div class="card-title">Spark Architecture: Driver + Executor DAG Engine</div>
+          <div class="card-desc">Pluggable cluster manager, rich in-memory RDD/DataFrame abstraction</div>
+        </div>
+      </div>
+      <div class="arch-grid">
+        <div class="arch-block spark">
+          <h3><span style="color:var(--spark)">⬡</span> Driver Program</h3>
+          <ul>
+            <li><span class="dot dot-spark"></span>SparkContext / SparkSession entry point</li>
+            <li><span class="dot dot-spark"></span>Catalyst optimizer converts SQL → logical → physical plan</li>
+            <li><span class="dot dot-spark"></span>DAG Scheduler breaks plan into stages of tasks</li>
+            <li><span class="dot dot-spark"></span>Task Scheduler dispatches tasks to executors</li>
+            <li><span class="dot dot-spark"></span>Tungsten engine generates optimized JVM bytecode</li>
+          </ul>
+        </div>
+        <div class="arch-block spark">
+          <h3><span style="color:var(--spark)">⬡</span> Executor Processes</h3>
+          <ul>
+            <li><span class="dot dot-spark"></span>Run on worker nodes (YARN, Kubernetes, Mesos, Standalone)</li>
+            <li><span class="dot dot-spark"></span>Each executor has JVM heap; tasks share executor memory</li>
+            <li><span class="dot dot-spark"></span>Cached RDDs stored in executor off-heap or on-heap</li>
+            <li><span class="dot dot-spark"></span>Shuffle service moves data between stages (sort-merge)</li>
+            <li><span class="dot dot-spark"></span>Dynamic Resource Allocation scales executors up/down</li>
+          </ul>
+        </div>
+        <div class="arch-block spark" style="grid-column: 1 / -1">
+          <h3><span style="color:var(--spark)">⬡</span> Core Modules</h3>
+          <ul style="display:grid; grid-template-columns:1fr 1fr; gap:0 24px;">
+            <li><span class="dot dot-spark"></span><strong>Spark SQL:</strong> ANSI SQL + DataFrame API, Hive/Glue metastore integration</li>
+            <li><span class="dot dot-spark"></span><strong>Structured Streaming:</strong> micro-batch and continuous exactly-once streams</li>
+            <li><span class="dot dot-spark"></span><strong>MLlib:</strong> distributed ML — linear models, trees, embeddings, pipelines</li>
+            <li><span class="dot dot-spark"></span><strong>GraphX:</strong> property graph processing with Pregel API</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── COMPARISON TABLE ─── -->
+  <section class="section" id="comparison">
+    <div class="section-label">
+      <div class="pill" style="background:var(--purple-light);color:var(--purple)">03</div>
+      <h2>Side-by-Side Comparison</h2>
+      <div class="line"></div>
+    </div>
+    <div class="table-wrap">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th class="th-doris">🔵 Apache Doris</th>
+            <th class="th-spark">🟠 Apache Spark</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="feature-cell">Category<div class="sub-feature">What kind of system</div></td>
+            <td><span class="chip chip-blue">OLAP Database</span><br><span style="font-size:14px;color:var(--text-muted)">Persistent storage + query engine</span></td>
+            <td><span class="chip chip-orange">Compute Engine</span><br><span style="font-size:14px;color:var(--text-muted)">No native storage, reads from any source</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Query Latency<div class="sub-feature">Typical interactive query</div></td>
+            <td><span class="chip chip-green">10ms – 1s</span><br><span style="font-size:14px;color:var(--text-muted)">Sub-second on pre-loaded data</span></td>
+            <td><span class="chip chip-yellow">2s – minutes</span><br><span style="font-size:14px;color:var(--text-muted)">Job startup overhead ~2-10s</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Data Freshness<div class="sub-feature">Ingest to query delay</div></td>
+            <td><span class="chip chip-green">Seconds</span><br><span style="font-size:14px;color:var(--text-muted)">Real-time via Routine Load / Stream Load</span></td>
+            <td><span class="chip chip-yellow">Minutes – hours</span><br><span style="font-size:14px;color:var(--text-muted)">Structured Streaming can do minutes</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Query Interface<div class="sub-feature">How you talk to it</div></td>
+            <td><code class="inline">MySQL-compatible SQL</code><br><span style="font-size:14px;color:var(--text-muted)">Connect any MySQL client, BI tool directly</span></td>
+            <td><code class="inline">DataFrame API + SparkSQL</code><br><span style="font-size:14px;color:var(--text-muted)">Python/Scala/Java/R via SparkSession</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Concurrency<div class="sub-feature">Simultaneous queries</div></td>
+            <td><span class="chip chip-green">High (thousands)</span><br><span style="font-size:14px;color:var(--text-muted)">Designed for many concurrent BI users</span></td>
+            <td><span class="chip chip-red">Limited (tens)</span><br><span style="font-size:14px;color:var(--text-muted)">Each job consumes cluster resources heavily</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">ETL / Transformation<div class="sub-feature">Data pipeline capability</div></td>
+            <td><span class="chip chip-yellow">Basic SQL only</span><br><span style="font-size:14px;color:var(--text-muted)">Not designed for complex multi-hop ETL</span></td>
+            <td><span class="chip chip-green">Excellent</span><br><span style="font-size:14px;color:var(--text-muted)">Core use case, rich transformation APIs</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Machine Learning<div class="sub-feature">Built-in ML capabilities</div></td>
+            <td><span class="chip chip-red">None built-in</span><br><span style="font-size:14px;color:var(--text-muted)">SQL UDFs possible but not the tool</span></td>
+            <td><span class="chip chip-green">MLlib + SparkML</span><br><span style="font-size:14px;color:var(--text-muted)">Distributed training, feature engineering</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Streaming<div class="sub-feature">Real-time stream processing</div></td>
+            <td><span class="chip chip-blue">Kafka → Doris</span><br><span style="font-size:14px;color:var(--text-muted)">Ingest from Kafka, not stream compute</span></td>
+            <td><span class="chip chip-green">Structured Streaming</span><br><span style="font-size:14px;color:var(--text-muted)">Full stateful stream processing, windowing</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Storage<div class="sub-feature">Where data lives</div></td>
+            <td><span class="chip chip-blue">Self-managed columnar</span><br><span style="font-size:14px;color:var(--text-muted)">Local BE disks or S3 (cold storage)</span></td>
+            <td><span class="chip chip-purple">External only</span><br><span style="font-size:14px;color:var(--text-muted)">HDFS, S3, GCS, ADLS, Delta, Iceberg, Hudi</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Joins at Scale<div class="sub-feature">Multi-table join perf</div></td>
+            <td><span class="chip chip-green">Colocated + broadcast joins</span><br><span style="font-size:14px;color:var(--text-muted)">Partition colocation eliminates shuffle for star schema</span></td>
+            <td><span class="chip chip-orange">Sort-merge shuffle joins</span><br><span style="font-size:14px;color:var(--text-muted)">Expensive shuffle, AQE helps adaptively</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Cluster Management<div class="sub-feature">Ops complexity</div></td>
+            <td><span class="chip chip-green">Simple (2 process types)</span><br><span style="font-size:14px;color:var(--text-muted)">No external dependencies like ZooKeeper</span></td>
+            <td><span class="chip chip-yellow">Complex</span><br><span style="font-size:14px;color:var(--text-muted)">Needs YARN/K8s, Hive metastore, tuning</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Scalability<div class="sub-feature">Data size limits</div></td>
+            <td><span class="chip chip-orange">PB-scale (tested)</span><br><span style="font-size:14px;color:var(--text-muted)">Baidu runs at petabyte scale internally</span></td>
+            <td><span class="chip chip-green">Unlimited scale</span><br><span style="font-size:14px;color:var(--text-muted)">Practically unbounded via cloud object storage</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Language Support<div class="sub-feature">Developer APIs</div></td>
+            <td><code class="inline">SQL only</code><br><span style="font-size:14px;color:var(--text-muted)">Java/C++ UDFs via plugin API</span></td>
+            <td><code class="inline">Python · Scala · Java · R</code><br><span style="font-size:14px;color:var(--text-muted)">Full native programming model</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Table Format Support<div class="sub-feature">Open lakehouse formats</div></td>
+            <td><span class="chip chip-blue">External Catalog</span><br><span style="font-size:14px;color:var(--text-muted)">Read Delta/Iceberg/Hudi via external catalog</span></td>
+            <td><span class="chip chip-green">Native Delta/Iceberg/Hudi</span><br><span style="font-size:14px;color:var(--text-muted)">Full read/write with time-travel & ACID</span></td>
+          </tr>
+          <tr>
+            <td class="feature-cell">Cost Model<div class="sub-feature">Typical deployment cost</div></td>
+            <td><span class="chip chip-orange">Higher $/TB stored</span><br><span style="font-size:14px;color:var(--text-muted)">Always-on cluster, fast disk needed</span></td>
+            <td><span class="chip chip-green">Lower $/TB stored</span><br><span style="font-size:14px;color:var(--text-muted)">Ephemeral clusters, cheap object storage</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─── PERFORMANCE ─── -->
+  <section class="section" id="performance">
+    <div class="section-label">
+      <div class="pill" style="background:var(--green-light);color:var(--green)">04</div>
+      <h2>Performance Characteristics</h2>
+      <div class="line"></div>
+    </div>
+    <div class="perf-grid">
+      <div class="perf-card">
+        <h3>🔵 Doris Performance Profile</h3>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Ad-hoc SQL Query (< 1M rows)</span><span class="score">98/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:98%;background:linear-gradient(90deg,var(--doris),#60a5fa)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Dashboard / BI Concurrency</span><span class="score">95/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:95%;background:linear-gradient(90deg,var(--doris),#60a5fa)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Real-Time Ingestion Throughput</span><span class="score">88/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:88%;background:linear-gradient(90deg,var(--doris),#60a5fa)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Point Lookup (Unique Key)</span><span class="score">92/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:92%;background:linear-gradient(90deg,var(--doris),#60a5fa)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Large-Scale Batch ETL</span><span class="score">42/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:42%;background:linear-gradient(90deg,#94a3b8,#cbd5e1)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">ML / Complex Transformations</span><span class="score">18/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:18%;background:linear-gradient(90deg,#94a3b8,#cbd5e1)"></div></div>
+        </div>
+      </div>
+
+      <div class="perf-card">
+        <h3>🟠 Spark Performance Profile</h3>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Large-Scale Batch ETL (TB+)</span><span class="score">97/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:97%;background:linear-gradient(90deg,var(--spark),#fb923c)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">ML Training at Scale</span><span class="score">94/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:94%;background:linear-gradient(90deg,var(--spark),#fb923c)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Complex Multi-Step Pipelines</span><span class="score">95/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:95%;background:linear-gradient(90deg,var(--spark),#fb923c)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Structured Streaming</span><span class="score">85/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:85%;background:linear-gradient(90deg,var(--spark),#fb923c)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">Interactive Sub-Second SQL</span><span class="score">30/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:30%;background:linear-gradient(90deg,#94a3b8,#cbd5e1)"></div></div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label"><span class="name">High-Concurrency BI (1000+ users)</span><span class="score">20/100</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:20%;background:linear-gradient(90deg,#94a3b8,#cbd5e1)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benchmark note -->
+    <div class="card" style="margin-top:20px; background: var(--bg-muted); box-shadow: none;">
+      <p style="font-size:14px; color:var(--text-muted); line-height:1.7;">
+        <strong>Benchmark context:</strong> Doris consistently ranks top-3 in TPC-H and TPC-DS benchmarks at scale factors up to 10TB, often beating Clickhouse and Presto on star-schema workloads.
+        Spark's Adaptive Query Execution (AQE) in Spark 3.x significantly closed the gap for complex SQL, but startup latency (JVM + executor allocation) still prevents sub-second responses.
+        Doris's vectorized engine (added 2021) achieves 3–10× speedup over its pre-vectorized version via SIMD AVX2 operations on columnar batches.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── STRENGTHS & WEAKNESSES ─── -->
+  <section class="section" id="strengths">
+    <div class="section-label">
+      <div class="pill" style="background:var(--yellow-light);color:var(--yellow)">05</div>
+      <h2>Strengths & Weaknesses</h2>
+      <div class="line"></div>
+    </div>
+    <div class="sw-grid">
+      <!-- DORIS strengths -->
+      <div class="sw-card sw-doris-str">
+        <h3 style="color:var(--doris)">✅ Doris Strengths</h3>
+        <ul>
+          <li><span class="ico">⚡</span><div><strong>Sub-second latency:</strong> Vectorized execution + pre-loaded columnar data enables 10ms–500ms queries that BI tools demand.</div></li>
+          <li><span class="ico">🔌</span><div><strong>Drop-in MySQL replacement:</strong> Any tool that speaks MySQL (Grafana, Superset, Tableau, DBeaver) connects instantly — zero SDK changes.</div></li>
+          <li><span class="ico">🔄</span><div><strong>True real-time freshness:</strong> Routine Load ingests Kafka topics with seconds-level delay, visible immediately to queries.</div></li>
+          <li><span class="ico">👥</span><div><strong>Massive concurrency:</strong> Thousands of simultaneous queries from BI dashboards without resource contention; connection pooling is trivial.</div></li>
+          <li><span class="ico">🧩</span><div><strong>Simplicity of operations:</strong> Two process types (FE + BE), no ZooKeeper, no Hadoop. A 3-node cluster in 30 minutes.</div></li>
+          <li><span class="ico">🗄️</span><div><strong>Multiple table models:</strong> Duplicate, Aggregate, Unique, Primary Key models serve different data patterns without separate systems.</div></li>
+          <li><span class="ico">❄️</span><div><strong>Cold-hot tiering:</strong> Hot data on SSD, cold data auto-migrated to S3 — cost-efficient for time-series data.</div></li>
+        </ul>
+      </div>
+
+      <!-- DORIS weaknesses -->
+      <div class="sw-card sw-doris-wk">
+        <h3 style="color:var(--spark)">⚠️ Doris Weaknesses</h3>
+        <ul>
+          <li><span class="ico">🚫</span><div><strong>Not a compute engine:</strong> Cannot run arbitrary Python or complex multi-step transformations outside of SQL.</div></li>
+          <li><span class="ico">💾</span><div><strong>Storage cost:</strong> Always-on cluster with fast disks is expensive compared to serverless compute over cheap object storage.</div></li>
+          <li><span class="ico">🤖</span><div><strong>No ML workloads:</strong> Feature engineering and model training are outside its scope entirely.</div></li>
+          <li><span class="ico">📦</span><div><strong>Smaller ecosystem:</strong> Far fewer integrations, tutorials, and community size compared to Spark. Chinese-language docs dominate.</div></li>
+          <li><span class="ico">🔁</span><div><strong>Schema rigidity:</strong> DDL schema changes require careful planning; ALTER TABLE on large datasets can be slow.</div></li>
+          <li><span class="ico">📊</span><div><strong>Limited graph / text:</strong> No native graph processing or full-text search at Elasticsearch level.</div></li>
+        </ul>
+      </div>
+
+      <!-- SPARK strengths -->
+      <div class="sw-card sw-spark-str">
+        <h3 style="color:var(--spark)">✅ Spark Strengths</h3>
+        <ul>
+          <li><span class="ico">🔀</span><div><strong>Universal ETL engine:</strong> Reads any source (S3, HDFS, RDBMS, Kafka, APIs), transforms with full code expressiveness, writes anywhere.</div></li>
+          <li><span class="ico">🤖</span><div><strong>Integrated ML pipeline:</strong> Feature engineering → model training → scoring in a single Spark job with MLlib & SparkML pipelines.</div></li>
+          <li><span class="ico">🌊</span><div><strong>Stateful streaming:</strong> Stateful aggregations, event-time windowing, watermarks, exactly-once semantics via Structured Streaming.</div></li>
+          <li><span class="ico">🌍</span><div><strong>Massive ecosystem:</strong> Delta Lake, Iceberg, Hudi, dbt, Great Expectations, Airflow, MLflow — everything integrates with Spark.</div></li>
+          <li><span class="ico">📈</span><div><strong>Infinite horizontal scale:</strong> Scales to exabytes; clusters resize dynamically in cloud environments (EMR, Databricks, GCP Dataproc).</div></li>
+          <li><span class="ico">💰</span><div><strong>Cost-efficient for batch:</strong> Ephemeral spot clusters on object storage dramatically reduce cost for nightly batch jobs.</div></li>
+          <li><span class="ico">🔬</span><div><strong>Rich language support:</strong> PySpark, Scala, Java, R — data engineers and data scientists share the same engine.</div></li>
+        </ul>
+      </div>
+
+      <!-- SPARK weaknesses -->
+      <div class="sw-card sw-spark-wk">
+        <h3 style="color:var(--purple)">⚠️ Spark Weaknesses</h3>
+        <ul>
+          <li><span class="ico">🐢</span><div><strong>High query latency:</strong> Job startup time (JVM + executor allocation) makes sub-second interactive queries impossible.</div></li>
+          <li><span class="ico">👥</span><div><strong>Poor concurrency:</strong> Running 100+ simultaneous queries saturates cluster resources; requires careful queue management.</div></li>
+          <li><span class="ico">⚙️</span><div><strong>Complex tuning:</strong> Memory fractions, shuffle partitions, AQE settings, GC tuning — a full-time expertise area.</div></li>
+          <li><span class="ico">📉</span><div><strong>OOM sensitivity:</strong> Skewed joins and large shuffles cause executor OOM errors that require expert debugging.</div></li>
+          <li><span class="ico">🔌</span><div><strong>Not a database:</strong> BI tools need a persistent SQL endpoint; Spark requires Thrift Server or Databricks SQL Warehouse — extra infra.</div></li>
+          <li><span class="ico">🔄</span><div><strong>Real-time freshness gap:</strong> True second-level freshness requires additional infra (Kafka + Flink/Delta Streaming) on top of Spark.</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── ECOSYSTEM ─── -->
+  <section class="section" id="ecosystem">
+    <div class="section-label">
+      <div class="pill" style="background:var(--green-light);color:var(--green)">06</div>
+      <h2>Ecosystem & Integrations</h2>
+      <div class="line"></div>
+    </div>
+    <div class="eco-split">
+      <div class="eco-card">
+        <h3 style="color:var(--doris)">🔵 Doris Ecosystem</h3>
+        <p style="font-size:15px; color:var(--text-muted); margin-bottom:14px;">Best-in-class for BI serving and real-time analytics stacks.</p>
+        <div class="eco-tags">
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Apache Kafka</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Apache Flink (write)</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">MySQL CDC</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Apache Superset</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Grafana</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Tableau</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Power BI</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">dbt (via MySQL adapter)</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">DataX / SeaTunnel</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Spark (as sink)</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Hive External Catalog</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">Iceberg Catalog</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">JDBC Catalog (PG, MySQL)</span>
+          <span class="eco-tag" style="background:var(--doris-light);color:var(--doris);border-color:var(--doris-mid)">SelectDB Cloud</span>
+        </div>
+      </div>
+      <div class="eco-card">
+        <h3 style="color:var(--spark)">🟠 Spark Ecosystem</h3>
+        <p style="font-size:15px; color:var(--text-muted); margin-bottom:14px;">Largest ecosystem in the data engineering world — integrates with everything.</p>
+        <div class="eco-tags">
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Delta Lake</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Apache Iceberg</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Apache Hudi</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">MLflow</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Apache Airflow</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">dbt (Spark adapter)</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Databricks</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">AWS EMR</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">GCP Dataproc</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Azure HDInsight</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Apache Kafka</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">TensorFlow / PyTorch</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Hugging Face</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Great Expectations</span>
+          <span class="eco-tag" style="background:var(--spark-light);color:var(--spark);border-color:var(--spark-mid)">Apache Hive / Glue</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── USE CASES ─── -->
+  <section class="section" id="use-cases">
+    <div class="section-label">
+      <div class="pill" style="background:var(--purple-light);color:var(--purple)">07</div>
+      <h2>When to Use Which — Real Scenarios</h2>
+      <div class="line"></div>
+    </div>
+    <div class="use-grid">
+
+      <div class="use-card winner-doris">
+        <div class="scenario">Scenario 01</div>
+        <h3>Real-Time Business Dashboard</h3>
+        <p>Your product team needs a live dashboard showing today's orders, revenue, and funnel metrics refreshing every 30 seconds with sub-second page loads. 50 simultaneous users.</p>
+        <span class="winner-badge doris">🔵 Use Doris</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Kafka → Doris Routine Load → Superset/Grafana. Latency: &lt;1s. Concurrency: no problem.</p>
+      </div>
+
+      <div class="use-card winner-spark">
+        <div class="scenario">Scenario 02</div>
+        <h3>Nightly ETL — 10TB Data Lake</h3>
+        <p>Every night you need to join 20+ tables across your data lake, apply complex business logic, deduplicate, and write cleaned Parquet to S3. Job runs for 2-4 hours.</p>
+        <span class="winner-badge spark">🟠 Use Spark</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Ephemeral EMR cluster on spot instances. Cost-efficient, massively scalable, expressive Python transforms.</p>
+      </div>
+
+      <div class="use-card winner-spark">
+        <div class="scenario">Scenario 03</div>
+        <h3>ML Feature Engineering Pipeline</h3>
+        <p>Your data science team needs to compute 500+ features from raw clickstream events, train gradient boosting models, and deploy weekly. Data: 5TB/day.</p>
+        <span class="winner-badge spark">🟠 Use Spark</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">PySpark + MLlib/SparkML pipelines + MLflow tracking. Feature store writes back to serving layer.</p>
+      </div>
+
+      <div class="use-card winner-doris">
+        <div class="scenario">Scenario 04</div>
+        <h3>User-Facing Analytics (SaaS Product)</h3>
+        <p>You're building an analytics page inside your SaaS product — each customer queries their own data. 10,000 tenants, queries must return in &lt;500ms, served via your API.</p>
+        <span class="winner-badge doris">🔵 Use Doris</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Doris's high concurrency + MySQL protocol makes it trivial to query from any backend language. Spark would collapse under this load.</p>
+      </div>
+
+      <div class="use-card winner-spark">
+        <div class="scenario">Scenario 05</div>
+        <h3>Event Stream Processing (Stateful)</h3>
+        <p>Count unique users per session, detect fraud patterns in payment events, compute 5-minute rolling windows with exactly-once semantics from Kafka at 1M events/sec.</p>
+        <span class="winner-badge spark">🟠 Use Spark</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Structured Streaming with stateful mapGroupsWithState. (Flink is also a top choice here.)</p>
+      </div>
+
+      <div class="use-card winner-doris">
+        <div class="scenario">Scenario 06</div>
+        <h3>Log Analytics & Observability</h3>
+        <p>Ingest 100GB/hour of application logs. Ops team needs instant drill-down: "show me all errors from service X in the last 10 minutes" — must complete in &lt;2 seconds.</p>
+        <span class="winner-badge doris">🔵 Use Doris</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Doris Duplicate Key model + bitmap/bloom filter indexes = blazing-fast predicate pushdown on log data.</p>
+      </div>
+
+      <div class="use-card winner-spark">
+        <div class="scenario">Scenario 07</div>
+        <h3>Data Lakehouse Migration</h3>
+        <p>Moving 500TB from legacy Oracle to an open lakehouse (Delta/Iceberg on S3). Need full ACID, schema evolution, time-travel, and to reprocess historical partitions.</p>
+        <span class="winner-badge spark">🟠 Use Spark</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Spark + Delta Lake is the de-facto standard. MERGE INTO, Z-ordering, auto-compaction, GDPR delete.</p>
+      </div>
+
+      <div class="use-card winner-doris">
+        <div class="scenario">Scenario 08</div>
+        <h3>Multi-Dimensional Ad-Hoc Analysis</h3>
+        <p>Business analysts run free-form SQL across a 500M-row fact table with 20 dimension tables daily. Queries vary wildly. No pre-defined aggregations. SLA: &lt;3s per query.</p>
+        <span class="winner-badge doris">🔵 Use Doris</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Doris's CBO + colocation join + vectorized engine handles star-schema ad-hoc without pre-computing cubes.</p>
+      </div>
+
+      <div class="use-card winner-both">
+        <div class="scenario">Scenario 09</div>
+        <h3>End-to-End Lakehouse Pipeline</h3>
+        <p>Build a modern data platform: ingest → transform → serve. You need ETL flexibility AND fast query serving, both at petabyte scale, in one coherent architecture.</p>
+        <span class="winner-badge both">⚡ Use Both Together</span>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:10px;margin-bottom:0">Spark for ETL → write to Doris for serving. This is the most common production pattern at companies like ByteDance, Meituan, and JD.com.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── DECISION GUIDE ─── -->
+  <section class="section" id="decision">
+    <div class="section-label">
+      <div class="pill" style="background:var(--yellow-light);color:var(--yellow)">08</div>
+      <h2>Quick Decision Guide</h2>
+      <div class="line"></div>
+    </div>
+    <div class="card" style="max-width:780px; margin:0 auto;">
+      <p style="font-size:15px; color:var(--text-muted); margin-bottom:22px; text-align:center;">
+        Ask yourself these questions in order ↓
+      </p>
+
+      <div class="flow-box q">Do you need query results in &lt; 1 second?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="flow-label">YES → latency-critical</div>
+          <div class="flow-box doris">🔵 Lean toward Doris</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-label">NO → throughput-oriented</div>
+          <div class="flow-box spark">🟠 Lean toward Spark</div>
+        </div>
+      </div>
+      <div class="divider" style="margin:20px 0"></div>
+
+      <div class="flow-box q">Are you running ML training or complex Python transformations?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="flow-label">YES → compute-heavy</div>
+          <div class="flow-box spark">🟠 Spark (only viable choice)</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-label">NO → SQL is enough</div>
+          <div class="flow-box doris">🔵 Doris handles it well</div>
+        </div>
+      </div>
+      <div class="divider" style="margin:20px 0"></div>
+
+      <div class="flow-box q">Do you need &gt; 100 concurrent query users?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="flow-label">YES → concurrency matters</div>
+          <div class="flow-box doris">🔵 Doris (Spark will break)</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-label">NO → batch / pipeline</div>
+          <div class="flow-box spark">🟠 Spark is fine</div>
+        </div>
+      </div>
+      <div class="divider" style="margin:20px 0"></div>
+
+      <div class="flow-box q">Is your data already in S3/HDFS and you want zero data copy?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="flow-label">YES → stay in lake</div>
+          <div class="flow-box spark">🟠 Spark reads native</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-label">NO → load into system</div>
+          <div class="flow-box doris">🔵 Doris ingestion pipeline</div>
+        </div>
+      </div>
+      <div class="divider" style="margin:20px 0"></div>
+
+      <div class="flow-box q">Need BOTH fast serving AND heavy transformation?</div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-box both" style="font-size:16px">⚡ Use Both — Spark for ETL → Doris for Serving</div>
+    </div>
+  </section>
+
+  <!-- ─── VERDICT ─── -->
+  <section class="section" id="verdict">
+    <div class="verdict fade-up">
+      <h2>🏁 The Real Verdict</h2>
+      <p>
+        <strong style="color:#e2e8f0">Apache Doris</strong> is a laser-focused analytical database — it does one thing better than almost anything else: serve fast, concurrent SQL queries over fresh data.
+        If you're building dashboards, real-time reports, or user-facing analytics where milliseconds matter and hundreds of users query simultaneously, Doris is your answer.
+        It's operationally simple, MySQL-compatible, and will make your BI team ecstatic.
+      </p>
+      <p>
+        <strong style="color:#e2e8f0">Apache Spark</strong> is a general-purpose distributed computing engine — the glue of the modern data stack.
+        If you're transforming terabytes, training models, migrating data lakes, or building complex multi-step pipelines, Spark's expressiveness, ecosystem depth, and horizontal scalability are unmatched.
+        It's the engine powering most Fortune 500 data platforms.
+      </p>
+      <p>
+        <strong style="color:#e2e8f0">The most powerful architecture uses both:</strong>
+        Spark handles the heavy lifting — cleaning, enriching, aggregating — and writes results to Doris, which serves them to users at sub-second speed.
+        This Spark → Doris pattern is battle-tested at massive scale (ByteDance, Meituan, JD.com) and represents the ideal modern analytical architecture.
+      </p>
+      <div class="verdict-chips">
+        <span class="verdict-chip d">Doris = Serve Layer</span>
+        <span class="verdict-chip s">Spark = Transform Layer</span>
+        <span class="verdict-chip">Doris for BI Concurrency</span>
+        <span class="verdict-chip">Spark for ETL + ML</span>
+        <span class="verdict-chip d">Doris for Real-Time Freshness</span>
+        <span class="verdict-chip s">Spark for Data Lakes</span>
+        <span class="verdict-chip">Best: Use Both Together</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Animate performance bars on load
+  document.addEventListener('DOMContentLoaded', () => {
+    const bars = document.querySelectorAll('.bar-fill');
+    const targetWidths = Array.from(bars).map(b => b.style.width);
+    bars.forEach(b => { b.style.width = '0'; });
+    setTimeout(() => {
+      bars.forEach((b, i) => { b.style.width = targetWidths[i]; });
+    }, 300);
+  });
+
+  // Intersection observer for fade-up cards
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.card, .use-card, .sw-card, .eco-card, .perf-card').forEach(el => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(20px)';
+    el.style.transition = 'opacity .5s ease, transform .5s ease, box-shadow .25s ease';
+    observer.observe(el);
+  });
+</script>
+</body>
+</html>

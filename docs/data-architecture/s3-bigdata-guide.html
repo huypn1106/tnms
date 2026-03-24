@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon S3 — Big Data Platform Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface2: #f7f9fd;
+    --border: #e2e8f4;
+    --text: #1a2236;
+    --text-muted: #64748b;
+    --blue: #3b82f6;
+    --blue-soft: #eff6ff;
+    --blue-border: #bfdbfe;
+    --orange: #f97316;
+    --orange-soft: #fff7ed;
+    --orange-border: #fed7aa;
+    --purple: #8b5cf6;
+    --purple-soft: #f5f3ff;
+    --purple-border: #ddd6fe;
+    --green: #10b981;
+    --green-soft: #ecfdf5;
+    --green-border: #a7f3d0;
+    --red: #ef4444;
+    --red-soft: #fef2f2;
+    --shadow: 0 2px 12px rgba(59,130,246,0.07), 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-hover: 0 8px 32px rgba(59,130,246,0.13), 0 2px 8px rgba(0,0,0,0.08);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1a2d4f 40%, #0f1f3d 100%);
+    color: white;
+    padding: 64px 40px 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 70% 50%, rgba(59,130,246,0.18) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 80%, rgba(139,92,246,0.12) 0%, transparent 50%);
+  }
+  .hero-inner { max-width: 1100px; margin: 0 auto; position: relative; z-index: 1; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.35);
+    color: #93c5fd; padding: 6px 14px; border-radius: 99px;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+    margin-bottom: 20px; text-transform: uppercase;
+  }
+  .hero h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .hero h1 span { color: #60a5fa; }
+  .hero-sub {
+    font-size: 17px; color: rgba(255,255,255,0.72);
+    max-width: 680px; line-height: 1.65;
+  }
+  .hero-stats {
+    display: flex; gap: 32px; flex-wrap: wrap;
+    margin-top: 40px; padding-top: 32px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .stat { display: flex; flex-direction: column; gap: 4px; }
+  .stat-value {
+    font-family: 'Sora', sans-serif;
+    font-size: 2rem; font-weight: 800; color: #60a5fa;
+    line-height: 1;
+  }
+  .stat-label { font-size: 13px; color: rgba(255,255,255,0.55); font-weight: 500; }
+
+  /* ── NAV ── */
+  .nav-bar {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; gap: 0; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-inner::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    padding: 16px 22px;
+    font-size: 14px; font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+    background: none; border-left: none; border-right: none; border-top: none;
+    outline: none;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .nav-tab:hover { color: var(--blue); }
+  .nav-tab.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--blue-soft); }
+  .nav-icon { font-size: 15px; }
+
+  /* ── MAIN ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  .section { display: none; animation: fadeUp 0.35s ease; }
+  .section.active { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 32px;
+    border: 1px solid var(--border);
+    transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .card-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+
+  .card h3 {
+    font-size: 17px; font-weight: 700; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .card p, .card li { font-size: 15.5px; color: #374151; line-height: 1.7; }
+  .card ul { padding-left: 20px; }
+  .card li { margin-bottom: 6px; }
+
+  /* ── SECTION HEADER ── */
+  .sec-header { margin-bottom: 32px; }
+  .sec-header h2 {
+    font-family: 'Sora', sans-serif;
+    font-size: 1.75rem; font-weight: 800;
+    color: var(--text); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sec-header p { font-size: 16px; color: var(--text-muted); max-width: 680px; }
+
+  /* ── CHIPS / BADGES ── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 99px;
+    font-size: 12.5px; font-weight: 600;
+  }
+  .chip-blue   { background: var(--blue-soft);   color: #1d4ed8; border: 1px solid var(--blue-border); }
+  .chip-orange { background: var(--orange-soft); color: #c2410c; border: 1px solid var(--orange-border); }
+  .chip-purple { background: var(--purple-soft); color: #6d28d9; border: 1px solid var(--purple-border); }
+  .chip-green  { background: var(--green-soft);  color: #065f46; border: 1px solid var(--green-border); }
+  .chip-red    { background: var(--red-soft);    color: #b91c1c; border: 1px solid #fecaca; }
+
+  /* ── COLOR-TINTED CARDS ── */
+  .card-blue   { border-left: 4px solid var(--blue);   background: linear-gradient(135deg, var(--blue-soft) 0%, white 60%); }
+  .card-orange { border-left: 4px solid var(--orange); background: linear-gradient(135deg, var(--orange-soft) 0%, white 60%); }
+  .card-purple { border-left: 4px solid var(--purple); background: linear-gradient(135deg, var(--purple-soft) 0%, white 60%); }
+  .card-green  { border-left: 4px solid var(--green);  background: linear-gradient(135deg, var(--green-soft) 0%, white 60%); }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: #0f172a;
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    overflow-x: auto;
+    margin: 16px 0;
+    border: 1px solid #1e293b;
+    position: relative;
+  }
+  .code-block pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: #e2e8f0;
+    white-space: pre;
+  }
+  .code-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600;
+    color: #64748b; text-transform: uppercase;
+    letter-spacing: 0.08em;
+    position: absolute; top: 10px; right: 14px;
+  }
+  .hl-key   { color: #93c5fd; }
+  .hl-val   { color: #86efac; }
+  .hl-str   { color: #fca5a5; }
+  .hl-cmt   { color: #475569; font-style: italic; }
+  .hl-num   { color: #fcd34d; }
+  .hl-bool  { color: #c4b5fd; }
+  .hl-fn    { color: #fb923c; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 24px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+
+  /* ── FLOW STEPS ── */
+  .flow-steps { display: flex; flex-direction: column; gap: 0; }
+  .flow-step {
+    display: flex; gap: 20px; align-items: flex-start;
+    padding: 24px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .flow-num {
+    flex-shrink: 0;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: white;
+    font-weight: 700; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Sora', sans-serif;
+  }
+  .flow-content h4 { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+  .flow-content p  { font-size: 15px; color: var(--text-muted); }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .compare-table th {
+    background: var(--blue-soft); color: #1d4ed8;
+    font-weight: 700; padding: 12px 16px;
+    text-align: left; border-bottom: 2px solid var(--blue-border);
+    font-size: 13.5px;
+  }
+  .compare-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .compare-table tr:hover td { background: var(--surface2); }
+  .compare-table .winner { font-weight: 700; color: var(--green); }
+  .tick { color: var(--green); font-weight: 700; }
+  .cross { color: var(--red); }
+
+  /* ── CALLOUT ── */
+  .callout {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 16px 20px;
+    border-radius: var(--radius-sm);
+    margin: 16px 0; font-size: 15px;
+  }
+  .callout-blue   { background: var(--blue-soft);   border-left: 3px solid var(--blue); }
+  .callout-orange { background: var(--orange-soft); border-left: 3px solid var(--orange); }
+  .callout-green  { background: var(--green-soft);  border-left: 3px solid var(--green); }
+  .callout-icon { font-size: 18px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── PILLARS GRID ── */
+  .pillar-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin-bottom: 14px;
+  }
+  .pillar-icon-blue   { background: var(--blue-soft); }
+  .pillar-icon-orange { background: var(--orange-soft); }
+  .pillar-icon-purple { background: var(--purple-soft); }
+  .pillar-icon-green  { background: var(--green-soft); }
+
+  /* ── TIER TABLE ── */
+  .tier-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 120px 140px;
+    gap: 16px; align-items: center;
+    padding: 16px 20px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    background: var(--surface);
+    transition: all 0.2s;
+  }
+  .tier-row:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+  .tier-name { font-weight: 700; font-size: 15px; }
+  .tier-desc { font-size: 14.5px; color: var(--text-muted); }
+  .tier-latency { font-size: 13px; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .tier-cost { font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: var(--green); }
+
+  /* ── PRODUCTION CHECKLIST ── */
+  .checklist { list-style: none; padding: 0; }
+  .checklist li {
+    padding: 12px 16px; margin-bottom: 8px;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: 15.5px;
+    display: flex; align-items: flex-start; gap: 10px;
+    transition: all 0.2s;
+  }
+  .checklist li:hover { border-color: var(--blue); background: var(--blue-soft); }
+  .checklist-icon { font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+
+  /* ── SVG DIAGRAM ── */
+  svg text { font-family: 'Inter', sans-serif; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .hero { padding: 40px 20px 36px; }
+    .main { padding: 32px 16px 60px; }
+    .card { padding: 20px; }
+    .tier-row { grid-template-columns: 1fr 1fr; }
+    .hero-stats { gap: 20px; }
+    .stat-value { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════ HERO ═══════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">🗄️ Big Data Platform Design</div>
+    <h1>Amazon <span>S3</span> — Complete Reference<br>for Data Engineers</h1>
+    <p class="hero-sub">
+      From fundamentals to petabyte-scale production architecture.
+      Everything you need to design, build, and operate S3 as the backbone of your Big Data Platform.
+    </p>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-value">335T+</div>
+        <div class="stat-label">Objects stored globally</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">11 9s</div>
+        <div class="stat-label">Durability guarantee</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">5TB</div>
+        <div class="stat-label">Max single object size</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Effective storage scale</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ NAV ═══════════════════════════════════════ -->
+<div class="nav-bar">
+  <div class="nav-inner">
+    <button class="nav-tab active" onclick="showTab('what')"><span class="nav-icon">🧠</span>What is S3</button>
+    <button class="nav-tab" onclick="showTab('how')"><span class="nav-icon">⚙️</span>How it Works</button>
+    <button class="nav-tab" onclick="showTab('arch')"><span class="nav-icon">🏗️</span>Internal Architecture</button>
+    <button class="nav-tab" onclick="showTab('why')"><span class="nav-icon">🚀</span>Why S3 for Big Data</button>
+    <button class="nav-tab" onclick="showTab('storage')"><span class="nav-icon">📦</span>Storage Classes</button>
+    <button class="nav-tab" onclick="showTab('production')"><span class="nav-icon">🔥</span>Production at PB Scale</button>
+    <button class="nav-tab" onclick="showTab('config')"><span class="nav-icon">📋</span>Config & Code</button>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ═══════════════════════════════════════ WHAT IS S3 ═══════════════════════════════════════ -->
+<div id="what" class="section active">
+  <div class="sec-header">
+    <h2>🧠 What is Amazon S3?</h2>
+    <p>Simple Storage Service — the world's most widely used object storage, and the de facto data lake foundation.</p>
+  </div>
+
+  <div class="card-grid-2" style="margin-bottom:24px">
+    <div class="card card-blue">
+      <div class="pillar-icon pillar-icon-blue">🗃️</div>
+      <h3>Object Storage (Not File, Not Block)</h3>
+      <p>S3 stores data as <strong>objects</strong> in flat namespaces called <em>buckets</em>. Unlike a filesystem, there are no directories — only keys (paths) and values (bytes). Every object gets a unique URL and optional metadata.</p>
+      <br>
+      <div style="font-size:14px; background:var(--blue-soft); padding:12px 16px; border-radius:8px; font-family:'JetBrains Mono', monospace;">
+        s3://my-datalake/year=2025/month=03/events.parquet
+      </div>
+    </div>
+
+    <div class="card card-orange">
+      <div class="pillar-icon pillar-icon-orange">📐</div>
+      <h3>Core Concepts</h3>
+      <ul>
+        <li><strong>Bucket</strong> — global namespace container, tied to a region</li>
+        <li><strong>Object</strong> — file + metadata, up to 5 TB</li>
+        <li><strong>Key</strong> — full path of the object within a bucket</li>
+        <li><strong>Prefix</strong> — logical folder simulation using "/" in key names</li>
+        <li><strong>Versioning</strong> — keep history of all object versions</li>
+        <li><strong>ETag</strong> — MD5 hash for integrity verification</li>
+      </ul>
+    </div>
+
+    <div class="card card-purple">
+      <div class="pillar-icon pillar-icon-purple">🔌</div>
+      <h3>API-First Design</h3>
+      <p>Everything is HTTP REST. <code style="font-family:'JetBrains Mono'; background:var(--purple-soft); padding:2px 6px; border-radius:4px; font-size:13px;">GET / PUT / DELETE / HEAD / LIST</code> — Six verbs control everything. This makes it universally integrable with any language, framework, or system on earth.</p>
+      <br>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+        <span class="chip chip-purple">REST API</span>
+        <span class="chip chip-blue">AWS SDK</span>
+        <span class="chip chip-green">S3-compatible API</span>
+        <span class="chip chip-orange">CLI / boto3</span>
+      </div>
+    </div>
+
+    <div class="card card-green">
+      <div class="pillar-icon pillar-icon-green">🌐</div>
+      <h3>S3 as Data Lake Foundation</h3>
+      <p>In modern Big Data architecture, S3 acts as the <strong>central data lake</strong> — a single source of truth where raw, processed, and curated data all live. Every processing engine (Spark, Flink, Athena, Redshift) reads from and writes to S3.</p>
+      <br>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        <span class="chip chip-blue">Apache Spark</span>
+        <span class="chip chip-orange">AWS Glue</span>
+        <span class="chip chip-purple">Athena</span>
+        <span class="chip chip-green">Redshift Spectrum</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:20px;">🔑 S3 in the Data Architecture Landscape</h3>
+    <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:900px; display:block; margin:0 auto;">
+      <!-- Background lanes -->
+      <rect x="10" y="10" width="870" height="260" rx="14" fill="#f7f9fd" stroke="#e2e8f4"/>
+      <!-- Sources -->
+      <rect x="30" y="60" width="140" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+      <text x="100" y="85" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">Kafka / Streams</text>
+      <rect x="30" y="115" width="140" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+      <text x="100" y="140" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">Databases / RDS</text>
+      <rect x="30" y="170" width="140" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+      <text x="100" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1d4ed8">APIs / SaaS</text>
+      <text x="100" y="38" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b" letter-spacing="0.05em">DATA SOURCES</text>
+
+      <!-- Arrows to S3 -->
+      <line x1="170" y1="82" x2="305" y2="130" stroke="#93c5fd" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="170" y1="137" x2="305" y2="140" stroke="#93c5fd" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="170" y1="192" x2="305" y2="150" stroke="#93c5fd" stroke-width="2" marker-end="url(#arr)"/>
+
+      <!-- S3 CENTER -->
+      <rect x="305" y="85" width="230" height="120" rx="12" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2.5"/>
+      <text x="420" y="118" text-anchor="middle" font-size="22" fill="white">🗄️</text>
+      <text x="420" y="142" text-anchor="middle" font-size="15" font-weight="800" fill="white">Amazon S3</text>
+      <text x="420" y="161" text-anchor="middle" font-size="11" fill="#93c5fd">Data Lake Foundation</text>
+      <text x="420" y="177" text-anchor="middle" font-size="10" fill="#60a5fa">11 nines durability · Infinite scale</text>
+      <text x="420" y="38" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b" letter-spacing="0.05em">STORAGE LAYER</text>
+
+      <!-- Arrows from S3 -->
+      <line x1="535" y1="130" x2="655" y2="82" stroke="#86efac" stroke-width="2" marker-end="url(#arG)"/>
+      <line x1="535" y1="140" x2="655" y2="137" stroke="#86efac" stroke-width="2" marker-end="url(#arG)"/>
+      <line x1="535" y1="150" x2="655" y2="192" stroke="#86efac" stroke-width="2" marker-end="url(#arG)"/>
+
+      <!-- Consumers -->
+      <rect x="655" y="60" width="150" height="44" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+      <text x="730" y="79" text-anchor="middle" font-size="11.5" font-weight="600" fill="#065f46">Apache Spark</text>
+      <text x="730" y="96" text-anchor="middle" font-size="10" fill="#6b7280">/ Flink / EMR</text>
+      <rect x="655" y="115" width="150" height="44" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+      <text x="730" y="134" text-anchor="middle" font-size="11.5" font-weight="600" fill="#065f46">AWS Athena</text>
+      <text x="730" y="151" text-anchor="middle" font-size="10" fill="#6b7280">Serverless SQL</text>
+      <rect x="655" y="170" width="150" height="44" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+      <text x="730" y="189" text-anchor="middle" font-size="11.5" font-weight="600" fill="#065f46">Redshift Spectrum</text>
+      <text x="730" y="206" text-anchor="middle" font-size="10" fill="#6b7280">Analytics DW</text>
+      <text x="730" y="38" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b" letter-spacing="0.05em">COMPUTE / QUERY</text>
+
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#93c5fd"/>
+        </marker>
+        <marker id="arG" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#86efac"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ HOW IT WORKS ═══════════════════════════════════════ -->
+<div id="how" class="section">
+  <div class="sec-header">
+    <h2>⚙️ How S3 Works</h2>
+    <p>Under the hood: request routing, consistency model, data paths, and operations.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3>📡 Request Lifecycle — PUT an Object</h3>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-content">
+          <h4>DNS Resolution + TLS Handshake</h4>
+          <p>Client resolves <code style="font-family:'JetBrains Mono'; font-size:13px; background:#f1f5f9; padding:1px 6px; border-radius:4px;">bucket.s3.region.amazonaws.com</code>. The bucket name routes to the correct AWS region's S3 fleet. TLS 1.3 secures all traffic in transit.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-content">
+          <h4>Authentication &amp; Authorization (SigV4)</h4>
+          <p>AWS Signature Version 4 signs every request with HMAC-SHA256. IAM evaluates the identity — IAM Role, User, or Service Account — against the bucket policy and resource policy before any data movement starts.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-content">
+          <h4>Data Ingestion — Frontend Service</h4>
+          <p>The S3 frontend service (load-balancer tier) accepts the TCP stream. For objects &gt;100 MB, Multipart Upload splits data into concurrent parts (min 5 MB each) that are uploaded in parallel and assembled atomically on completion.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-content">
+          <h4>Durability: Multi-AZ Replication</h4>
+          <p>S3 Standard replicates every object across ≥3 Availability Zones. Each AZ independently stores the data on multiple physical drives with Reed-Solomon erasure coding. The PUT only returns 200 OK after AZ-redundant replication is confirmed.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-content">
+          <h4>Metadata Indexing</h4>
+          <p>A distributed metadata service records the object key, size, ETag, storage class, ACL, and version ID. This index is what powers the LIST API and enables S3 Inventory, Lifecycle, and Replication rules to function at scale.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-content">
+          <h4>Strong Read-After-Write Consistency</h4>
+          <p>Since December 2020, S3 offers <strong>strong consistency</strong> for all operations — GET, PUT, DELETE, LIST. A successful PUT is immediately visible to all subsequent GETs with no eventual consistency lag. This is critical for Big Data pipelines.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-grid">
+    <div class="card card-blue">
+      <h3>🔢 Key Operations &amp; APIs</h3>
+      <ul>
+        <li><strong>PutObject</strong> — upload single object (≤5GB)</li>
+        <li><strong>GetObject</strong> — download full object or byte-range</li>
+        <li><strong>DeleteObject</strong> — remove object (soft with versioning)</li>
+        <li><strong>ListObjectsV2</strong> — paginate up to 1000 keys/page</li>
+        <li><strong>CreateMultipartUpload</strong> — start chunked upload</li>
+        <li><strong>CopyObject</strong> — server-side copy without re-transfer</li>
+        <li><strong>SelectObjectContent</strong> — query CSV/JSON/Parquet in-place</li>
+        <li><strong>HeadObject</strong> — get metadata without downloading data</li>
+      </ul>
+    </div>
+
+    <div class="card card-orange">
+      <h3>📊 Throughput &amp; Limits</h3>
+      <ul>
+        <li><strong>Per-prefix</strong>: 5,500 GET/HEAD, 3,500 PUT/DELETE per sec</li>
+        <li><strong>Scaling trick</strong>: Use randomized prefixes to shard across S3 partitions</li>
+        <li><strong>Max object size</strong>: 5 TB (requires multipart for &gt;5 GB)</li>
+        <li><strong>Max bucket count</strong>: 100 (soft) / 1,000 (hard) per account</li>
+        <li><strong>No bucket size limit</strong>: store exabytes in one bucket</li>
+        <li><strong>S3 Transfer Acceleration</strong>: uses CloudFront edge for global fast PUT</li>
+      </ul>
+    </div>
+
+    <div class="card card-green">
+      <h3>🔒 Security Model</h3>
+      <ul>
+        <li><strong>Encryption at rest</strong>: SSE-S3 (free), SSE-KMS (auditable), SSE-C (customer key)</li>
+        <li><strong>Encryption in transit</strong>: TLS enforced via bucket policy</li>
+        <li><strong>Block Public Access</strong>: account-level guardrail</li>
+        <li><strong>Bucket Policy</strong>: resource-based JSON IAM policy</li>
+        <li><strong>VPC Endpoint</strong>: private access, traffic never leaves AWS network</li>
+        <li><strong>Macie</strong>: ML-based PII/sensitive data detection</li>
+        <li><strong>Object Lock</strong>: WORM for compliance (GOVERNANCE / COMPLIANCE)</li>
+      </ul>
+    </div>
+
+    <div class="card card-purple">
+      <h3>🔔 Events &amp; Integrations</h3>
+      <ul>
+        <li><strong>S3 Event Notifications</strong> → SQS / SNS / Lambda</li>
+        <li><strong>S3 Event Bridge</strong> → 100+ AWS services, fine-grained routing</li>
+        <li><strong>Object Lambda</strong>: transform data on GET without copying</li>
+        <li><strong>S3 Batch Operations</strong>: invoke Lambda on billions of objects</li>
+        <li><strong>Replication (CRR/SRR)</strong>: async object-level replication</li>
+        <li><strong>S3 Access Logs</strong>: detailed request logging to S3</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ ARCHITECTURE ═══════════════════════════════════════ -->
+<div id="arch" class="section">
+  <div class="sec-header">
+    <h2>🏗️ S3 Internal Architecture</h2>
+    <p>How AWS built a system that stores trillions of objects with 11 nines of durability.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:20px;">🌐 Multi-Layer Architecture</h3>
+    <svg viewBox="0 0 860 400" xmlns="http://www.w3.org/2000/svg" style="width:100%; display:block;">
+      <!-- Layer 1: Client -->
+      <rect x="10" y="14" width="840" height="58" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+      <text x="430" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#1d4ed8" letter-spacing="0.05em">CLIENT TIER</text>
+      <rect x="100" y="26" width="120" height="34" rx="6" fill="white" stroke="#93c5fd"/>
+      <text x="160" y="47" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">SDK / CLI</text>
+      <rect x="240" y="26" width="120" height="34" rx="6" fill="white" stroke="#93c5fd"/>
+      <text x="300" y="47" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">HTTP REST API</text>
+      <rect x="380" y="26" width="120" height="34" rx="6" fill="white" stroke="#93c5fd"/>
+      <text x="440" y="47" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">Presigned URL</text>
+      <rect x="520" y="26" width="120" height="34" rx="6" fill="white" stroke="#93c5fd"/>
+      <text x="580" y="47" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">VPC Endpoint</text>
+      <rect x="660" y="26" width="120" height="34" rx="6" fill="white" stroke="#93c5fd"/>
+      <text x="720" y="47" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">Transfer Accel.</text>
+
+      <!-- Arrow -->
+      <line x1="430" y1="72" x2="430" y2="92" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4,3"/>
+      <polygon points="424,90 436,90 430,98" fill="#94a3b8"/>
+
+      <!-- Layer 2: Frontend -->
+      <rect x="10" y="98" width="840" height="60" rx="10" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+      <text x="430" y="122" text-anchor="middle" font-size="12" font-weight="700" fill="#c2410c" letter-spacing="0.05em">FRONTEND SERVICE LAYER (Load Balancer + Auth)</text>
+      <text x="430" y="142" text-anchor="middle" font-size="11" fill="#92400e">SigV4 Auth · Rate Limiting · TLS Termination · Request Routing</text>
+
+      <line x1="430" y1="158" x2="430" y2="178" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4,3"/>
+      <polygon points="424,176 436,176 430,184" fill="#94a3b8"/>
+
+      <!-- Layer 3: Index/Metadata -->
+      <rect x="10" y="184" width="400" height="80" rx="10" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+      <text x="210" y="208" text-anchor="middle" font-size="12" font-weight="700" fill="#6d28d9">METADATA SERVICE</text>
+      <text x="210" y="227" text-anchor="middle" font-size="11" fill="#7c3aed">Key → Location mapping</text>
+      <text x="210" y="245" text-anchor="middle" font-size="11" fill="#7c3aed">Distributed NoSQL · Strongly consistent</text>
+
+      <!-- Layer 3: Storage Nodes -->
+      <rect x="450" y="184" width="400" height="80" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+      <text x="650" y="208" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">STORAGE NODES</text>
+      <text x="650" y="227" text-anchor="middle" font-size="11" fill="#047857">Erasure coded chunks (Reed-Solomon)</text>
+      <text x="650" y="245" text-anchor="middle" font-size="11" fill="#047857">Distributed across AZs + physical hosts</text>
+
+      <!-- Connecting lines -->
+      <line x1="210" y1="264" x2="210" y2="290" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4,3"/>
+      <line x1="650" y1="264" x2="650" y2="290" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4,3"/>
+
+      <!-- Layer 4: AZs -->
+      <rect x="10" y="296" width="250" height="90" rx="10" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+      <text x="135" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">AZ-a</text>
+      <text x="135" y="340" text-anchor="middle" font-size="11" fill="#7f1d1d">3+ replicas</text>
+      <text x="135" y="358" text-anchor="middle" font-size="11" fill="#7f1d1d">Independent power/network</text>
+      <text x="135" y="376" text-anchor="middle" font-size="10" fill="#9ca3af">us-east-1a</text>
+
+      <rect x="305" y="296" width="250" height="90" rx="10" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+      <text x="430" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">AZ-b</text>
+      <text x="430" y="340" text-anchor="middle" font-size="11" fill="#7f1d1d">3+ replicas</text>
+      <text x="430" y="358" text-anchor="middle" font-size="11" fill="#7f1d1d">Independent power/network</text>
+      <text x="430" y="376" text-anchor="middle" font-size="10" fill="#9ca3af">us-east-1b</text>
+
+      <rect x="600" y="296" width="250" height="90" rx="10" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+      <text x="725" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">AZ-c</text>
+      <text x="725" y="340" text-anchor="middle" font-size="11" fill="#7f1d1d">3+ replicas</text>
+      <text x="725" y="358" text-anchor="middle" font-size="11" fill="#7f1d1d">Independent power/network</text>
+      <text x="725" y="376" text-anchor="middle" font-size="10" fill="#9ca3af">us-east-1c</text>
+    </svg>
+  </div>
+
+  <div class="card-grid">
+    <div class="card card-blue">
+      <h3>🔢 Erasure Coding</h3>
+      <p>S3 uses <strong>Reed-Solomon erasure coding</strong> rather than simple 3× replication. Data is split into <em>k</em> data chunks and <em>m</em> parity chunks. The system can reconstruct the full object even if <em>m</em> chunks are lost — providing durability comparable to 6× replication at ~1.5× storage cost.</p>
+      <br>
+      <div style="background:var(--blue-soft); border-radius:8px; padding:12px 14px; font-size:14px;">
+        <strong>Example:</strong> k=10 data + m=4 parity → survives 4 simultaneous drive failures
+      </div>
+    </div>
+
+    <div class="card card-purple">
+      <h3>🗂️ Metadata Sharding</h3>
+      <p>S3's metadata service is a <strong>distributed key-value store</strong> sharded by bucket+prefix hash. This is why randomizing prefixes matters — sequential prefixes (e.g., timestamps) hot-spot a single shard, while random prefixes distribute load across hundreds of shard servers.</p>
+    </div>
+
+    <div class="card card-orange">
+      <h3>📦 Multipart Upload Internals</h3>
+      <p>For large objects, S3 Multipart Upload lets you upload parts (5 MB–5 GB each) in parallel. Parts are stored as separate objects internally, then assembled via <strong>CompleteMultipartUpload</strong> which is an atomic operation — either all parts succeed or the whole upload fails.</p>
+    </div>
+
+    <div class="card card-green">
+      <h3>🔄 Consistency Architecture</h3>
+      <p>S3 achieves strong consistency through a <strong>distributed consensus protocol</strong> at the metadata layer. All reads are routed through the metadata service, which ensures the latest committed version is returned. This was a fundamental architectural redesign deployed in 2020.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ WHY S3 ═══════════════════════════════════════ -->
+<div id="why" class="section">
+  <div class="sec-header">
+    <h2>🚀 Why S3 for Big Data?</h2>
+    <p>S3 wins in every dimension that matters for large-scale data platforms.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:20px;">📊 S3 vs Alternatives for Data Lake</h3>
+    <div style="overflow-x:auto;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Amazon S3</th>
+            <th>HDFS</th>
+            <th>Azure ADLS</th>
+            <th>GCS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Durability</strong></td>
+            <td class="winner">11 nines (99.999999999%)</td>
+            <td>~4 nines (3× replication)</td>
+            <td>11+ nines</td>
+            <td>11+ nines</td>
+          </tr>
+          <tr>
+            <td><strong>Scalability</strong></td>
+            <td class="winner">∞ (no practical limit)</td>
+            <td>Cluster-bound, hard limit</td>
+            <td>∞</td>
+            <td>∞</td>
+          </tr>
+          <tr>
+            <td><strong>Cost/GB/mo</strong></td>
+            <td class="winner">~$0.023 (Standard)</td>
+            <td>$0.05–0.10 (ops incl.)</td>
+            <td>~$0.018</td>
+            <td>~$0.020</td>
+          </tr>
+          <tr>
+            <td><strong>Operational Overhead</strong></td>
+            <td class="winner">Zero (fully managed)</td>
+            <td>High (cluster admin)</td>
+            <td>Low</td>
+            <td>Low</td>
+          </tr>
+          <tr>
+            <td><strong>Compute Separation</strong></td>
+            <td class="winner"><span class="tick">✓</span> Native</td>
+            <td><span class="cross">✗</span> Coupled</td>
+            <td><span class="tick">✓</span></td>
+            <td><span class="tick">✓</span></td>
+          </tr>
+          <tr>
+            <td><strong>Ecosystem</strong></td>
+            <td class="winner">Universal (Spark, Flink, dbt…)</td>
+            <td>Hadoop-centric</td>
+            <td>Azure-first</td>
+            <td>GCP-first</td>
+          </tr>
+          <tr>
+            <td><strong>Strong Consistency</strong></td>
+            <td class="winner"><span class="tick">✓</span> Since 2020</td>
+            <td><span class="tick">✓</span></td>
+            <td><span class="tick">✓</span></td>
+            <td><span class="tick">✓</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card-grid" style="margin-bottom:24px;">
+    <div class="card card-blue">
+      <div class="pillar-icon pillar-icon-blue">⚖️</div>
+      <h3>Decoupled Compute &amp; Storage</h3>
+      <p>With HDFS, scaling storage requires scaling compute (and vice versa). S3 breaks this coupling — you can run a 1-node Spark cluster or a 10,000-node EMR fleet against the same S3 data. Elasticity becomes cost-efficient at any scale.</p>
+    </div>
+
+    <div class="card card-orange">
+      <div class="pillar-icon pillar-icon-orange">💸</div>
+      <h3>Dramatic Cost Tiering</h3>
+      <p>S3's storage classes reduce cost by up to 95% for cold data. Active warehouse tables stay in Standard; 90-day-old audit logs move to Glacier Instant; 3-year compliance data moves to Glacier Deep Archive. Lifecycle rules automate all of this.</p>
+    </div>
+
+    <div class="card card-purple">
+      <div class="pillar-icon pillar-icon-purple">🔗</div>
+      <h3>Universal Connector</h3>
+      <p>Every major data tool supports S3 natively: Apache Spark, Flink, Hive, Presto, Trino, dbt, Airbyte, Fivetran, Databricks, Snowflake, and 200+ more. S3 is the common language of Big Data.</p>
+    </div>
+
+    <div class="card card-green">
+      <div class="pillar-icon pillar-icon-green">🛡️</div>
+      <h3>Enterprise Security &amp; Compliance</h3>
+      <p>SOC 2, HIPAA, PCI-DSS, GDPR, FedRAMP. Object Lock for WORM compliance. KMS-managed encryption keys. Fine-grained IAM policies. VPC-only access. Macie for data classification. S3 is battle-tested for regulated industries.</p>
+    </div>
+  </div>
+
+  <div class="callout callout-blue">
+    <div class="callout-icon">💡</div>
+    <div><strong>Key Insight:</strong> The "Data Lakehouse" pattern (Delta Lake, Apache Iceberg, Apache Hudi on S3) gives you both the cheap scale of a data lake AND the ACID transactions of a warehouse — all sitting on S3 as the storage layer.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ STORAGE CLASSES ═══════════════════════════════════════ -->
+<div id="storage" class="section">
+  <div class="sec-header">
+    <h2>📦 S3 Storage Classes</h2>
+    <p>Choose the right tier for each data access pattern to minimize cost without sacrificing availability.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:20px;">Storage Class Decision Matrix</h3>
+
+    <div class="tier-row" style="border-left:4px solid #3b82f6;">
+      <div><div class="tier-name">S3 Standard</div><span class="chip chip-blue" style="font-size:11px;">DEFAULT</span></div>
+      <div class="tier-desc">Frequently accessed data. Hot data lake tables, recent partitions, active pipeline staging. No retrieval fee.</div>
+      <div class="tier-latency" style="color:var(--blue)">ms latency</div>
+      <div class="tier-cost">$0.023/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #10b981;">
+      <div><div class="tier-name">S3 Intelligent-Tiering</div><span class="chip chip-green" style="font-size:11px;">AUTO</span></div>
+      <div class="tier-desc">Automatically moves objects between tiers based on access. Best for unpredictable patterns. Small monitoring fee per object.</div>
+      <div class="tier-latency" style="color:var(--green)">ms latency</div>
+      <div class="tier-cost">$0.023–0.004/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #f59e0b;">
+      <div><div class="tier-name">S3 Standard-IA</div><span class="chip chip-orange" style="font-size:11px;">INFREQUENT</span></div>
+      <div class="tier-desc">Accessed less than once/month. Disaster recovery, older year partitions. 30-day minimum storage charge.</div>
+      <div class="tier-latency" style="color:var(--orange)">ms latency</div>
+      <div class="tier-cost">$0.0125/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #8b5cf6;">
+      <div><div class="tier-name">S3 One Zone-IA</div><span class="chip chip-purple" style="font-size:11px;">SINGLE AZ</span></div>
+      <div class="tier-desc">Infrequently accessed, reproducible data. One AZ only — lower cost but no AZ failure protection. Good for thumbnails/re-derivable data.</div>
+      <div class="tier-latency" style="color:var(--purple)">ms latency</div>
+      <div class="tier-cost">$0.010/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #6366f1;">
+      <div><div class="tier-name">Glacier Instant Retrieval</div><span class="chip chip-purple" style="font-size:11px;">ARCHIVE</span></div>
+      <div class="tier-desc">Long-lived archive accessed ~once/quarter. Medical images, media assets. Same instant access as Standard-IA but cheaper storage.</div>
+      <div class="tier-latency" style="color:#6366f1">ms latency</div>
+      <div class="tier-cost">$0.004/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #64748b;">
+      <div><div class="tier-name">Glacier Flexible Retrieval</div><span class="chip" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; font-size:11px;">COLD</span></div>
+      <div class="tier-desc">Rarely accessed. Bulk data backups, compliance archives. Retrieval: 1–5 min (Expedited), 3–5 hr (Standard), 5–12 hr (Bulk).</div>
+      <div class="tier-latency" style="color:#64748b">1 min–12 hr</div>
+      <div class="tier-cost">$0.0036/GB</div>
+    </div>
+
+    <div class="tier-row" style="border-left:4px solid #1e293b;">
+      <div><div class="tier-name">Glacier Deep Archive</div><span class="chip" style="background:#1e293b; color:#94a3b8; border:1px solid #334155; font-size:11px;">DEEPFREEZE</span></div>
+      <div class="tier-desc">Cheapest S3 storage. 7–10 year compliance retention, regulatory records. Minimum 180 days. Retrieval 12–48 hours.</div>
+      <div class="tier-latency" style="color:#475569">12–48 hours</div>
+      <div class="tier-cost">$0.00099/GB</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔄 Lifecycle Policy Example</h3>
+    <p style="font-size:15px; color:var(--text-muted); margin-bottom:12px;">Automatically transition objects across tiers based on age:</p>
+    <div class="code-block">
+      <span class="code-label">JSON</span>
+      <pre><span class="hl-cmt"># S3 Lifecycle Policy — BigData Datalake</span>
+{
+  <span class="hl-key">"Rules"</span>: [
+    {
+      <span class="hl-key">"ID"</span>: <span class="hl-str">"DataLakeLifecycle"</span>,
+      <span class="hl-key">"Status"</span>: <span class="hl-str">"Enabled"</span>,
+      <span class="hl-key">"Filter"</span>: { <span class="hl-key">"Prefix"</span>: <span class="hl-str">"data/processed/"</span> },
+      <span class="hl-key">"Transitions"</span>: [
+        {
+          <span class="hl-key">"Days"</span>: <span class="hl-num">30</span>,
+          <span class="hl-key">"StorageClass"</span>: <span class="hl-str">"STANDARD_IA"</span>    <span class="hl-cmt">// After 30 days</span>
+        },
+        {
+          <span class="hl-key">"Days"</span>: <span class="hl-num">90</span>,
+          <span class="hl-key">"StorageClass"</span>: <span class="hl-str">"GLACIER_IR"</span>      <span class="hl-cmt">// After 90 days</span>
+        },
+        {
+          <span class="hl-key">"Days"</span>: <span class="hl-num">365</span>,
+          <span class="hl-key">"StorageClass"</span>: <span class="hl-str">"DEEP_ARCHIVE"</span>    <span class="hl-cmt">// After 1 year</span>
+        }
+      ],
+      <span class="hl-key">"NoncurrentVersionTransitions"</span>: [
+        { <span class="hl-key">"NoncurrentDays"</span>: <span class="hl-num">7</span>, <span class="hl-key">"StorageClass"</span>: <span class="hl-str">"STANDARD_IA"</span> }
+      ],
+      <span class="hl-key">"NoncurrentVersionExpiration"</span>: { <span class="hl-key">"NoncurrentDays"</span>: <span class="hl-num">90</span> }
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ PRODUCTION ═══════════════════════════════════════ -->
+<div id="production" class="section">
+  <div class="sec-header">
+    <h2>🔥 Production at Petabyte Scale</h2>
+    <p>Designing and operating S3 when your data lake holds 1 PB+ across hundreds of billions of objects.</p>
+  </div>
+
+  <div class="card-grid-2" style="margin-bottom:24px;">
+    <div class="card card-blue">
+      <h3>🗂️ Bucket Strategy at PB Scale</h3>
+      <ul>
+        <li><strong>Separation of concerns</strong>: Raw / Staged / Curated / Archive buckets</li>
+        <li><strong>One bucket per environment</strong>: dev / staging / prod (never share)</li>
+        <li><strong>Region co-location</strong>: S3 + Compute in same region → zero egress cost</li>
+        <li><strong>S3 Inventory</strong>: daily CSV manifest of all objects for auditing</li>
+        <li><strong>Requester Pays</strong>: charge consumers for cross-account access</li>
+      </ul>
+      <br>
+      <div style="background:var(--blue-soft); border-radius:8px; padding:12px 14px; font-family:'JetBrains Mono'; font-size:13px; line-height:1.8;">
+        my-company-raw-prod<br>
+        my-company-staged-prod<br>
+        my-company-curated-prod<br>
+        my-company-archive-prod
+      </div>
+    </div>
+
+    <div class="card card-orange">
+      <h3>📁 Partition Design Strategy</h3>
+      <p style="margin-bottom:12px; font-size:15px;">Good partitioning is the single most impactful performance decision for query engines (Athena, Spark).</p>
+      <div class="code-block" style="margin:0;">
+        <pre style="font-size:12.5px;"><span class="hl-cmt"># ❌ BAD — Sequential keys hot-spot S3 shards</span>
+<span class="hl-str">s3://bucket/2025-03-18-00001.parquet</span>
+
+<span class="hl-cmt"># ✅ GOOD — Hive-style partition pruning</span>
+<span class="hl-str">s3://bucket/events/</span>
+  <span class="hl-str">year=2025/month=03/day=18/</span>
+    <span class="hl-str">region=us-east/</span>
+      <span class="hl-str">part-00001.parquet</span>
+
+<span class="hl-cmt"># ✅ BEST at PB scale — prefix randomization</span>
+<span class="hl-str">s3://bucket/a3f2/events/year=2025/...</span>
+<span class="hl-str">s3://bucket/7c1e/events/year=2025/...</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3 style="margin-bottom:8px;">⚡ Performance Tuning at Scale</h3>
+    <p style="font-size:15px; color:var(--text-muted); margin-bottom:20px;">Key levers to maximize S3 throughput for large-scale jobs</p>
+    <div class="card-grid">
+      <div style="padding:16px; border:1px solid var(--border); border-radius:10px; background:var(--surface2);">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--blue);">🔀 Prefix Sharding</div>
+        <p style="font-size:14.5px;">Each prefix partition handles 3,500 PUT/5,500 GET per sec. Shard across 100+ prefixes to reach 500K+ RPS. Add random 4-hex prefix to all keys.</p>
+      </div>
+      <div style="padding:16px; border:1px solid var(--border); border-radius:10px; background:var(--surface2);">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--orange);">📦 Multipart Upload</div>
+        <p style="font-size:14.5px;">Always use Multipart for files &gt;100 MB. Use 64–128 MB part sizes. Saturate network with 20–50 concurrent part uploads per object.</p>
+      </div>
+      <div style="padding:16px; border:1px solid var(--border); border-radius:10px; background:var(--surface2);">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--purple);">🔌 S3 Select / Byte Range</div>
+        <p style="font-size:14.5px;">Use S3 Select to push filter predicates down to S3 for CSV/JSON/Parquet. Use byte-range GET to read only relevant row groups in Parquet files.</p>
+      </div>
+      <div style="padding:16px; border:1px solid var(--border); border-radius:10px; background:var(--surface2);">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--green);">💾 File Sizing</div>
+        <p style="font-size:14.5px;">Target 128–512 MB Parquet files. Too small = LIST API overhead. Too large = wasted reads. Use compaction jobs (Spark/Glue) to maintain file sizes.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-green" style="margin-bottom:24px;">
+    <h3>🏛️ Data Lakehouse Architecture at PB Scale</h3>
+    <div class="arch-diagram" style="padding:20px;">
+      <svg viewBox="0 0 860 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; display:block;">
+        <!-- Ingestion -->
+        <rect x="10" y="60" width="140" height="200" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+        <text x="80" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b">INGESTION</text>
+        <rect x="20" y="72" width="120" height="30" rx="6" fill="white" stroke="#93c5fd"/>
+        <text x="80" y="91" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">Kafka</text>
+        <rect x="20" y="112" width="120" height="30" rx="6" fill="white" stroke="#93c5fd"/>
+        <text x="80" y="131" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">Firehose</text>
+        <rect x="20" y="152" width="120" height="30" rx="6" fill="white" stroke="#93c5fd"/>
+        <text x="80" y="171" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">DMS / CDC</text>
+        <rect x="20" y="192" width="120" height="30" rx="6" fill="white" stroke="#93c5fd"/>
+        <text x="80" y="211" text-anchor="middle" font-size="11" font-weight="600" fill="#1d4ed8">API Gateway</text>
+
+        <!-- Arrow -->
+        <line x1="150" y1="160" x2="175" y2="160" stroke="#cbd5e1" stroke-width="2" marker-end="url(#a1)"/>
+
+        <!-- S3 RAW -->
+        <rect x="175" y="110" width="110" height="100" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2"/>
+        <text x="230" y="148" text-anchor="middle" font-size="11" font-weight="700" fill="white">S3</text>
+        <text x="230" y="164" text-anchor="middle" font-size="10" fill="#93c5fd">raw/</text>
+        <text x="230" y="180" text-anchor="middle" font-size="9" fill="#60a5fa">JSON · Avro · CSV</text>
+
+        <!-- Arrow -->
+        <line x1="285" y1="160" x2="315" y2="160" stroke="#cbd5e1" stroke-width="2" marker-end="url(#a1)"/>
+
+        <!-- Processing -->
+        <rect x="315" y="80" width="140" height="160" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/>
+        <text x="385" y="70" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b">PROCESSING</text>
+        <rect x="325" y="92" width="120" height="28" rx="6" fill="white" stroke="#c4b5fd"/>
+        <text x="385" y="110" text-anchor="middle" font-size="11" font-weight="600" fill="#6d28d9">Spark on EMR</text>
+        <rect x="325" y="130" width="120" height="28" rx="6" fill="white" stroke="#c4b5fd"/>
+        <text x="385" y="148" text-anchor="middle" font-size="11" font-weight="600" fill="#6d28d9">AWS Glue ETL</text>
+        <rect x="325" y="168" width="120" height="28" rx="6" fill="white" stroke="#c4b5fd"/>
+        <text x="385" y="186" text-anchor="middle" font-size="11" font-weight="600" fill="#6d28d9">Apache Flink</text>
+        <rect x="325" y="206" width="120" height="24" rx="6" fill="white" stroke="#c4b5fd"/>
+        <text x="385" y="222" text-anchor="middle" font-size="10.5" font-weight="600" fill="#6d28d9">dbt (transforms)</text>
+
+        <!-- Arrow -->
+        <line x1="455" y1="160" x2="480" y2="160" stroke="#cbd5e1" stroke-width="2" marker-end="url(#a1)"/>
+
+        <!-- S3 CURATED -->
+        <rect x="480" y="110" width="110" height="100" rx="10" fill="#064e3b" stroke="#10b981" stroke-width="2"/>
+        <text x="535" y="148" text-anchor="middle" font-size="11" font-weight="700" fill="white">S3</text>
+        <text x="535" y="164" text-anchor="middle" font-size="10" fill="#6ee7b7">curated/</text>
+        <text x="535" y="180" text-anchor="middle" font-size="9" fill="#a7f3d0">Parquet · Delta</text>
+        <text x="535" y="196" text-anchor="middle" font-size="9" fill="#a7f3d0">Iceberg tables</text>
+
+        <!-- Arrow -->
+        <line x1="590" y1="160" x2="615" y2="160" stroke="#cbd5e1" stroke-width="2" marker-end="url(#a1)"/>
+
+        <!-- Query Layer -->
+        <rect x="615" y="60" width="145" height="200" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+        <text x="687" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="#64748b">QUERY / SERVE</text>
+        <rect x="625" y="72" width="125" height="28" rx="6" fill="white" stroke="#86efac"/>
+        <text x="687" y="91" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">Amazon Athena</text>
+        <rect x="625" y="110" width="125" height="28" rx="6" fill="white" stroke="#86efac"/>
+        <text x="687" y="129" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">Redshift Spectrum</text>
+        <rect x="625" y="148" width="125" height="28" rx="6" fill="white" stroke="#86efac"/>
+        <text x="687" y="167" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">Trino / Presto</text>
+        <rect x="625" y="186" width="125" height="28" rx="6" fill="white" stroke="#86efac"/>
+        <text x="687" y="205" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">QuickSight / BI</text>
+
+        <!-- Glue Catalog (top) -->
+        <rect x="315" y="270" width="370" height="40" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
+        <text x="500" y="294" text-anchor="middle" font-size="11" font-weight="700" fill="#c2410c">AWS Glue Data Catalog — Hive Metastore (table metadata, schema, partition info)</text>
+
+        <defs>
+          <marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#94a3b8"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔒 Production Security Checklist</h3>
+    <ul class="checklist">
+      <li><span class="checklist-icon">🔐</span><div><strong>Block All Public Access</strong> — Enable at account level. No exceptions for data lakes. All access via IAM roles only.</div></li>
+      <li><span class="checklist-icon">🔑</span><div><strong>SSE-KMS Encryption</strong> — Use customer-managed KMS keys (CMK) for each environment. Enforce via bucket policy (<code style="font-family:'JetBrains Mono'; font-size:13px;">aws:SecureTransport</code> + <code style="font-family:'JetBrains Mono'; font-size:13px;">s3:x-amz-server-side-encryption</code>).</div></li>
+      <li><span class="checklist-icon">🌐</span><div><strong>VPC Gateway Endpoints</strong> — All S3 access from within VPC goes through private endpoint. No internet traversal. Zero data egress cost for VPC traffic.</div></li>
+      <li><span class="checklist-icon">📋</span><div><strong>CloudTrail + S3 Access Logs</strong> — Log all data-plane operations. Feed to Security Lake or SIEM. Retain 1 year minimum for compliance.</div></li>
+      <li><span class="checklist-icon">🛡️</span><div><strong>Bucket Versioning + Object Lock</strong> — Enable versioning on curated buckets. Use COMPLIANCE mode Object Lock for regulatory data. Protects against ransomware and accidental deletion.</div></li>
+      <li><span class="checklist-icon">🔁</span><div><strong>Cross-Region Replication (CRR)</strong> — Replicate curated data to DR region. Use RTC (Replication Time Control) for 99.99% of objects replicated within 15 minutes SLA.</div></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ CONFIG & CODE ═══════════════════════════════════════ -->
+<div id="config" class="section">
+  <div class="sec-header">
+    <h2>📋 Config &amp; Code Reference</h2>
+    <p>Production-ready configurations for setting up S3 in a Big Data platform.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3>🏗️ Terraform — Production S3 Data Lake Bucket</h3>
+    <div class="code-block">
+      <span class="code-label">TERRAFORM</span>
+      <pre><span class="hl-cmt"># ═══ S3 Data Lake — Production Setup ═══</span>
+
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket"</span> <span class="hl-str">"datalake_curated"</span> {
+  bucket = <span class="hl-str">"my-company-curated-prod"</span>
+
+  tags = {
+    <span class="hl-key">Environment</span> = <span class="hl-str">"production"</span>
+    <span class="hl-key">DataClass</span>   = <span class="hl-str">"curated"</span>
+    <span class="hl-key">Team</span>        = <span class="hl-str">"data-platform"</span>
+  }
+}
+
+<span class="hl-cmt"># ── Block all public access ──</span>
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket_public_access_block"</span> <span class="hl-str">"curated"</span> {
+  bucket                  = aws_s3_bucket.datalake_curated.id
+  block_public_acls       = <span class="hl-bool">true</span>
+  block_public_policy     = <span class="hl-bool">true</span>
+  ignore_public_acls      = <span class="hl-bool">true</span>
+  restrict_public_buckets = <span class="hl-bool">true</span>
+}
+
+<span class="hl-cmt"># ── SSE-KMS Encryption ──</span>
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket_server_side_encryption_configuration"</span> <span class="hl-str">"curated"</span> {
+  bucket = aws_s3_bucket.datalake_curated.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = <span class="hl-str">"aws:kms"</span>
+      kms_master_key_id = aws_kms_key.datalake.arn
+    }
+    bucket_key_enabled = <span class="hl-bool">true</span>  <span class="hl-cmt"># Reduces KMS API costs by 99%</span>
+  }
+}
+
+<span class="hl-cmt"># ── Versioning ──</span>
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket_versioning"</span> <span class="hl-str">"curated"</span> {
+  bucket = aws_s3_bucket.datalake_curated.id
+  versioning_configuration { status = <span class="hl-str">"Enabled"</span> }
+}
+
+<span class="hl-cmt"># ── Lifecycle Policy ──</span>
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket_lifecycle_configuration"</span> <span class="hl-str">"curated"</span> {
+  bucket = aws_s3_bucket.datalake_curated.id
+
+  rule {
+    id     = <span class="hl-str">"tiering"</span>
+    status = <span class="hl-str">"Enabled"</span>
+
+    transition {
+      days          = <span class="hl-num">90</span>
+      storage_class = <span class="hl-str">"STANDARD_IA"</span>
+    }
+    transition {
+      days          = <span class="hl-num">365</span>
+      storage_class = <span class="hl-str">"GLACIER_IR"</span>
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = <span class="hl-num">90</span>
+    }
+  }
+}
+
+<span class="hl-cmt"># ── CRR to DR Region ──</span>
+<span class="hl-fn">resource</span> <span class="hl-str">"aws_s3_bucket_replication_configuration"</span> <span class="hl-str">"curated"</span> {
+  bucket = aws_s3_bucket.datalake_curated.id
+  role   = aws_iam_role.replication.arn
+
+  rule {
+    id     = <span class="hl-str">"disaster-recovery"</span>
+    status = <span class="hl-str">"Enabled"</span>
+
+    destination {
+      bucket        = aws_s3_bucket.datalake_curated_dr.arn
+      storage_class = <span class="hl-str">"STANDARD_IA"</span>
+
+      replication_time {
+        status = <span class="hl-str">"Enabled"</span>   <span class="hl-cmt"># RTC: 15-min SLA</span>
+        time { minutes = <span class="hl-num">15</span> }
+      }
+    }
+  }
+}</pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <h3>🐍 Python (boto3) — PB-Scale Multipart Upload</h3>
+    <div class="code-block">
+      <span class="code-label">PYTHON</span>
+      <pre><span class="hl-fn">import</span> boto3
+<span class="hl-fn">from</span> boto3.s3.transfer <span class="hl-fn">import</span> TransferConfig
+<span class="hl-fn">import</span> concurrent.futures
+
+<span class="hl-cmt"># ── Optimized config for PB-scale uploads ──</span>
+transfer_config = TransferConfig(
+    multipart_threshold = <span class="hl-num">100</span> * <span class="hl-num">1024</span> * <span class="hl-num">1024</span>,   <span class="hl-cmt"># 100 MB</span>
+    multipart_chunksize = <span class="hl-num">128</span> * <span class="hl-num">1024</span> * <span class="hl-num">1024</span>,   <span class="hl-cmt"># 128 MB parts</span>
+    max_concurrency     = <span class="hl-num">20</span>,                   <span class="hl-cmt"># 20 threads/object</span>
+    use_threads         = <span class="hl-bool">True</span>
+)
+
+s3 = boto3.client(<span class="hl-str">'s3'</span>, region_name=<span class="hl-str">'us-east-1'</span>)
+
+<span class="hl-fn">def</span> <span class="hl-fn">upload_to_datalake</span>(local_path: str, s3_key: str):
+    <span class="hl-str">"""Upload with optimised multipart + SSE-KMS + metadata."""</span>
+    s3.upload_file(
+        Filename   = local_path,
+        Bucket     = <span class="hl-str">'my-company-raw-prod'</span>,
+        Key        = s3_key,
+        Config     = transfer_config,
+        ExtraArgs  = {
+            <span class="hl-key">'ServerSideEncryption'</span>: <span class="hl-str">'aws:kms'</span>,
+            <span class="hl-key">'SSEKMSKeyId'</span>        : <span class="hl-str">'arn:aws:kms:...'</span>,
+            <span class="hl-key">'StorageClass'</span>       : <span class="hl-str">'INTELLIGENT_TIERING'</span>,
+            <span class="hl-key">'ContentType'</span>        : <span class="hl-str">'application/octet-stream'</span>,
+            <span class="hl-key">'Metadata'</span>           : {
+                <span class="hl-str">'pipeline-version'</span>: <span class="hl-str">'v2.1'</span>,
+                <span class="hl-str">'source-system'</span>   : <span class="hl-str">'kafka-prod'</span>
+            }
+        }
+    )
+
+<span class="hl-cmt"># ── Paginated LIST across billions of objects ──</span>
+<span class="hl-fn">def</span> <span class="hl-fn">list_objects_paginated</span>(bucket: str, prefix: str):
+    paginator = s3.get_paginator(<span class="hl-str">'list_objects_v2'</span>)
+    pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+    <span class="hl-fn">for</span> page <span class="hl-fn">in</span> pages:
+        <span class="hl-fn">for</span> obj <span class="hl-fn">in</span> page.get(<span class="hl-str">'Contents'</span>, []):
+            <span class="hl-fn">yield</span> obj[<span class="hl-str">'Key'</span>], obj[<span class="hl-str">'Size'</span>]
+
+<span class="hl-cmt"># ── Byte-range GET (read only a Parquet row group) ──</span>
+<span class="hl-fn">def</span> <span class="hl-fn">read_parquet_footer</span>(bucket: str, key: str) -> bytes:
+    response = s3.get_object(
+        Bucket    = bucket,
+        Key       = key,
+        Range     = <span class="hl-str">'bytes=-8192'</span>  <span class="hl-cmt"># Last 8KB (Parquet footer)</span>
+    )
+    <span class="hl-fn">return</span> response[<span class="hl-str">'Body'</span>].read()</pre>
+    </div>
+  </div>
+
+  <div class="card card-purple" style="margin-bottom:24px;">
+    <h3>⚡ Apache Spark — Read from S3 at Scale</h3>
+    <div class="code-block">
+      <span class="code-label">PYTHON / PYSPARK</span>
+      <pre><span class="hl-fn">from</span> pyspark.sql <span class="hl-fn">import</span> SparkSession
+
+spark = SparkSession.builder \
+    .appName(<span class="hl-str">"PB-Scale S3 Reader"</span>) \
+    .config(<span class="hl-str">"spark.hadoop.fs.s3a.impl"</span>,
+            <span class="hl-str">"org.apache.hadoop.fs.s3a.S3AFileSystem"</span>) \
+    .config(<span class="hl-str">"spark.hadoop.fs.s3a.aws.credentials.provider"</span>,
+            <span class="hl-str">"com.amazonaws.auth.WebIdentityTokenCredentialsProvider"</span>) \
+    .config(<span class="hl-str">"spark.hadoop.fs.s3a.connection.maximum"</span>, <span class="hl-str">"200"</span>) \
+    .config(<span class="hl-str">"spark.hadoop.fs.s3a.fast.upload"</span>,       <span class="hl-str">"true"</span>) \
+    .config(<span class="hl-str">"spark.hadoop.fs.s3a.block.size"</span>,        <span class="hl-str">"134217728"</span>) \
+    .config(<span class="hl-str">"spark.sql.parquet.filterPushdown"</span>,      <span class="hl-str">"true"</span>) \
+    .config(<span class="hl-str">"spark.sql.parquet.mergeSchema"</span>,         <span class="hl-str">"false"</span>) \
+    .getOrCreate()
+
+<span class="hl-cmt"># ── Read with partition pruning ──</span>
+df = spark.read.parquet(
+    <span class="hl-str">"s3a://my-company-curated-prod/events/"</span>
+).filter(
+    <span class="hl-str">"year = 2025 AND month = 3"</span>   <span class="hl-cmt"># Only reads matching partitions</span>
+)
+
+<span class="hl-cmt"># ── Write with optimal settings ──</span>
+df.repartition(<span class="hl-num">200</span>) \
+  .write \
+  .mode(<span class="hl-str">"overwrite"</span>) \
+  .partitionBy(<span class="hl-str">"year"</span>, <span class="hl-str">"month"</span>, <span class="hl-str">"day"</span>) \
+  .option(<span class="hl-str">"parquet.block.size"</span>, <span class="hl-str">"134217728"</span>) \
+  .parquet(<span class="hl-str">"s3a://my-company-curated-prod/events_v2/"</span>)</pre>
+    </div>
+  </div>
+
+  <div class="card card-green">
+    <h3>💰 Cost Estimation for 1 PB Data Lake</h3>
+    <div style="overflow-x:auto;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Volume</th>
+            <th>Storage Class</th>
+            <th>Cost/Month</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Hot (curated, &lt;30 days)</strong></td>
+            <td>50 TB</td>
+            <td>S3 Standard</td>
+            <td style="font-family:'JetBrains Mono'; font-weight:600;">~$1,150</td>
+          </tr>
+          <tr>
+            <td><strong>Warm (30–365 days)</strong></td>
+            <td>200 TB</td>
+            <td>Standard-IA</td>
+            <td style="font-family:'JetBrains Mono'; font-weight:600;">~$2,500</td>
+          </tr>
+          <tr>
+            <td><strong>Cold (1–3 years)</strong></td>
+            <td>500 TB</td>
+            <td>Glacier Instant</td>
+            <td style="font-family:'JetBrains Mono'; font-weight:600;">~$2,000</td>
+          </tr>
+          <tr>
+            <td><strong>Archive (&gt;3 years)</strong></td>
+            <td>250 TB</td>
+            <td>Deep Archive</td>
+            <td style="font-family:'JetBrains Mono'; font-weight:600;">~$248</td>
+          </tr>
+          <tr style="background:var(--green-soft);">
+            <td><strong>Total: 1 PB</strong></td>
+            <td>1,000 TB</td>
+            <td>Mixed tiered</td>
+            <td style="font-family:'JetBrains Mono'; font-weight:800; color:var(--green);">~$5,900/mo</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-orange" style="margin-top:16px;">
+      <div class="callout-icon">⚠️</div>
+      <div><strong>Note:</strong> Costs above are storage only. Add GET/PUT request costs (~$0.004/10K req), data transfer ($0.09/GB out to internet), and KMS calls. Real total typically 1.3–1.6× storage cost. Use AWS Cost Explorer and S3 Lens to monitor.</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end .main -->
+
+<script>
+  function showTab(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    const tabs = {
+      'what':'0','how':'1','arch':'2','why':'3','storage':'4','production':'5','config':'6'
+    };
+    document.querySelectorAll('.nav-tab')[parseInt(tabs[id])].classList.add('active');
+    window.scrollTo({ top: document.querySelector('.nav-bar').offsetTop - 10, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>

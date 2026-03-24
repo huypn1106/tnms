@@ -609,6 +609,123 @@ tr:hover td {
   box-shadow: 0 2px 8px var(--accent-glow);
 }
 
+/* --- Viewer wide layout ------------------------------------ */
+.doc-container.viewer-wide {
+  max-width: 1400px;
+}
+
+/* --- Doc viewer toolbar ------------------------------------ */
+.doc-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  margin-bottom: -0.5rem;
+}
+
+.btn-fullscreen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.btn-fullscreen svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  transition: transform 0.2s ease;
+}
+
+.btn-fullscreen:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.btn-fullscreen:hover svg {
+  transform: scale(1.15);
+}
+
+.btn-fullscreen:active {
+  transform: translateY(0);
+}
+
+/* --- Fullscreen overlay ------------------------------------ */
+.doc-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.doc-fullscreen-overlay .fullscreen-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1.25rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.doc-fullscreen-overlay .fullscreen-title {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.doc-fullscreen-overlay .btn-exit-fullscreen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.doc-fullscreen-overlay .btn-exit-fullscreen:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.doc-fullscreen-overlay .btn-exit-fullscreen svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.doc-fullscreen-overlay .fullscreen-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  display: block;
+}
+
 /* --- Footer ------------------------------------------------ */
 .site-footer {
   text-align: center;
@@ -640,9 +757,17 @@ tr:hover td {
     padding: 3rem 2.5rem 5rem;
   }
 
+  .doc-container.viewer-wide {
+    max-width: 1600px;
+  }
+
   .site-header {
     max-width: 1080px;
     padding: 1.5rem 2.5rem;
+  }
+
+  .site-header:has(+ .doc-container.viewer-wide) {
+    max-width: 1600px;
   }
 
   h1 {

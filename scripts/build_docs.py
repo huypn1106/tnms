@@ -41,16 +41,23 @@ VIEWER_TEMPLATE = """<!DOCTYPE html>
         <button class="theme-toggle" aria-label="Toggle theme"></button>
     </header>
 
-    <main class="doc-container">
+    <main class="doc-container viewer-wide">
         <nav class="breadcrumb" aria-label="Breadcrumb">
             <a href="/">tnms</a> {breadcrumb_html} <span class="sep">/</span>
             <span>{basename_no_ext}</span>
         </nav>
 
         <h1>{title}</h1>
-        
+
+        <div class="doc-viewer-toolbar">
+            <button class="btn-fullscreen" id="btn-fullscreen" aria-label="View fullscreen">
+                <svg viewBox="0 0 24 24"><path d="M3 3h7v2H5v5H3V3zm11 0h7v7h-2V5h-5V3zM3 14h2v5h5v2H3v-7zm18 0v7h-7v-2h5v-5h2z"/></svg>
+                Fullscreen
+            </button>
+        </div>
+
         <div class="doc-iframe-container">
-            <iframe src="{raw_html_file}" class="doc-iframe" title="{title}"></iframe>
+            <iframe src="{raw_html_file}" class="doc-iframe" id="doc-iframe" title="{title}"></iframe>
         </div>
 
         <hr>
@@ -61,6 +68,46 @@ VIEWER_TEMPLATE = """<!DOCTYPE html>
     <footer class="site-footer">
         tnms
     </footer>
+
+    <script>
+        (function () {{
+            'use strict';
+            var btnFullscreen = document.getElementById('btn-fullscreen');
+            var docIframe = document.getElementById('doc-iframe');
+            var docTitle = document.querySelector('h1').textContent;
+
+            function openFullscreen() {{
+                var overlay = document.createElement('div');
+                overlay.className = 'doc-fullscreen-overlay';
+                overlay.id = 'fullscreen-overlay';
+                overlay.innerHTML =
+                    '<div class="fullscreen-topbar">' +
+                    '  <span class="fullscreen-title">' + docTitle + '</span>' +
+                    '  <button class="btn-exit-fullscreen" id="btn-exit-fullscreen" aria-label="Exit fullscreen">' +
+                    '    <svg viewBox="0 0 24 24"><path d="M9 3v3H5v2h6V3H9zm6 0v5h6V6h-4V3h-2zM5 15v2h4v3h2v-5H5zm10 0v5h2v-3h4v-2h-6z"/></svg>' +
+                    '    Exit' +
+                    '  </button>' +
+                    '</div>' +
+                    '<iframe src="' + docIframe.src + '" class="fullscreen-iframe" title="' + docTitle + '"></iframe>';
+                document.body.appendChild(overlay);
+                document.body.style.overflow = 'hidden';
+                overlay.querySelector('#btn-exit-fullscreen').addEventListener('click', closeFullscreen);
+            }}
+
+            function closeFullscreen() {{
+                var overlay = document.getElementById('fullscreen-overlay');
+                if (overlay) {{
+                    overlay.remove();
+                    document.body.style.overflow = '';
+                }}
+            }}
+
+            btnFullscreen.addEventListener('click', openFullscreen);
+            document.addEventListener('keydown', function (e) {{
+                if (e.key === 'Escape') closeFullscreen();
+            }});
+        }})();
+    </script>
 
 </body>
 
@@ -210,19 +257,18 @@ def process_directory(current_dir):
         title = extract_title(content, clean_title(raw_basename))
         desc = f"Imported document: {title}"
 
-        # Create viewer
-        if not os.path.exists(viewer_path):
-            print(f"[{rel_dir}] Creating viewer for: {filename} -> {viewer_filename}")
-            viewer_html = VIEWER_TEMPLATE.format(
-                desc=desc,
-                title=title,
-                basename_no_ext=raw_basename,
-                raw_html_file=filename,
-                assets_rel=get_rel_path(depth) + 'assets/',
-                breadcrumb_html=build_breadcrumb(parts, extra_level=True)
-            )
-            with open(viewer_path, 'w', encoding='utf-8') as f:
-                f.write(viewer_html)
+        # Create/update viewer (always regenerate to keep in sync with template)
+        print(f"[{rel_dir}] Generating viewer for: {filename} -> {viewer_filename}")
+        viewer_html = VIEWER_TEMPLATE.format(
+            desc=desc,
+            title=title,
+            basename_no_ext=raw_basename,
+            raw_html_file=filename,
+            assets_rel=get_rel_path(depth) + 'assets/',
+            breadcrumb_html=build_breadcrumb(parts, extra_level=True)
+        )
+        with open(viewer_path, 'w', encoding='utf-8') as f:
+            f.write(viewer_html)
 
         # Append to index
         if f'href="{viewer_filename}"' not in index_html and f"href='{viewer_filename}'" not in index_html:

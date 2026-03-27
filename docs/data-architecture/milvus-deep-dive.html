@@ -1,0 +1,1820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Milvus Vector Database — Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  /* ── RESET & BASE ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #f0f4ff;
+    --bg-alt:      #e8eeff;
+    --surface:     #ffffff;
+    --surface-2:   #f7f9ff;
+    --border:      #dde4f5;
+    --text:        #1a1f36;
+    --text-2:      #4a5178;
+    --text-3:      #8892b0;
+
+    --blue:        #3b6ef5;
+    --blue-light:  #eef2ff;
+    --blue-mid:    #c7d4fd;
+    --orange:      #f0873a;
+    --orange-light:#fff3ea;
+    --purple:      #7c5cbf;
+    --purple-light:#f2eeff;
+    --green:       #2ea87e;
+    --green-light: #e6f9f3;
+    --red:         #e05c5c;
+    --red-light:   #fef0f0;
+    --teal:        #1ea7c5;
+    --teal-light:  #e4f7fc;
+
+    --shadow-sm:   0 1px 4px rgba(60,80,180,.07);
+    --shadow-md:   0 4px 16px rgba(60,80,180,.10);
+    --shadow-lg:   0 8px 32px rgba(60,80,180,.13);
+
+    --radius:      14px;
+    --radius-sm:   8px;
+    --font-body:   'Inter', sans-serif;
+    --font-mono:   'JetBrains Mono', monospace;
+    --font-display:'Syne', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.75;
+    overflow-x: hidden;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 7px; }
+  ::-webkit-scrollbar-track { background: var(--bg-alt); }
+  ::-webkit-scrollbar-thumb { background: var(--blue-mid); border-radius: 99px; }
+
+  /* ── LAYOUT ── */
+  .page-wrap { max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(240,244,255,.92);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+  }
+  .nav-inner { display: flex; align-items: center; gap: 12px; max-width: 1140px; margin: 0 auto; padding: 0 28px; flex-wrap: wrap; }
+  .nav-logo { font-family: var(--font-display); font-size: 1.05rem; font-weight: 800; color: var(--blue); letter-spacing: -.01em; white-space: nowrap; text-decoration: none; }
+  .nav-links { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+  .nav-links a {
+    font-size: .78rem; font-weight: 500; color: var(--text-2);
+    text-decoration: none; padding: 5px 11px; border-radius: 99px;
+    transition: all .2s;
+  }
+  .nav-links a:hover { background: var(--blue-light); color: var(--blue); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1a2a6c 0%, #2255d0 50%, #3b6ef5 100%);
+    color: #fff;
+    padding: 90px 0 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content:'';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+  .hero-inner { position: relative; max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+    border-radius: 99px; padding: 5px 14px; font-size: .8rem; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.9);
+    margin-bottom: 22px;
+  }
+  .hero-badge span { width: 7px; height: 7px; border-radius: 50%; background: #5dffc8; display: block; }
+  .hero h1 {
+    font-family: var(--font-display); font-size: clamp(2.4rem, 5vw, 3.8rem);
+    font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+    margin-bottom: 20px; max-width: 760px;
+  }
+  .hero h1 em { font-style: normal; color: #5dffc8; }
+  .hero-sub { font-size: 1.1rem; color: rgba(255,255,255,.8); max-width: 640px; line-height: 1.7; margin-bottom: 36px; }
+  .hero-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+  .hero-tag {
+    background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 99px; padding: 5px 14px; font-size: .82rem; font-weight: 500; color: rgba(255,255,255,.88);
+  }
+  .hero-meta { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 44px; padding-top: 36px; border-top: 1px solid rgba(255,255,255,.15); }
+  .hero-stat .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.55); font-weight: 600; margin-bottom: 4px; }
+  .hero-stat .value { font-family: var(--font-display); font-size: 1.5rem; font-weight: 800; color: #fff; }
+
+  /* ── TOC ── */
+  .toc-section { padding: 48px 0 0; }
+  .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap: 12px; }
+  .toc-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px;
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; color: var(--text);
+    transition: all .22s; box-shadow: var(--shadow-sm);
+  }
+  .toc-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--blue-mid); }
+  .toc-num { font-family: var(--font-display); font-size: 1.1rem; font-weight: 800; color: var(--blue); min-width: 28px; }
+  .toc-label { font-size: .87rem; font-weight: 500; line-height: 1.3; }
+
+  /* ── SECTIONS ── */
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  .sec-header { margin-bottom: 40px; }
+  .sec-num {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: .78rem; font-weight: 600;
+    color: var(--blue); text-transform: uppercase; letter-spacing: .1em;
+    margin-bottom: 10px;
+  }
+  .sec-num::before { content: ''; width: 20px; height: 2px; background: var(--blue); display: block; }
+  h2 {
+    font-family: var(--font-display); font-size: clamp(1.6rem, 3vw, 2.2rem);
+    font-weight: 800; line-height: 1.2; letter-spacing: -.02em; color: var(--text);
+  }
+  h3 {
+    font-family: var(--font-display); font-size: 1.25rem; font-weight: 700;
+    color: var(--text); margin: 32px 0 12px; letter-spacing: -.01em;
+  }
+  h4 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+  p { margin-bottom: 16px; color: var(--text-2); font-size: 16px; }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--text); font-weight: 600; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px 30px;
+    box-shadow: var(--shadow-sm); transition: box-shadow .2s, transform .2s;
+  }
+  .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .card-grid { display: grid; gap: 20px; }
+  .card-grid-2 { grid-template-columns: repeat(auto-fill, minmax(320px,1fr)); }
+  .card-grid-3 { grid-template-columns: repeat(auto-fill, minmax(250px,1fr)); }
+  .card-grid-4 { grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); }
+
+  /* ── CALLOUT ── */
+  .callout {
+    border-radius: var(--radius-sm); padding: 18px 22px;
+    border-left: 4px solid; margin: 24px 0; font-size: 15px;
+  }
+  .callout-blue { background: var(--blue-light); border-color: var(--blue); color: #2a4ab5; }
+  .callout-orange { background: var(--orange-light); border-color: var(--orange); color: #a05820; }
+  .callout-green { background: var(--green-light); border-color: var(--green); color: #1a6b50; }
+  .callout-purple { background: var(--purple-light); border-color: var(--purple); color: #5a3d9a; }
+  .callout strong { font-weight: 700; display: block; margin-bottom: 4px; font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    font-size: .75rem; font-weight: 600; font-family: var(--font-mono);
+    letter-spacing: .02em;
+  }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-orange { background: var(--orange-light); color: var(--orange); }
+  .badge-purple { background: var(--purple-light); color: var(--purple); }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-teal { background: var(--teal-light); color: var(--teal); }
+
+  /* ── CODE ── */
+  pre {
+    background: #111827; border-radius: var(--radius-sm);
+    padding: 22px 24px; overflow-x: auto;
+    font-family: var(--font-mono); font-size: 13.5px; line-height: 1.75;
+    color: #e2e8f0; margin: 20px 0;
+    border: 1px solid #1f2937;
+    position: relative;
+  }
+  .code-label {
+    position: absolute; top: 12px; right: 14px;
+    font-family: var(--font-mono); font-size: .68rem; color: #4b5563;
+    text-transform: uppercase; letter-spacing: .1em;
+  }
+  code:not(pre code) {
+    font-family: var(--font-mono); font-size: .88em;
+    background: var(--blue-light); color: var(--blue);
+    padding: 2px 7px; border-radius: 4px;
+  }
+  .kw { color: #93c5fd; }
+  .str { color: #86efac; }
+  .cm { color: #6b7280; font-style: italic; }
+  .fn { color: #fbbf24; }
+  .num { color: #f9a8d4; }
+  .cls { color: #c4b5fd; }
+  .op { color: #67e8f9; }
+
+  /* ── ASCII DIAGRAM ── */
+  .ascii-box {
+    background: #0d1117; border-radius: var(--radius-sm);
+    padding: 28px 30px; overflow-x: auto; margin: 24px 0;
+    border: 1px solid #1f2937;
+  }
+  .ascii-box pre {
+    background: transparent; border: none; padding: 0; margin: 0;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.65;
+    color: #7dd3fc;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow-sm); margin: 24px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; background: var(--surface); }
+  thead { background: linear-gradient(90deg, var(--blue), #5582f7); color: #fff; }
+  th { padding: 14px 18px; text-align: left; font-weight: 600; font-size: .83rem; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  td { padding: 13px 18px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-2); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  td:first-child { font-weight: 600; color: var(--text); }
+  .check { color: var(--green); font-weight: 700; }
+  .cross { color: var(--red); }
+  .partial { color: var(--orange); }
+
+  /* ── ICON CARD ── */
+  .icon-card { display: flex; gap: 18px; align-items: flex-start; }
+  .icon-bubble {
+    width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .ib-blue { background: var(--blue-light); }
+  .ib-orange { background: var(--orange-light); }
+  .ib-purple { background: var(--purple-light); }
+  .ib-green { background: var(--green-light); }
+  .ib-red { background: var(--red-light); }
+  .ib-teal { background: var(--teal-light); }
+  .icon-card h4 { margin: 0 0 5px; }
+
+  /* ── METRIC ── */
+  .metric-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap: 16px; margin: 24px 0; }
+  .metric {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 20px 22px;
+    text-align: center; box-shadow: var(--shadow-sm);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .metric:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .metric .val { font-family: var(--font-display); font-size: 2rem; font-weight: 800; color: var(--blue); line-height: 1; }
+  .metric .lbl { font-size: .78rem; color: var(--text-3); margin-top: 6px; font-weight: 500; }
+
+  /* ── PILL LIST ── */
+  .pill-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  .pill {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 99px; padding: 5px 15px; font-size: .84rem; font-weight: 500;
+    color: var(--text-2); transition: all .18s;
+  }
+  .pill:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 20px 0; }
+  .flow-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 18px;
+    font-size: .85rem; font-weight: 500; color: var(--text);
+    text-align: center; box-shadow: var(--shadow-sm);
+    transition: all .2s;
+  }
+  .flow-box:hover { border-color: var(--blue); box-shadow: var(--shadow-md); }
+  .flow-box.blue { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .flow-box.orange { background: var(--orange); color: #fff; border-color: var(--orange); }
+  .flow-box.green { background: var(--green); color: #fff; border-color: var(--green); }
+  .flow-box.purple { background: var(--purple); color: #fff; border-color: var(--purple); }
+  .flow-arrow { font-size: 1.2rem; color: var(--text-3); }
+
+  /* ── PROS/CONS ── */
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 680px) { .pros-cons { grid-template-columns: 1fr; } }
+  .pros-box { background: var(--green-light); border: 1px solid #a7f3d0; border-radius: var(--radius); padding: 24px; }
+  .cons-box { background: var(--red-light); border: 1px solid #fecaca; border-radius: var(--radius); padding: 24px; }
+  .pros-box h3 { color: var(--green); margin-top: 0; }
+  .cons-box h3 { color: var(--red); margin-top: 0; }
+
+  /* ── LIST ── */
+  ul.styled, ol.styled { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+  ul.styled li::before { content: '▸'; color: var(--blue); font-weight: 700; margin-right: 10px; }
+  ul.styled li, ol.styled li { display: flex; align-items: flex-start; font-size: 15.5px; color: var(--text-2); line-height: 1.6; }
+  ol.styled { counter-reset: list; }
+  ol.styled li { counter-increment: list; }
+  ol.styled li::before { content: counter(list); color: #fff; background: var(--blue); border-radius: 50%; min-width: 22px; height: 22px; font-size: .72rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-right: 12px; flex-shrink: 0; margin-top: 2px; }
+  ul.check li::before { content: '✓'; color: var(--green); }
+  ul.cross li::before { content: '✗'; color: var(--red); }
+
+  /* ── DIVIDER ── */
+  .divider { height: 1px; background: var(--border); margin: 32px 0; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: #0f172a; color: #94a3b8;
+    padding: 48px 0; text-align: center; font-size: .88rem;
+  }
+  footer a { color: #60a5fa; text-decoration: none; }
+  footer strong { color: #fff; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .card-grid-2, .card-grid-3, .card-grid-4 { grid-template-columns: 1fr; }
+    .hero { padding: 60px 0 52px; }
+    .nav-links { display: none; }
+    pre { font-size: 12px; }
+    .ascii-box pre { font-size: 11px; }
+    .hero-meta { gap: 20px; }
+    .metric-row { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .metric-row { grid-template-columns: 1fr 1fr; }
+    .pros-cons { grid-template-columns: 1fr; }
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:none; } }
+  .hero-inner > * { animation: fadeUp .6s ease both; }
+  .hero-inner > *:nth-child(1) { animation-delay: .05s; }
+  .hero-inner > *:nth-child(2) { animation-delay: .15s; }
+  .hero-inner > *:nth-child(3) { animation-delay: .25s; }
+  .hero-inner > *:nth-child(4) { animation-delay: .35s; }
+  .hero-inner > *:nth-child(5) { animation-delay: .45s; }
+
+  /* ── DECISION TABLE ── */
+  .decision-row { display: flex; gap: 12px; margin: 10px 0; align-items: flex-start; }
+  .decision-cond { background: var(--blue-light); color: var(--blue); border-radius: var(--radius-sm); padding: 8px 14px; font-size: .85rem; font-weight: 600; min-width: 200px; flex-shrink: 0; }
+  .decision-rec { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; font-size: .85rem; color: var(--text-2); flex: 1; }
+  @media (max-width: 600px) { .decision-row { flex-direction: column; } .decision-cond { min-width: 0; } }
+
+  /* ── ARCH LAYER ── */
+  .arch-layer { margin: 8px 0; }
+  .arch-layer-title { font-family: var(--font-mono); font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text-3); margin-bottom: 8px; }
+  .arch-layer-boxes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .arch-box {
+    border-radius: var(--radius-sm); padding: 10px 16px;
+    font-size: .83rem; font-weight: 600; font-family: var(--font-mono);
+    transition: transform .15s;
+  }
+  .arch-box:hover { transform: scale(1.04); }
+  .ab-blue { background: var(--blue); color: #fff; }
+  .ab-blue-l { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-mid); }
+  .ab-orange { background: var(--orange); color: #fff; }
+  .ab-orange-l { background: var(--orange-light); color: var(--orange); border: 1px solid #fcd9b5; }
+  .ab-green { background: var(--green); color: #fff; }
+  .ab-green-l { background: var(--green-light); color: var(--green); border: 1px solid #a7f3d0; }
+  .ab-purple { background: var(--purple); color: #fff; }
+  .ab-purple-l { background: var(--purple-light); color: var(--purple); border: 1px solid #d4c6f5; }
+  .ab-teal { background: var(--teal); color: #fff; }
+  .ab-teal-l { background: var(--teal-light); color: var(--teal); border: 1px solid #a7e8f5; }
+  .ab-gray-l { background: var(--bg-alt); color: var(--text-2); border: 1px solid var(--border); }
+  .arch-arrow { text-align: center; font-size: 1.5rem; color: var(--text-3); line-height: 1; margin: 4px 0; }
+
+  /* ── COPY BTN ── */
+  .copy-btn {
+    position: absolute; top: 10px; right: 44px;
+    background: #1f2937; border: 1px solid #374151; color: #9ca3af;
+    border-radius: 5px; padding: 3px 9px; font-family: var(--font-mono); font-size: .68rem;
+    cursor: pointer; transition: all .2s;
+  }
+  .copy-btn:hover { background: #374151; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="#top">⬡ Milvus Deep Dive</a>
+    <div class="nav-links">
+      <a href="#intro">Intro</a>
+      <a href="#concepts">Concepts</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#dataflow">Data Flow</a>
+      <a href="#performance">Performance</a>
+      <a href="#usecases">Use Cases</a>
+      <a href="#comparison">Comparison</a>
+      <a href="#when">When to Use</a>
+      <a href="#stack">AI Stack</a>
+      <a href="#proscons">Pros & Cons</a>
+      <a href="#conclusion">Conclusion</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="top">
+  <div class="hero-inner">
+    <div class="hero-badge"><span></span> Production Architecture Reference</div>
+    <h1>Milvus Vector Database<br><em>Deep Dive</em></h1>
+    <p class="hero-sub">A comprehensive, senior-engineer-level analysis of Milvus 2.x — covering distributed architecture, data flows, performance characteristics, and production deployment patterns for AI systems.</p>
+    <div class="hero-tags">
+      <span class="hero-tag">Vector Search</span>
+      <span class="hero-tag">RAG Pipelines</span>
+      <span class="hero-tag">Distributed Systems</span>
+      <span class="hero-tag">ANN Indexes</span>
+      <span class="hero-tag">LLM Infrastructure</span>
+      <span class="hero-tag">Semantic Search</span>
+    </div>
+    <div class="hero-meta">
+      <div class="hero-stat"><div class="label">Milvus Version</div><div class="value">2.x</div></div>
+      <div class="hero-stat"><div class="label">Scale</div><div class="value">Billion+</div></div>
+      <div class="hero-stat"><div class="label">License</div><div class="value">Apache 2.0</div></div>
+      <div class="hero-stat"><div class="label">GitHub Stars</div><div class="value">30k+</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<main>
+
+<!-- TOC -->
+<section class="toc-section">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">Navigation</div>
+    <h2>Table of Contents</h2>
+  </div>
+  <div class="toc-grid">
+    <a class="toc-item" href="#intro"><span class="toc-num">01</span><span class="toc-label">Introduction & Context</span></a>
+    <a class="toc-item" href="#concepts"><span class="toc-num">02</span><span class="toc-label">Core Concepts</span></a>
+    <a class="toc-item" href="#architecture"><span class="toc-num">03</span><span class="toc-label">Architecture Deep Dive</span></a>
+    <a class="toc-item" href="#dataflow"><span class="toc-num">04</span><span class="toc-label">Data Flow & Query Flow</span></a>
+    <a class="toc-item" href="#performance"><span class="toc-num">05</span><span class="toc-label">Performance & Scalability</span></a>
+    <a class="toc-item" href="#usecases"><span class="toc-num">06</span><span class="toc-label">Real-World Use Cases</span></a>
+    <a class="toc-item" href="#comparison"><span class="toc-num">07</span><span class="toc-label">Comparison Table</span></a>
+    <a class="toc-item" href="#when"><span class="toc-num">08</span><span class="toc-label">When to Use Milvus</span></a>
+    <a class="toc-item" href="#stack"><span class="toc-num">09</span><span class="toc-label">Integration in AI Stack</span></a>
+    <a class="toc-item" href="#proscons"><span class="toc-num">10</span><span class="toc-label">Pros & Cons</span></a>
+    <a class="toc-item" href="#conclusion"><span class="toc-num">11</span><span class="toc-label">Conclusion</span></a>
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 1: INTRODUCTION ── -->
+<section id="intro">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">01 — Introduction</div>
+    <h2>What is Milvus?</h2>
+  </div>
+
+  <p><strong>Milvus</strong> is an open-source, cloud-native vector database designed for storing, indexing, and querying high-dimensional embedding vectors at massive scale. Originally developed by <strong>Zilliz</strong> and donated to the LF AI & Data Foundation in 2019, it has become one of the de-facto standards for production-grade vector search infrastructure.</p>
+
+  <p>Unlike traditional databases optimized for structured, tabular data, Milvus is purpose-built for the fundamental operation of AI workloads: <strong>finding semantically similar items</strong> among billions of high-dimensional vectors — in milliseconds.</p>
+
+  <div class="metric-row">
+    <div class="metric"><div class="val">10B+</div><div class="lbl">Vectors per collection</div></div>
+    <div class="metric"><div class="val">&lt;10ms</div><div class="lbl">P99 search latency</div></div>
+    <div class="metric"><div class="val">2048+</div><div class="lbl">Dimensions supported</div></div>
+    <div class="metric"><div class="val">10+</div><div class="lbl">Index types</div></div>
+    <div class="metric"><div class="val">99.9%</div><div class="lbl">HA availability</div></div>
+  </div>
+
+  <h3>The Role of Vector Databases in Modern AI</h3>
+  <p>The AI stack has fundamentally shifted. Large Language Models (LLMs) like GPT-4, Llama, and Claude encode knowledge into <strong>dense vector representations</strong>. The challenge: these models have fixed context windows and static training data. Vector databases solve the <em>knowledge retrieval</em> problem.</p>
+
+  <div class="card-grid card-grid-3" style="margin-top:24px;">
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-blue">🤖</div>
+        <div>
+          <h4>LLM Augmentation (RAG)</h4>
+          <p style="font-size:14px;">Inject fresh, domain-specific knowledge into LLMs at inference time without fine-tuning. Retrieve the top-k most relevant chunks, pass as context.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-orange">🔍</div>
+        <div>
+          <h4>Semantic Search</h4>
+          <p style="font-size:14px;">Go beyond keyword matching. "Running shoes for flat feet" matches "athletic footwear for overpronation" via embedding similarity.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-purple">🧠</div>
+        <div>
+          <h4>Multi-modal AI</h4>
+          <p style="font-size:14px;">Unify text, image, audio, and video in a shared embedding space. Search across modalities (text query → similar images).</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why Vector Search Matters: The Embedding Pipeline</h3>
+  <div class="flow-row" style="flex-wrap:wrap; align-items:center;">
+    <div class="flow-box">Unstructured Data<br><small style="color:#8892b0">Text/Image/Audio</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box orange">Embedding Model<br><small>BERT/CLIP/Ada</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box blue">Dense Vector<br><small>[0.21, -0.87, ...]</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box purple">Milvus Index<br><small>HNSW/IVF</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box green">Top-K Results<br><small>Nearest Neighbors</small></div>
+  </div>
+
+  <div class="callout callout-blue">
+    <strong>Key Insight</strong>
+    The explosion of unstructured data (images, text, audio, video) represents 80–90% of enterprise data. Traditional databases cannot query this data semantically. Vector databases are the <em>missing infrastructure layer</em> that makes AI applications practically deployable.
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 2: CORE CONCEPTS ── -->
+<section id="concepts">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">02 — Core Concepts</div>
+    <h2>Vectors, Indexes & Collections</h2>
+  </div>
+
+  <h3>Vectors & Embeddings</h3>
+  <p>An <strong>embedding</strong> is a function that maps high-dimensional, complex data to a point in a lower-dimensional continuous vector space, such that <em>semantically similar inputs map to geometrically nearby points</em>. Common embedding models:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model</th><th>Modality</th><th>Dimensions</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td>text-embedding-3-large (OpenAI)</td><td>Text</td><td>3072</td><td>RAG, semantic search</td></tr>
+        <tr><td>all-MiniLM-L6-v2 (Sentence-Transformers)</td><td>Text</td><td>384</td><td>Lightweight similarity</td></tr>
+        <tr><td>CLIP (OpenAI)</td><td>Image + Text</td><td>512 / 768</td><td>Multi-modal search</td></tr>
+        <tr><td>Nomic-embed-vision</td><td>Image</td><td>768</td><td>Image similarity</td></tr>
+        <tr><td>BGE-M3</td><td>Text (multi-lingual)</td><td>1024</td><td>Cross-lingual RAG</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Similarity Metrics</h3>
+  <div class="card-grid card-grid-3" style="margin-top:16px;">
+    <div class="card">
+      <span class="badge badge-blue">L2 / Euclidean</span>
+      <h4 style="margin-top:12px;">L2 Distance</h4>
+      <pre style="font-size:12px;margin:10px 0;"><code>d(a,b) = √Σ(aᵢ - bᵢ)²</code></pre>
+      <p style="font-size:14px;">Measures straight-line distance in vector space. Best for image embeddings, normalized float vectors. Sensitive to vector magnitude.</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-orange">Cosine</span>
+      <h4 style="margin-top:12px;">Cosine Similarity</h4>
+      <pre style="font-size:12px;margin:10px 0;"><code>cos(θ) = (a·b) / (|a||b|)</code></pre>
+      <p style="font-size:14px;">Measures angle between vectors regardless of magnitude. Best for text embeddings. Range [-1, 1]. Standard for NLP tasks.</p>
+    </div>
+    <div class="card">
+      <span class="badge badge-purple">Inner Product</span>
+      <h4 style="margin-top:12px;">Inner Product (IP)</h4>
+      <pre style="font-size:12px;margin:10px 0;"><code>IP(a,b) = Σ(aᵢ × bᵢ)</code></pre>
+      <p style="font-size:14px;">Dot product of two vectors. Equivalent to cosine on unit-normalized vectors. Used in recommendation systems and MIPS problems.</p>
+    </div>
+  </div>
+
+  <h3>Approximate Nearest Neighbor (ANN)</h3>
+  <p>Exact nearest neighbor search over billions of vectors is O(n·d) per query — computationally infeasible. ANN algorithms trade a <strong>small accuracy loss</strong> (recall) for dramatically faster search times through pre-computed indexes.</p>
+
+  <div class="callout callout-orange">
+    <strong>Recall vs Latency Trade-off</strong>
+    ANN indexes allow tuning: higher <code>nprobe</code>/<code>ef</code> = higher recall (closer to exact) but more latency and CPU. Milvus exposes these params per-query, enabling dynamic trade-off at runtime.
+  </div>
+
+  <h3>Index Types in Milvus</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Index Type</th><th>Algorithm</th><th>Best For</th><th>Memory</th><th>Build Speed</th><th>Query Speed</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>FLAT</td><td>Brute-force</td><td>Small datasets (&lt;1M), 100% recall</td><td>High</td><td>Instant</td><td>Slow</td></tr>
+        <tr><td>IVF_FLAT</td><td>Inverted File</td><td>Balanced recall/speed, medium scale</td><td>Medium</td><td>Medium</td><td>Fast</td></tr>
+        <tr><td>IVF_SQ8</td><td>IVF + Scalar Quantization</td><td>Reduced memory, slight accuracy loss</td><td>Low</td><td>Medium</td><td>Fast</td></tr>
+        <tr><td>IVF_PQ</td><td>IVF + Product Quantization</td><td>Very large scale, aggressive compression</td><td>Very Low</td><td>Slow</td><td>Medium</td></tr>
+        <tr><td><strong>HNSW</strong></td><td>Hierarchical NSW Graph</td><td><strong>High recall + speed, default choice</strong></td><td>High</td><td>Slow</td><td>Very Fast</td></tr>
+        <tr><td>SCANN</td><td>Anisotropic quantization</td><td>High-dimensional, high throughput</td><td>Medium</td><td>Medium</td><td>Very Fast</td></tr>
+        <tr><td>DiskANN</td><td>Graph on NVMe SSD</td><td>Billion-scale, memory-constrained</td><td>Very Low (disk)</td><td>Slow</td><td>Moderate</td></tr>
+        <tr><td>GPU_CAGRA</td><td>GPU graph-based</td><td>GPU-accelerated, ultra-low latency</td><td>GPU VRAM</td><td>Very Fast</td><td>Extremely Fast</td></tr>
+        <tr><td>SPARSE_INVERTED_INDEX</td><td>Sparse IVF</td><td>BM25-style sparse vectors</td><td>Low</td><td>Fast</td><td>Fast</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Collections, Partitions & Segments</h3>
+  <div class="card-grid card-grid-3" style="margin-top:16px;">
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-blue">📦</div>
+        <div>
+          <h4>Collection</h4>
+          <p style="font-size:14px;">The top-level logical grouping. Equivalent to a table in RDBMS. Defines the schema: vector field(s), dimension, metric type, and scalar fields. A collection can hold billions of entities.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-orange">🗂️</div>
+        <div>
+          <h4>Partition</h4>
+          <p style="font-size:14px;">Logical sub-division within a collection (e.g., by date, category, tenant). Allows scoped searches to reduce scan space. A collection has a default partition; you can create up to 4096 named partitions.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-green">🧩</div>
+        <div>
+          <h4>Segment</h4>
+          <p style="font-size:14px;">The physical storage unit. Each partition is split into segments of configurable size (default 512MB). Segments progress through a lifecycle: Growing → Sealed → Indexed → Compacted.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <pre><code class="language-python"><span class="cm"># Python SDK — Creating a collection with schema</span>
+<span class="kw">from</span> pymilvus <span class="kw">import</span> MilvusClient, DataType
+
+client = MilvusClient(<span class="str">"http://localhost:19530"</span>)
+
+schema = client.create_schema(auto_id=<span class="cls">True</span>, enable_dynamic_field=<span class="cls">True</span>)
+schema.add_field(<span class="str">"id"</span>,        DataType.INT64, is_primary=<span class="cls">True</span>)
+schema.add_field(<span class="str">"embedding"</span>, DataType.FLOAT_VECTOR, dim=<span class="num">1536</span>)
+schema.add_field(<span class="str">"content"</span>,   DataType.VARCHAR, max_length=<span class="num">8192</span>)
+schema.add_field(<span class="str">"source"</span>,    DataType.VARCHAR, max_length=<span class="num">256</span>)
+schema.add_field(<span class="str">"created_at"</span>,DataType.INT64)
+
+index_params = client.prepare_index_params()
+index_params.add_index(
+    field_name=<span class="str">"embedding"</span>,
+    index_type=<span class="str">"HNSW"</span>,
+    metric_type=<span class="str">"COSINE"</span>,
+    params={<span class="str">"M"</span>: <span class="num">16</span>, <span class="str">"efConstruction"</span>: <span class="num">256</span>}
+)
+
+client.create_collection(
+    collection_name=<span class="str">"rag_chunks"</span>,
+    schema=schema,
+    index_params=index_params
+)</code><div class="code-label">Python</div></pre>
+</div>
+</section>
+
+<!-- ── SECTION 3: ARCHITECTURE ── -->
+<section id="architecture">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">03 — Architecture</div>
+    <h2>Milvus 2.x Distributed Architecture</h2>
+  </div>
+
+  <p>Milvus 2.x adopts a <strong>cloud-native, disaggregated architecture</strong> with complete separation of compute and storage. Every component is stateless (except storage backends) and scales independently. This design enables elastic horizontal scaling and zero-downtime upgrades.</p>
+
+  <div class="callout callout-blue">
+    <strong>Design Philosophy</strong>
+    Milvus follows the <em>"log as data"</em> pattern — the message queue (Pulsar/Kafka) is the single source of truth. All nodes replay the log to recover state. This enables crash recovery without data loss and decouples producers from consumers.
+  </div>
+
+  <!-- Architecture Visual -->
+  <div class="ascii-box">
+    <pre>
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          MILVUS 2.x DISTRIBUTED ARCHITECTURE                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+  CLIENT LAYER
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Python  │ │  Node.js │ │   Java   │ │   REST   │
+  │   SDK    │ │   SDK    │ │   SDK    │ │   API    │
+  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+       └─────────────┴─────────────┴─────────────┘
+                              │
+                  ════════════╪════════════
+                   ACCESS LAYER (Stateless)
+  ┌──────────────────────────────────────────────────┐
+  │                    PROXY (×N)                     │
+  │  • Request routing & load balancing               │
+  │  • Auth, rate limiting, schema validation         │
+  │  • TSO (Timestamp Oracle) client                  │
+  │  • Result aggregation & re-ranking                │
+  └──────────────────────────────────────────────────┘
+                              │
+       ┌───────────────────────┼────────────────────────┐
+       │                       │                        │
+  ═════╪══════════  ══════════╪═══════════  ════════════╪══════
+  COORDINATOR LAYER          │             │
+  ┌────────────┐  ┌──────────────┐  ┌─────────────┐  ┌──────────────┐
+  │ Root Coord │  │ Query Coord  │  │  Data Coord │  │ Index Coord  │
+  │            │  │              │  │             │  │              │
+  │• Collection│  │• Query node  │  │• Segment    │  │• Index task  │
+  │  lifecycle │  │  management  │  │  assignment │  │  scheduling  │
+  │• Schema    │  │• Segment     │  │• Flush      │  │• Node health │
+  │  registry  │  │  distribution│  │  management │  │  monitoring  │
+  │• TSO       │  │• Result merge│  │• Import     │  │              │
+  └────────────┘  └──────────────┘  └─────────────┘  └──────────────┘
+       │                  │                 │                 │
+  ═════╪══════════════════╪═════════════════╪═════════════════╪════
+  WORKER LAYER
+  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+  │  QUERY NODES   │ │   DATA NODES   │ │  INDEX NODES   │
+  │  (×N, scale)  │ │  (×N, scale)  │ │  (×N, scale)  │
+  │                │ │                │ │                │
+  │• Load segments │ │• Receive DML   │ │• Build indexes │
+  │• Execute ANN   │ │• Write WAL to  │ │• Store to      │
+  │  vector search │ │  message queue │ │  object store  │
+  │• Scalar filter │ │• Seal growing  │ │• GPU accel     │
+  │• Serve results │ │  segments      │ │  (optional)    │
+  │• Cache hot     │ │• Flush to S3   │ │                │
+  │  segments      │ │                │ │                │
+  └───────┬────────┘ └───────┬────────┘ └───────┬────────┘
+          │                  │                   │
+  ════════╪══════════════════╪═══════════════════╪═════════
+  INFRASTRUCTURE LAYER
+  ┌───────────────┐  ┌────────────────────┐  ┌───────────────┐
+  │     ETCD      │  │   MESSAGE QUEUE    │  │  OBJECT STORE │
+  │               │  │  Pulsar / Kafka    │  │  MinIO / S3   │
+  │• Service disc.│  │                    │  │               │
+  │• Metadata     │  │• Write-Ahead Log   │  │• Raw vectors  │
+  │• Config store │  │• Binlog streaming  │  │• Index files  │
+  │• Coord leader │  │• Exactly-once dlv  │  │• Delta logs   │
+  │  election     │  │• Replay on failure │  │• Snapshots    │
+  └───────────────┘  └────────────────────┘  └───────────────┘
+    </pre>
+  </div>
+
+  <h3>Component Deep Dive</h3>
+
+  <!-- Components -->
+  <div class="card-grid card-grid-2" style="margin-top:20px;">
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">🌐 Access Layer</div>
+      <h4>Proxy</h4>
+      <p style="font-size:14px;">The <strong>single entry point</strong> for all client traffic. Stateless — can be scaled horizontally behind any load balancer. Responsibilities:</p>
+      <ul class="styled" style="font-size:14px;">
+        <li>Route DML (insert/delete) to Data Nodes via message queue</li>
+        <li>Route DQL (search/query) to Query Nodes</li>
+        <li>Validate schemas against etcd metadata</li>
+        <li>Enforce Timestamp Oracle for consistent reads</li>
+        <li>Aggregate and merge results from multiple Query Nodes</li>
+        <li>Rate limiting and auth enforcement</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">🎛️ Coordinator Services</div>
+      <h4>Four Coordinators (Active-Standby HA)</h4>
+      <ul class="styled" style="font-size:14px;">
+        <li><strong>Root Coord:</strong> Manages collection/partition lifecycle, DDL ops, global timestamp service (TSO), and schema storage in etcd.</li>
+        <li><strong>Query Coord:</strong> Manages the "query cluster" — which segments live on which Query Nodes. Handles load balancing of segments across QNodes.</li>
+        <li><strong>Data Coord:</strong> Tracks segment lifecycle (growing → sealed). Triggers flushes. Monitors Data Node health. Manages binlog metadata.</li>
+        <li><strong>Index Coord:</strong> Assigns index-building tasks to Index Nodes. Tracks index build status. Ensures every sealed segment eventually gets indexed.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">🔍 Query Nodes</div>
+      <h4>Search Execution Engine</h4>
+      <p style="font-size:14px;">Stateless workers that load vector segments into memory and execute ANN search. Key characteristics:</p>
+      <ul class="styled" style="font-size:14px;">
+        <li>Load sealed segments from object storage (S3/MinIO)</li>
+        <li>Subscribe to message queue for growing segment data (streaming)</li>
+        <li>Execute SIMD/GPU-accelerated vector similarity computations</li>
+        <li>Apply scalar filters before/after vector search (pre/post filtering)</li>
+        <li>Return partial results to Proxy for global top-K merge</li>
+        <li>Cache frequently-accessed segments in memory</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">📥 Data Nodes</div>
+      <h4>Ingestion & Persistence Engine</h4>
+      <p style="font-size:14px;">Consume the write-ahead log and persist data to object storage:</p>
+      <ul class="styled" style="font-size:14px;">
+        <li>Subscribe to Pulsar topics, consume DML (insert/delete) messages</li>
+        <li>Buffer incoming vectors into <em>growing segments</em> (in-memory)</li>
+        <li>When growing segment reaches capacity, seal it and flush to S3</li>
+        <li>Write binlogs (vector data), delta logs (deletes), and stats logs</li>
+        <li>Report segment metadata to Data Coordinator</li>
+        <li>Stateless — can be replaced without data loss (log replay)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">⚙️ Index Nodes</div>
+      <h4>Offline Index Builder</h4>
+      <p style="font-size:14px;">Dedicated workers for CPU/GPU-intensive index construction:</p>
+      <ul class="styled" style="font-size:14px;">
+        <li>Receive index-build tasks from Index Coordinator</li>
+        <li>Load raw vector data from object storage</li>
+        <li>Build HNSW, IVF, DiskANN, GPU_CAGRA graphs</li>
+        <li>Write finished index files back to object storage</li>
+        <li>Can be GPU-equipped for accelerated CAGRA/IVF_GPU builds</li>
+        <li>Scales independently — add more nodes during bulk ingestion</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="arch-layer-title" style="margin-bottom:8px;">💾 Storage Layer</div>
+      <h4>Object Store + Metadata + Messaging</h4>
+      <ul class="styled" style="font-size:14px;">
+        <li><strong>MinIO / S3:</strong> Stores raw vector binlogs, sealed segments, index files, delta logs, and checkpoints. Durable, replicated, infinitely scalable.</li>
+        <li><strong>etcd:</strong> Stores cluster metadata, collection schemas, segment info, coordinator leader state, service discovery records. Small, critical, backed up.</li>
+        <li><strong>Pulsar / Kafka:</strong> The WAL (write-ahead log). All DML flows through here. Enables exactly-once delivery, log replay on node failure, and pub-sub fan-out to multiple consumers.</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <h3>Stateless Design & Separation of Compute/Storage</h3>
+  <div class="callout callout-green">
+    <strong>Key Architectural Benefit</strong>
+    Because all durable state lives in S3 (vectors) + etcd (metadata) + Pulsar (WAL), every worker node (Query, Data, Index) is <em>fully stateless</em>. A crashed node can be replaced by launching a new pod — it simply replays from Pulsar and reloads segments from S3. No manual recovery, no data re-replication between peers.
+  </div>
+
+  <div class="card-grid card-grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h4>🔄 Control Flow</h4>
+      <p style="font-size:14px;">Coordinator services manage the cluster control plane via etcd. They make decisions (e.g., "seal this segment," "assign this index task to Node X") and write those decisions to etcd. Worker nodes watch etcd for task assignments and act accordingly.</p>
+    </div>
+    <div class="card">
+      <h4>📡 Data Flow</h4>
+      <p style="font-size:14px;">Actual vector data flows through Pulsar (write path) and S3 (persistence). The Proxy writes DML events to Pulsar. Data Nodes consume from Pulsar and flush to S3. Query Nodes read from S3 and serve searches. Data never passes through coordinator services.</p>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 4: DATA FLOW ── -->
+<section id="dataflow">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">04 — Data Flow</div>
+    <h2>Write Path, Read Path & Segment Lifecycle</h2>
+  </div>
+
+  <h3>Write Path (Ingestion Pipeline)</h3>
+  <ol class="styled">
+    <li><strong>Client calls insert()</strong> via SDK → hits Proxy over gRPC/REST.</li>
+    <li><strong>Proxy validates</strong> schema against etcd metadata, assigns row IDs if auto_id=True, gets a monotonic timestamp from Root Coord (TSO).</li>
+    <li><strong>Proxy publishes DML message</strong> (vector payload + timestamp) to a Pulsar topic partitioned by collection/shard.</li>
+    <li><strong>Data Node subscribes</strong> to the Pulsar topic. Receives messages and buffers them into a <em>growing segment</em> in memory.</li>
+    <li><strong>Growing segment reaches threshold</strong> (size limit or time window). Data Coord triggers a <em>seal</em> operation.</li>
+    <li><strong>Data Node flushes</strong> sealed segment to object storage: writes binlog files (raw vectors), stats log (min/max, bloom filter), and delta log (deletes). Notifies Data Coord.</li>
+    <li><strong>Data Coord notifies Index Coord</strong>. Index Coord schedules an index-building task and assigns it to an available Index Node.</li>
+    <li><strong>Index Node reads raw binlog</strong> from S3, builds the ANN index (HNSW graph, IVF clusters, etc.), writes index file back to S3.</li>
+    <li><strong>Segment becomes queryable</strong>. Query Coord loads it onto Query Nodes. Searches now include this segment.</li>
+  </ol>
+
+  <div class="ascii-box">
+    <pre>
+  WRITE PATH — INGESTION PIPELINE
+
+  Client
+    │
+    │ insert(vectors, metadata)
+    ▼
+  ┌─────────────┐
+  │    Proxy    │ ── validates schema, assigns timestamps
+  └──────┬──────┘
+         │ publishes DML event
+         ▼
+  ┌──────────────────┐
+  │   Pulsar Topic   │ ── WAL / durable message log
+  │  (per-shard)     │
+  └──────┬───────────┘
+         │ subscribes & consumes
+         ▼
+  ┌─────────────┐
+  │  Data Node  │ ── buffers in growing segment (RAM)
+  └──────┬──────┘
+         │ seal triggered → flush
+         ▼
+  ┌─────────────────────────────────┐
+  │         Object Store (S3)       │
+  │  binlog/ ── raw vectors         │
+  │  stats/  ── bloom filter, etc.  │
+  │  delta/  ── deletes             │
+  └──────────────┬──────────────────┘
+                 │ index build task
+                 ▼
+  ┌─────────────┐
+  │ Index Node  │ ── builds HNSW/IVF from binlog
+  └──────┬──────┘
+         │ writes index file
+         ▼
+  ┌─────────────────────────────────┐
+  │   Object Store (S3)             │
+  │  index/ ── HNSW graph file      │
+  └──────────────────────────────────┘
+         │ Query Coord loads segment
+         ▼
+  ┌─────────────┐
+  │ Query Node  │ ── segment ready for ANN search
+  └─────────────┘
+    </pre>
+  </div>
+
+  <h3>Read Path (Search/Query Execution)</h3>
+  <ol class="styled">
+    <li><strong>Client calls search()</strong> with query vector, top-K, filter expression, and search params.</li>
+    <li><strong>Proxy receives request.</strong> Determines which shards/partitions to query based on collection metadata. Generates a "guaranteed timestamp" to ensure consistent reads.</li>
+    <li><strong>Proxy fans out</strong> the search request to all relevant Query Nodes in parallel (each holds different segments).</li>
+    <li><strong>Each Query Node executes locally:</strong> (a) applies scalar pre-filter if expr is provided, (b) runs ANN search on vector index in memory, (c) returns local top-K results with distances.</li>
+    <li><strong>Proxy collects partial results</strong> from all Query Nodes. Performs global merge/re-rank to produce final top-K.</li>
+    <li><strong>Proxy streams response</strong> back to client with entity IDs, distances, and any requested output fields.</li>
+  </ol>
+
+  <pre><code class="language-python"><span class="cm"># Read path — vector search with scalar filter</span>
+results = client.<span class="fn">search</span>(
+    collection_name=<span class="str">"rag_chunks"</span>,
+    data=[query_embedding],           <span class="cm"># [1536-dim float list]</span>
+    limit=<span class="num">10</span>,                        <span class="cm"># top-K</span>
+    output_fields=[<span class="str">"content"</span>, <span class="str">"source"</span>],
+    filter=<span class="str">'created_at > 1700000000 AND source == "docs"'</span>,
+    search_params={
+        <span class="str">"metric_type"</span>: <span class="str">"COSINE"</span>,
+        <span class="str">"params"</span>: {<span class="str">"ef"</span>: <span class="num">200</span>}  <span class="cm"># HNSW ef: higher = better recall</span>
+    },
+    consistency_level=<span class="str">"Bounded"</span>     <span class="cm"># eventual/bounded/strong</span>
+)
+
+<span class="kw">for</span> hit <span class="kw">in</span> results[<span class="num">0</span>]:
+    <span class="fn">print</span>(<span class="str">f"score={hit.distance:.4f} | {hit.entity['content'][:100]}"</span>)</code><div class="code-label">Python</div></pre>
+
+  <h3>Segment Lifecycle</h3>
+  <div class="flow-row" style="flex-wrap:wrap;">
+    <div class="flow-box blue">Growing<br><small>In-memory buffer<br>on Data Node</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box orange">Sealed<br><small>Immutable, flushed<br>to S3 (raw)</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box purple">Indexed<br><small>ANN index built<br>stored in S3</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box green">Loaded<br><small>On Query Node<br>serving searches</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box" style="background:#64748b;color:#fff;">Compacted<br><small>Merged small segs<br>deletes applied</small></div>
+  </div>
+
+  <div class="callout callout-purple">
+    <strong>Compaction</strong>
+    Small segments are periodically compacted (merged) to improve search efficiency. Deleted records (soft-deleted via delta logs) are physically purged during compaction. Compaction is transparent to queries and happens in the background.
+  </div>
+
+  <h3>Consistency Levels</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Level</th><th>Guarantee</th><th>Latency Impact</th><th>Use Case</th></tr></thead>
+      <tbody>
+        <tr><td><code>Strong</code></td><td>Read-your-writes. Waits for all writes to be visible.</td><td>High (+10–50ms)</td><td>Financial, compliance-critical</td></tr>
+        <tr><td><code>Bounded</code></td><td>Reads data within a bounded staleness window (e.g., 5s).</td><td>Low–Medium</td><td>Most production workloads ✓</td></tr>
+        <tr><td><code>Session</code></td><td>Within a session, reads are monotonic.</td><td>Low</td><td>User-specific consistency</td></tr>
+        <tr><td><code>Eventually</code></td><td>No guarantees. Fastest possible read.</td><td>Minimal</td><td>Analytics, batch workloads</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</section>
+
+<!-- ── SECTION 5: PERFORMANCE ── -->
+<section id="performance">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">05 — Performance</div>
+    <h2>Performance & Scalability at Billion Scale</h2>
+  </div>
+
+  <h3>Horizontal Scaling Strategy</h3>
+  <p>Every worker tier scales independently. This means you can tune resource allocation precisely to your workload profile:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th>When to Scale Out</th><th>Bottleneck Signal</th></tr></thead>
+      <tbody>
+        <tr><td>Proxy</td><td>High inbound QPS, connection limits</td><td>CPU saturation, gRPC queue depth</td></tr>
+        <tr><td>Query Nodes</td><td>High search QPS, high latency</td><td>Search latency P99 &gt; SLA, CPU &gt; 80%</td></tr>
+        <tr><td>Data Nodes</td><td>High ingestion throughput, slow flushes</td><td>Pulsar lag, flush queue depth</td></tr>
+        <tr><td>Index Nodes</td><td>Slow index building during bulk load</td><td>Index build queue depth &gt; threshold</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Hardware Acceleration</h3>
+  <div class="card-grid card-grid-3">
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-blue">⚡</div>
+        <div>
+          <h4>SIMD / AVX-512</h4>
+          <p style="font-size:14px;">Milvus uses CPU SIMD intrinsics (SSE4, AVX2, AVX-512) for vectorized distance computations. AVX-512 processes 16 float32 values per clock cycle. Auto-detected at runtime, no config needed.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-purple">🖥️</div>
+        <div>
+          <h4>GPU Acceleration</h4>
+          <p style="font-size:14px;">GPU_CAGRA (RAPIDS cuVS) and GPU_IVF_FLAT indexes run on NVIDIA GPUs. Index build is 10–100× faster than CPU. Search throughput increases dramatically for high-dim vectors.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-green">💿</div>
+        <div>
+          <h4>DiskANN (NVMe)</h4>
+          <p style="font-size:14px;">For memory-constrained environments, DiskANN stores the graph on NVMe SSDs. Enables billion-scale search on commodity hardware with 10–20× less memory than HNSW.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Columnar Storage & Memory Management</h3>
+  <p>Milvus stores data in a <strong>columnar format</strong> (Apache Arrow-compatible). Benefits for vector workloads:</p>
+  <ul class="styled">
+    <li>Load only the vector field for search (skip scalar fields) — reduces I/O from S3</li>
+    <li>SIMD-friendly memory layout for batch distance computations</li>
+    <li>Efficient compression per-column (quantization, delta encoding)</li>
+    <li>Memory-mapped segment loading with OS page cache for hot segments</li>
+  </ul>
+
+  <h3>Quantization & Compression</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Technique</th><th>Memory Reduction</th><th>Recall Loss</th><th>Method</th></tr></thead>
+      <tbody>
+        <tr><td>FP32 (raw)</td><td>1× baseline</td><td>0%</td><td>Full precision float</td></tr>
+        <tr><td>FP16 / BF16</td><td>2×</td><td>&lt;0.1%</td><td>Half-precision float</td></tr>
+        <tr><td>INT8 (SQ8)</td><td>4×</td><td>0.5–1%</td><td>Scalar quantization</td></tr>
+        <tr><td>Product Quantization (PQ)</td><td>8–32×</td><td>2–5%</td><td>Sub-vector codebook</td></tr>
+        <tr><td>Binary Vectors</td><td>32×</td><td>Depends on task</td><td>Hash-based encoding</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Benchmarks (Reference Figures)</h3>
+  <div class="callout callout-orange">
+    <strong>Benchmark Note</strong>
+    These figures are illustrative from published benchmarks (ANN-Benchmarks, Zilliz blog). Real-world performance varies based on hardware, vector dimensionality, dataset distribution, and index parameters.
+  </div>
+
+  <div class="metric-row">
+    <div class="metric"><div class="val">1M</div><div class="lbl">Vec HNSW search &lt;2ms P99</div></div>
+    <div class="metric"><div class="val">1B</div><div class="lbl">DiskANN with 64GB RAM</div></div>
+    <div class="metric"><div class="val">100k</div><div class="lbl">QPS with GPU_CAGRA</div></div>
+    <div class="metric"><div class="val">99.5%</div><div class="lbl">Recall@10 HNSW</div></div>
+    <div class="metric"><div class="val">10M/s</div><div class="lbl">Ingestion throughput</div></div>
+  </div>
+
+</div>
+</section>
+
+<!-- ── SECTION 6: USE CASES ── -->
+<section id="usecases">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">06 — Use Cases</div>
+    <h2>Real-World Applications</h2>
+  </div>
+
+  <div class="card-grid card-grid-2">
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-blue">🤖</div>
+        <div>
+          <h4>RAG (Retrieval-Augmented Generation)</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Chunk documents → embed with OpenAI/BGE → store in Milvus. At query time: embed question → search Milvus for top-5 chunks → inject into LLM prompt.</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Enterprise knowledge base chatbot. 500k internal documents indexed. Employees query in natural language. Milvus returns relevant policy/process docs in &lt;50ms. LLM synthesizes a grounded answer, eliminating hallucinations.</p>
+      <div class="pill-list">
+        <span class="pill">LangChain</span><span class="pill">LlamaIndex</span><span class="pill">OpenAI</span><span class="pill">Haystack</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-orange">🛍️</div>
+        <div>
+          <h4>E-Commerce Semantic Search</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Embed product titles + descriptions. At search time: embed user query → ANN search → re-rank by business rules (price, inventory, margin).</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Fashion retailer with 50M SKUs. Query "casual summer dress for petite women" retrieves semantically matching products even if no keyword overlap. Hybrid search combines vector similarity + BM25 for optimal results. 25% CTR uplift vs keyword search.</p>
+      <div class="pill-list">
+        <span class="pill">Hybrid Search</span><span class="pill">Re-ranking</span><span class="pill">A/B Testing</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-purple">🎯</div>
+        <div>
+          <h4>Recommendation Systems</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Embed user interaction history (clicks, purchases) + item features into a shared space. Use MIPS (Maximum Inner Product Search) to find items closest to user embedding.</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Video streaming platform. 10M user embeddings + 50M content embeddings. Real-time personalized recommendations at login. Batch-update user embeddings daily. Candidate generation via Milvus → scoring/filtering → final recommendations.</p>
+      <div class="pill-list">
+        <span class="pill">Two-Tower Model</span><span class="pill">MIPS</span><span class="pill">Partitioning</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-red">🚨</div>
+        <div>
+          <h4>Fraud Detection</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Embed transaction behavior (merchant category, amount distribution, geo, time) into feature vector. Real-time search for similar historical fraudulent transactions.</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Payment processor. Each transaction becomes a 256-dim behavioral embedding. Milvus searches 500M historical transactions in &lt;5ms. If top-5 neighbors are flagged as fraud with high similarity, escalate for review. Catches novel fraud patterns that rule-based systems miss.</p>
+      <div class="pill-list">
+        <span class="pill">Real-time</span><span class="pill">Anomaly Detection</span><span class="pill">Partitions by date</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-teal">🖼️</div>
+        <div>
+          <h4>Image & Video Similarity</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Embed images via CLIP/ResNet/DINOv2. Store embeddings + metadata in Milvus. Query by image upload or text description (CLIP multi-modal).</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Stock photo agency. 500M images indexed. "Find photos similar to this mood board" — CLIP embeds the mood board image, Milvus returns 50 visually similar candidates in &lt;30ms. Also supports text-to-image: "golden hour mountain sunset."</p>
+      <div class="pill-list">
+        <span class="pill">CLIP</span><span class="pill">DINOv2</span><span class="pill">Multi-modal</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-green">🧬</div>
+        <div>
+          <h4>Drug Discovery / Bioinformatics</h4>
+        </div>
+      </div>
+      <p style="font-size:14.5px;margin-top:14px;"><strong>Pattern:</strong> Embed molecular fingerprints (ECFP, Morgan) or protein sequences (ESM-2). Search for structurally or functionally similar compounds at scale.</p>
+      <p style="font-size:14.5px;"><strong>Example:</strong> Pharma R&D. 50M compound library. Researcher uploads a candidate molecule → Milvus retrieves 100 similar compounds from the library in &lt;100ms. Dramatically accelerates hit-finding and scaffold-hopping. Used in combination with Tanimoto similarity via binary vector indexes.</p>
+      <div class="pill-list">
+        <span class="pill">Binary Vectors</span><span class="pill">Tanimoto</span><span class="pill">ESM-2</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 7: COMPARISON ── -->
+<section id="comparison">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">07 — Comparison</div>
+    <h2>Vector Database Landscape</h2>
+  </div>
+
+  <p>Choosing a vector database is a system design decision driven by scale, operational model, team expertise, and budget. Here's an objective comparison of the major options.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Milvus</th>
+          <th>Pinecone</th>
+          <th>Weaviate</th>
+          <th>FAISS</th>
+          <th>pgvector</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Type</td>
+          <td><span class="badge badge-blue">Purpose-built DB</span></td>
+          <td><span class="badge badge-purple">Managed SaaS</span></td>
+          <td><span class="badge badge-orange">Purpose-built DB</span></td>
+          <td><span class="badge badge-teal">Library</span></td>
+          <td><span class="badge badge-green">Extension</span></td>
+        </tr>
+        <tr>
+          <td>Open Source</td>
+          <td class="check">✓ Apache 2.0</td>
+          <td class="cross">✗ Proprietary</td>
+          <td class="check">✓ BSD-3</td>
+          <td class="check">✓ MIT</td>
+          <td class="check">✓ PostgreSQL License</td>
+        </tr>
+        <tr>
+          <td>Deployment</td>
+          <td>Self-hosted / Zilliz Cloud</td>
+          <td>Fully managed (AWS/GCP)</td>
+          <td>Self-hosted / WCS Cloud</td>
+          <td>In-process library only</td>
+          <td>Any PostgreSQL host</td>
+        </tr>
+        <tr>
+          <td>Scalability</td>
+          <td>🟢 Billion-scale, horizontal</td>
+          <td>🟡 Large scale, serverless</td>
+          <td>🟡 Multi-node cluster</td>
+          <td>🔴 Single machine only</td>
+          <td>🔴 PostgreSQL limits (~100M)</td>
+        </tr>
+        <tr>
+          <td>Max Vectors</td>
+          <td>10B+ (tested)</td>
+          <td>~1B+ (managed)</td>
+          <td>~1B (self-hosted)</td>
+          <td>RAM/disk limited</td>
+          <td>~100M practical</td>
+        </tr>
+        <tr>
+          <td>Hybrid Search</td>
+          <td class="check">✓ Dense + Sparse + Scalar</td>
+          <td class="partial">⚠ Sparse + Dense</td>
+          <td class="check">✓ BM25 + vector</td>
+          <td class="cross">✗ Vector only</td>
+          <td class="partial">⚠ Vector + SQL (manual)</td>
+        </tr>
+        <tr>
+          <td>Multi-vector</td>
+          <td class="check">✓ ColBERT-style</td>
+          <td class="check">✓ (sparse)</td>
+          <td class="partial">⚠ Named vectors</td>
+          <td class="cross">✗</td>
+          <td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td>GPU Support</td>
+          <td class="check">✓ CAGRA, IVF_GPU</td>
+          <td class="cross">✗ (managed)</td>
+          <td class="cross">✗</td>
+          <td class="check">✓ FAISS-GPU</td>
+          <td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td>Index Types</td>
+          <td>IVF, HNSW, DiskANN, CAGRA, Sparse, Binary</td>
+          <td>Proprietary (HNSW-based)</td>
+          <td>HNSW</td>
+          <td>IVF, HNSW, PQ, LSH</td>
+          <td>IVFFlat, HNSW, IVFPQ</td>
+        </tr>
+        <tr>
+          <td>Persistence</td>
+          <td class="check">✓ S3 / MinIO</td>
+          <td class="check">✓ Managed</td>
+          <td class="check">✓ Self-managed disk</td>
+          <td class="cross">✗ In-memory (ext. needed)</td>
+          <td class="check">✓ PostgreSQL storage</td>
+        </tr>
+        <tr>
+          <td>ACID Transactions</td>
+          <td class="partial">⚠ Eventual (tunable)</td>
+          <td class="cross">✗</td>
+          <td class="cross">✗</td>
+          <td class="cross">✗</td>
+          <td class="check">✓ Full ACID (Postgres)</td>
+        </tr>
+        <tr>
+          <td>Multi-tenancy</td>
+          <td class="check">✓ Partitions, RBAC</td>
+          <td class="check">✓ Namespaces</td>
+          <td class="check">✓ Classes</td>
+          <td class="cross">✗</td>
+          <td class="partial">⚠ Schema-level isolation</td>
+        </tr>
+        <tr>
+          <td>Operational Complexity</td>
+          <td>High (etcd, Pulsar, S3, 4 coordinators)</td>
+          <td>Zero (fully managed)</td>
+          <td>Medium</td>
+          <td>Zero (library)</td>
+          <td>Low (existing Postgres)</td>
+        </tr>
+        <tr>
+          <td>Cost Model</td>
+          <td>Self-host (infra cost) / Zilliz (usage-based)</td>
+          <td>Per-unit pricing (expensive at scale)</td>
+          <td>Self-host (free) / WCS (usage-based)</td>
+          <td>Free (compute cost only)</td>
+          <td>Free (Postgres infra cost)</td>
+        </tr>
+        <tr>
+          <td>Ecosystem</td>
+          <td>LangChain, LlamaIndex, Haystack, Spark</td>
+          <td>LangChain, LlamaIndex</td>
+          <td>LangChain, LlamaIndex</td>
+          <td>LangChain (low-level)</td>
+          <td>All Postgres tooling</td>
+        </tr>
+        <tr>
+          <td>Best For</td>
+          <td>Large-scale production, billion+ vectors</td>
+          <td>Fast start, managed ops, mid-scale</td>
+          <td>GraphQL API, semantic layer</td>
+          <td>Research, custom systems</td>
+          <td>Existing Postgres users, &lt;10M vecs</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-orange">
+    <strong>Important Nuance: Milvus Lite vs Milvus Standalone vs Milvus Distributed</strong>
+    Milvus ships in three modes: <strong>Lite</strong> (in-process Python, no infra needed — great for dev/testing), <strong>Standalone</strong> (single Docker container, simple deployment for medium scale), and <strong>Distributed</strong> (full Kubernetes cluster, billion-scale). This means Milvus can compete with pgvector and FAISS at the low end, and with enterprise offerings at the high end.
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 8: WHEN TO USE ── -->
+<section id="when">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">08 — Decision Guide</div>
+    <h2>When to Use Milvus vs Alternatives</h2>
+  </div>
+
+  <h3>Decision Framework</h3>
+
+  <div style="margin: 20px 0;">
+    <div class="decision-row">
+      <div class="decision-cond">Vectors &gt; 50M at scale</div>
+      <div class="decision-rec">✅ <strong>Milvus Distributed</strong> — built exactly for this. Horizontal scaling, DiskANN, GPU support.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">Vectors &lt; 1M, existing Postgres</div>
+      <div class="decision-rec">✅ <strong>pgvector</strong> — zero new infra, SQL queries, ACID. Milvus adds unnecessary complexity.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">No ops team, fast time-to-production</div>
+      <div class="decision-rec">✅ <strong>Pinecone</strong> — zero ops, generous free tier, solid managed SaaS. Pay-per-use.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">Research / ML experimentation</div>
+      <div class="decision-rec">✅ <strong>FAISS</strong> — in-process, no server, fastest iteration. Not for production serving.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">GraphQL API / semantic layer needed</div>
+      <div class="decision-rec">✅ <strong>Weaviate</strong> — rich object model, GraphQL, integrated text2vec modules.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">Hybrid search (dense + sparse)</div>
+      <div class="decision-rec">✅ <strong>Milvus</strong> — native multi-vector support, RRF (Reciprocal Rank Fusion) reranking built-in.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">GPU-accelerated index building</div>
+      <div class="decision-rec">✅ <strong>Milvus</strong> — only production-grade DB with CAGRA GPU index support.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">Startup with &lt;$10k/mo infra budget</div>
+      <div class="decision-rec">✅ <strong>Milvus Standalone (Docker)</strong> or <strong>Pinecone Starter</strong> — balance cost vs ops simplicity.</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-cond">On-premises / air-gapped deployment</div>
+      <div class="decision-rec">✅ <strong>Milvus</strong> — fully self-hosted, no external SaaS dependencies. Kubernetes-native.</div>
+    </div>
+  </div>
+
+  <h3>Trade-offs Summary</h3>
+  <div class="card-grid card-grid-2">
+    <div class="card">
+      <h4>🏢 Enterprise / Large Scale → Milvus</h4>
+      <ul class="styled" style="font-size:14.5px;">
+        <li>Need to store and search 100M–10B+ vectors</li>
+        <li>Require GPU-accelerated index builds</li>
+        <li>Multi-tenancy with namespace isolation</li>
+        <li>Hybrid search (sparse + dense + scalar filters)</li>
+        <li>Data sovereignty / on-premises requirements</li>
+        <li>Cost optimization at scale (vs. Pinecone per-unit pricing)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>🚀 Startup / Prototype → Consider Alternatives</h4>
+      <ul class="styled" style="font-size:14.5px;">
+        <li>Team has no Kubernetes/distributed systems expertise</li>
+        <li>Dataset is &lt; 5M vectors (pgvector is simpler)</li>
+        <li>Need zero-ops infrastructure immediately</li>
+        <li>Budget constraints favor managed SaaS until scale demands otherwise</li>
+        <li>Already using PostgreSQL as primary datastore</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-green">
+    <strong>Migration Path</strong>
+    A common pattern: start with pgvector for &lt;5M vectors, migrate to Milvus Standalone at 5–50M, and move to Milvus Distributed (Kubernetes) at 50M+. The pymilvus API is stable, so application code changes are minimal. LangChain/LlamaIndex abstract the vector DB layer, making migrations even easier.
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 9: AI STACK ── -->
+<section id="stack">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">09 — Integration</div>
+    <h2>Milvus in the AI Stack</h2>
+  </div>
+
+  <h3>Complete RAG Pipeline Architecture</h3>
+
+  <div class="ascii-box">
+    <pre>
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                    PRODUCTION RAG SYSTEM ARCHITECTURE                   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  INGESTION PIPELINE (offline / async)                                  │
+  │                                                                        │
+  │  Document Sources                                                      │
+  │  [PDFs, Web, DBs, APIs, Confluence, SharePoint, S3]                    │
+  │           │                                                            │
+  │           ▼                                                            │
+  │  ┌──────────────────┐                                                  │
+  │  │  Document Parser │ ── PDF extract, HTML clean, Markdown parse       │
+  │  └────────┬─────────┘                                                  │
+  │           │                                                            │
+  │           ▼                                                            │
+  │  ┌──────────────────┐                                                  │
+  │  │  Chunking Engine │ ── Recursive, semantic, or fixed-size chunking   │
+  │  │  (LangChain/     │    Overlap: 10–20% for context continuity        │
+  │  │   LlamaIndex)    │                                                  │
+  │  └────────┬─────────┘                                                  │
+  │           │ text chunks                                                │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │   Embedding Model    │ ← OpenAI text-embedding-3-large              │
+  │  │   (Async Batch API)  │   OR BGE-M3 (self-hosted, ONNX)             │
+  │  └────────┬─────────────┘                                              │
+  │           │ [1536-dim float32 vectors]                                 │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │       MILVUS         │ ── collection: rag_chunks                    │
+  │  │  (Vector Store)      │    index: HNSW (M=16, efConstruction=256)    │
+  │  │                      │    metric: COSINE                            │
+  │  └──────────────────────┘                                              │
+  └────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  QUERY PIPELINE (real-time, per user request)                          │
+  │                                                                        │
+  │  User Query: "What is our refund policy for international orders?"     │
+  │           │                                                            │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │    API Gateway /     │ ── Auth, rate limit, logging                 │
+  │  │    FastAPI           │                                              │
+  │  └────────┬─────────────┘                                              │
+  │           │                                                            │
+  │    ┌──────┴──────┐                                                     │
+  │    │             │ (optional: hybrid search)                           │
+  │    ▼             ▼                                                     │
+  │  ┌──────────┐  ┌──────────┐                                            │
+  │  │Embedding │  │  BM25    │                                            │
+  │  │ Model    │  │ Sparse   │                                            │
+  │  │ (query)  │  │ Encoder  │                                            │
+  │  └────┬─────┘  └────┬─────┘                                            │
+  │       └──────┬───────┘                                                 │
+  │              │ vector(s)                                               │
+  │              ▼                                                         │
+  │  ┌──────────────────────┐                                              │
+  │  │       MILVUS         │ ── ANN search (ef=200, top-20)               │
+  │  │   .search() call     │    scalar filter: source IN ["policy", ...]  │
+  │  │                      │    returns: [(chunk_id, score, content)]     │
+  │  └────────┬─────────────┘                                              │
+  │           │ top-20 candidates                                          │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │    Re-ranker         │ ── Cross-encoder (BGE-Reranker / Cohere)     │
+  │  │   (optional)         │    Reduce 20 → top-5 for context window      │
+  │  └────────┬─────────────┘                                              │
+  │           │ top-5 chunks                                               │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │   Prompt Builder     │ ── System prompt + retrieved context + query │
+  │  └────────┬─────────────┘                                              │
+  │           │ full prompt (~4000 tokens)                                 │
+  │           ▼                                                            │
+  │  ┌──────────────────────┐                                              │
+  │  │        LLM           │ ← GPT-4o / Claude 3.5 / Llama-3.1-70B      │
+  │  │   (Completion API)   │                                              │
+  │  └────────┬─────────────┘                                              │
+  │           │ grounded response + citations                              │
+  │           ▼                                                            │
+  │        User Response                                                   │
+  └────────────────────────────────────────────────────────────────────────┘
+    </pre>
+  </div>
+
+  <h3>Complete RAG Code Example</h3>
+  <pre><code class="language-python"><span class="kw">import</span> os
+<span class="kw">from</span> openai <span class="kw">import</span> OpenAI
+<span class="kw">from</span> pymilvus <span class="kw">import</span> MilvusClient
+
+<span class="cm"># ── Setup ──────────────────────────────────────────────────────────────</span>
+openai_client = OpenAI(api_key=os.environ[<span class="str">"OPENAI_API_KEY"</span>])
+milvus_client = MilvusClient(<span class="str">"http://milvus:19530"</span>)
+
+<span class="cls">COLLECTION</span> = <span class="str">"rag_chunks"</span>
+<span class="cls">EMBED_MODEL</span> = <span class="str">"text-embedding-3-large"</span>
+<span class="cls">LLM_MODEL</span>   = <span class="str">"gpt-4o"</span>
+
+<span class="cm"># ── Embedding helper ───────────────────────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">embed</span>(text: <span class="cls">str</span>) -> <span class="cls">list</span>[<span class="cls">float</span>]:
+    resp = openai_client.embeddings.<span class="fn">create</span>(input=text, model=<span class="cls">EMBED_MODEL</span>)
+    <span class="kw">return</span> resp.data[<span class="num">0</span>].embedding  <span class="cm"># 3072-dim vector</span>
+
+<span class="cm"># ── Ingestion ──────────────────────────────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">ingest_documents</span>(chunks: <span class="cls">list</span>[<span class="cls">dict</span>]):
+    <span class="cm">"""
+    chunks: [{"content": str, "source": str, "created_at": int}, ...]
+    """</span>
+    embeddings = [<span class="fn">embed</span>(c[<span class="str">"content"</span>]) <span class="kw">for</span> c <span class="kw">in</span> chunks]
+    data = [
+        {
+            <span class="str">"embedding"</span>:  embeddings[i],
+            <span class="str">"content"</span>:    chunks[i][<span class="str">"content"</span>],
+            <span class="str">"source"</span>:     chunks[i][<span class="str">"source"</span>],
+            <span class="str">"created_at"</span>: chunks[i][<span class="str">"created_at"</span>],
+        }
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(chunks))
+    ]
+    milvus_client.<span class="fn">insert</span>(collection_name=<span class="cls">COLLECTION</span>, data=data)
+
+<span class="cm"># ── RAG Query ──────────────────────────────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">rag_query</span>(user_question: <span class="cls">str</span>, top_k: <span class="cls">int</span> = <span class="num">5</span>) -> <span class="cls">str</span>:
+    <span class="cm"># Step 1: Embed the question</span>
+    q_vec = <span class="fn">embed</span>(user_question)
+
+    <span class="cm"># Step 2: Retrieve relevant chunks from Milvus</span>
+    results = milvus_client.<span class="fn">search</span>(
+        collection_name=<span class="cls">COLLECTION</span>,
+        data=[q_vec],
+        limit=top_k,
+        output_fields=[<span class="str">"content"</span>, <span class="str">"source"</span>],
+        search_params={<span class="str">"metric_type"</span>: <span class="str">"COSINE"</span>, <span class="str">"params"</span>: {<span class="str">"ef"</span>: <span class="num">200</span>}},
+    )
+
+    <span class="cm"># Step 3: Build context string</span>
+    context_parts = []
+    <span class="kw">for</span> hit <span class="kw">in</span> results[<span class="num">0</span>]:
+        src  = hit[<span class="str">"entity"</span>][<span class="str">"source"</span>]
+        body = hit[<span class="str">"entity"</span>][<span class="str">"content"</span>]
+        context_parts.<span class="fn">append</span>(<span class="str">f"[Source: {src}]\n{body}"</span>)
+    context = <span class="str">"\n\n---\n\n"</span>.<span class="fn">join</span>(context_parts)
+
+    <span class="cm"># Step 4: Call LLM with RAG prompt</span>
+    prompt = <span class="str">f"""You are a helpful assistant. Answer based ONLY on the provided context.
+If the answer is not in the context, say "I don't have that information."
+
+CONTEXT:
+{context}
+
+QUESTION: {user_question}
+ANSWER:"""</span>
+
+    resp = openai_client.chat.completions.<span class="fn">create</span>(
+        model=<span class="cls">LLM_MODEL</span>,
+        messages=[{<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: prompt}],
+        temperature=<span class="num">0.1</span>,
+    )
+    <span class="kw">return</span> resp.choices[<span class="num">0</span>].message.content
+
+<span class="cm"># ── Usage ──────────────────────────────────────────────────────────────</span>
+answer = <span class="fn">rag_query</span>(<span class="str">"What is our refund policy for international orders?"</span>)
+<span class="fn">print</span>(answer)</code><div class="code-label">Python — Full RAG Pipeline</div></pre>
+
+  <h3>Hybrid Search (Dense + Sparse)</h3>
+  <pre><code class="language-python"><span class="kw">from</span> pymilvus <span class="kw">import</span> AnnSearchRequest, RRFRanker, WeightedRanker
+
+<span class="cm"># Dense vector search request</span>
+dense_req = AnnSearchRequest(
+    data=[dense_embedding],
+    anns_field=<span class="str">"dense_vector"</span>,
+    param={<span class="str">"metric_type"</span>: <span class="str">"COSINE"</span>, <span class="str">"params"</span>: {<span class="str">"ef"</span>: <span class="num">100</span>}},
+    limit=<span class="num">20</span>
+)
+
+<span class="cm"># Sparse vector search request (BM25-style)</span>
+sparse_req = AnnSearchRequest(
+    data=[sparse_embedding],
+    anns_field=<span class="str">"sparse_vector"</span>,
+    param={<span class="str">"metric_type"</span>: <span class="str">"IP"</span>, <span class="str">"params"</span>: {}},
+    limit=<span class="num">20</span>
+)
+
+<span class="cm"># Merge results using Reciprocal Rank Fusion</span>
+results = client.<span class="fn">hybrid_search</span>(
+    collection_name=<span class="str">"rag_chunks"</span>,
+    reqs=[dense_req, sparse_req],
+    ranker=<span class="fn">RRFRanker</span>(k=<span class="num">60</span>),  <span class="cm"># or WeightedRanker([0.7, 0.3])</span>
+    limit=<span class="num">10</span>,
+    output_fields=[<span class="str">"content"</span>, <span class="str">"source"</span>]
+)</code><div class="code-label">Python — Hybrid Search</div></pre>
+</div>
+</section>
+
+<!-- ── SECTION 10: PROS & CONS ── -->
+<section id="proscons">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">10 — Evaluation</div>
+    <h2>Pros & Cons</h2>
+  </div>
+
+  <div class="pros-cons">
+    <div class="pros-box">
+      <h3>✅ Strengths</h3>
+      <ul class="styled check" style="font-size:14.5px;">
+        <li><strong>Billion-scale proven:</strong> The only open-source vector DB with documented 10B+ vector deployments in production.</li>
+        <li><strong>Index diversity:</strong> HNSW, IVF, DiskANN, GPU_CAGRA, sparse — tune for any cost/performance profile.</li>
+        <li><strong>Hybrid search:</strong> Native dense + sparse + scalar filter in a single query. First-class RRF reranking.</li>
+        <li><strong>GPU acceleration:</strong> CAGRA index builds and searches on NVIDIA GPUs. 10–100× speedup for large batches.</li>
+        <li><strong>Cloud-native:</strong> Kubernetes-native, horizontally scalable, cloud-agnostic (AWS/GCP/Azure/on-prem).</li>
+        <li><strong>Active ecosystem:</strong> LangChain, LlamaIndex, Haystack integrations. Strong community (30k+ GitHub stars).</li>
+        <li><strong>DiskANN:</strong> NVMe-based billion-scale search with dramatically lower RAM requirements.</li>
+        <li><strong>Multi-vector fields:</strong> Support for ColBERT-style late interaction (multiple embeddings per document).</li>
+        <li><strong>Milvus Lite:</strong> Zero-infra dev mode — prototype locally, deploy to cluster unchanged.</li>
+        <li><strong>Open source:</strong> No vendor lock-in. Apache 2.0 license. Zilliz Cloud as optional managed path.</li>
+      </ul>
+    </div>
+    <div class="cons-box">
+      <h3>❌ Limitations</h3>
+      <ul class="styled cross" style="font-size:14.5px;">
+        <li><strong>Operational complexity:</strong> Full distributed mode requires etcd, Pulsar, MinIO, plus 4 coordinator types. Significant K8s expertise needed.</li>
+        <li><strong>No ACID transactions:</strong> Eventual consistency by default. Not suitable as a source of truth for financial/transactional data without careful design.</li>
+        <li><strong>Memory-heavy HNSW:</strong> HNSW index holds entire graph in RAM. 1B vectors @ 768-dim ≈ 3TB RAM with HNSW. DiskANN mitigates but adds latency.</li>
+        <li><strong>No native joins:</strong> Cannot join with external relational data. Must denormalize metadata into Milvus or handle joins in application layer.</li>
+        <li><strong>Learning curve:</strong> Concept of coordinators, segments, WAL, and TSO is unfamiliar to engineers from RDBMS backgrounds.</li>
+        <li><strong>Compaction overhead:</strong> Background compaction can spike I/O and CPU. Must size resources with compaction headroom.</li>
+        <li><strong>Pulsar/Kafka dependency:</strong> Adds operational overhead and a potential failure domain. New Woodpecker WAL (in development) aims to replace this.</li>
+        <li><strong>Slow index builds:</strong> CPU-based HNSW builds on 100M+ vectors can take hours. GPU nodes or DiskANN are workarounds.</li>
+        <li><strong>Limited analytical queries:</strong> Not designed for aggregations, GROUP BY, or complex analytical SQL. Use alongside a data warehouse for analytics.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Operational Complexity Breakdown</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Concern</th><th>Details</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>etcd management</td><td>Must be backed up. Leader elections. 3-node HA minimum.</td><td>Use managed etcd (etcd-operator, cloud provider)</td></tr>
+        <tr><td>Pulsar complexity</td><td>Requires BookKeeper + ZooKeeper. Topic retention tuning.</td><td>Use Kafka alternative or wait for Woodpecker WAL</td></tr>
+        <tr><td>Index rebuild on schema change</td><td>Changing index type requires full rebuild. Downtime risk.</td><td>Blue/green deployment with dual collections</td></tr>
+        <tr><td>Memory sizing</td><td>HNSW must fit in Query Node RAM. Undersizing = OOM crashes.</td><td>DiskANN, quantization, or partition-based loading</td></tr>
+        <tr><td>Monitoring</td><td>Many internal metrics (segment count, WAL lag, query latency).</td><td>Prometheus + Grafana dashboards (provided by Milvus)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- ── SECTION 11: CONCLUSION ── -->
+<section id="conclusion">
+<div class="page-wrap">
+  <div class="sec-header">
+    <div class="sec-num">11 — Conclusion</div>
+    <h2>Summary & Future of Vector Databases</h2>
+  </div>
+
+  <div class="card" style="margin-bottom:32px;">
+    <h3 style="margin-top:0;">Engineering Summary</h3>
+    <p>Milvus is the most feature-complete, production-battle-tested open-source vector database available today. Its disaggregated, cloud-native architecture — separating access, coordination, compute, and storage — enables genuinely elastic scaling from millions to billions of vectors without redesigning your system.</p>
+    <p>The key differentiators vs alternatives are: <strong>(1) billion-scale proven</strong>, <strong>(2) GPU-accelerated index building/search</strong>, <strong>(3) native hybrid search</strong> (dense + sparse + scalar), <strong>(4) DiskANN for memory-constrained scale</strong>, and <strong>(5) the richest index type selection</strong> in any vector DB.</p>
+    <p>The trade-off is <strong>operational complexity</strong>. Running Milvus Distributed requires mature Kubernetes operations, monitoring discipline, and capacity planning expertise. For teams without this, Milvus Lite → Standalone → Zilliz Cloud is a viable progression that defers operational burden until scale demands it.</p>
+  </div>
+
+  <h3>When Milvus is the Right Call</h3>
+  <ul class="styled" style="font-size:15px;">
+    <li>You are building AI-native products where semantic search is a first-class feature, not an afterthought</li>
+    <li>Your dataset exceeds 50M vectors or is projected to reach that within 12 months</li>
+    <li>You need hybrid search (combining dense, sparse, and structured filters) in a single query</li>
+    <li>You require data sovereignty, on-premises deployment, or multi-cloud portability</li>
+    <li>Your team has (or is building) Kubernetes operational capability</li>
+    <li>Cost optimization matters — self-hosted Milvus is dramatically cheaper than Pinecone at billions of vectors</li>
+  </ul>
+
+  <h3>The Future of Vector Databases</h3>
+  <div class="card-grid card-grid-2" style="margin-top:20px;">
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-blue">🔮</div>
+        <div>
+          <h4>Convergence with Traditional DBs</h4>
+          <p style="font-size:14px;">PostgreSQL (pgvector), SingleStore, Oracle, and MongoDB are all adding vector capabilities. The future likely involves multi-model databases that handle relational + vector + document in one system. Milvus responds with richer scalar query support.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-orange">⚡</div>
+        <div>
+          <h4>Hardware-Accelerated Search</h4>
+          <p style="font-size:14px;">GPU-native indexes (CAGRA), custom ASIC accelerators (e.g., FPGA-based ANN), and NVMe-optimized DiskANN will push billion-scale search latencies below 1ms. GPU memory bandwidth is the new CPU cache for AI workloads.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-purple">🌐</div>
+        <div>
+          <h4>Serverless & Edge Deployment</h4>
+          <p style="font-size:14px;">Milvus Lite and on-device embedding models enable vector search at the edge. Serverless vector DBs (scaling to zero) will reduce costs for intermittent workloads. Expect WASM-compiled vector indexes in browsers.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon-card">
+        <div class="icon-bubble ib-green">🧠</div>
+        <div>
+          <h4>Multi-modal & Learned Indexes</h4>
+          <p style="font-size:14px;">Universal embedding models (text, image, audio, video in one space) will simplify schemas. Learned index structures (using neural nets to predict data distribution) will surpass handcrafted ANN algorithms for specific domains.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-blue" style="margin-top:32px;">
+    <strong>Final Verdict</strong>
+    Vector databases are not a trend — they are <em>foundational infrastructure</em> for the AI era, playing the same role that RDBMS played in the web 1.0 era. Milvus has earned its position as the production-grade reference implementation. Whether you run it self-hosted on Kubernetes or via Zilliz Cloud, investing in understanding its architecture will pay dividends as your AI systems scale. The engineers who understand vector infrastructure deeply will architect systems that others cannot.
+  </div>
+
+  <div style="margin-top:40px; padding-top:32px; border-top:1px solid var(--border);">
+    <h3>References & Further Reading</h3>
+    <div class="pill-list">
+      <span class="pill">milvus.io/docs</span>
+      <span class="pill">github.com/milvus-io/milvus</span>
+      <span class="pill">ANN-Benchmarks (erikbern.com)</span>
+      <span class="pill">Zilliz Blog</span>
+      <span class="pill">HNSW Paper — Malkov & Yashunin (2018)</span>
+      <span class="pill">DiskANN Paper — Jayaram et al. (2019)</span>
+      <span class="pill">CAGRA — Ootomo et al. (2023)</span>
+      <span class="pill">LangChain Milvus Integration</span>
+      <span class="pill">LlamaIndex Vector Stores</span>
+    </div>
+  </div>
+</div>
+</section>
+
+</main>
+
+<footer>
+  <div class="page-wrap">
+    <p><strong>Milvus Vector Database — Deep Dive</strong></p>
+    <p style="margin-top:8px;">Produced as a senior architect reference document. Content reflects Milvus 2.x architecture.<br>
+    <a href="https://milvus.io" target="_blank">milvus.io</a> · <a href="https://github.com/milvus-io/milvus" target="_blank">GitHub</a> · Apache 2.0 License</p>
+  </div>
+</footer>
+
+<script>
+// Copy button behavior
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = 'copy';
+  pre.style.position = 'relative';
+  pre.appendChild(btn);
+  btn.addEventListener('click', () => {
+    const code = pre.querySelector('code');
+    const text = code ? code.innerText : pre.innerText.replace('copy','').trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.style.color = '#86efac';
+      setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 2000);
+    });
+  });
+});
+
+// Intersection observer for subtle reveal
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '1';
+      entry.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.07 });
+
+document.querySelectorAll('.card, .metric, .toc-item').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(14px)';
+  el.style.transition = 'opacity .45s ease, transform .45s ease';
+  observer.observe(el);
+});
+</script>
+</body>
+</html>

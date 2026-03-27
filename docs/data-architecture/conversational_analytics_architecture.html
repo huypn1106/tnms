@@ -1,0 +1,2158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Conversational Analytics Platform — Product Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+
+:root {
+  --bg:          #0c0e14;
+  --bg2:         #111420;
+  --bg3:         #161b2a;
+  --bg4:         #1c2236;
+  --border:      #1f2840;
+  --border2:     #2a3754;
+  --amber:       #f59e0b;
+  --amber-dim:   #d97706;
+  --amber-glow:  rgba(245,158,11,0.15);
+  --blue:        #60a5fa;
+  --blue-dim:    #3b82f6;
+  --cyan:        #22d3ee;
+  --green:       #34d399;
+  --rose:        #fb7185;
+  --violet:      #a78bfa;
+  --slate:       #94a3b8;
+  --slate2:      #64748b;
+  --slate3:      #334155;
+  --text:        #e2e8f0;
+  --text2:       #94a3b8;
+  --text3:       #475569;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+  --display: 'Syne', sans-serif;
+  --nav-w: 260px;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:15px}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  line-height:1.72;
+  overflow-x:hidden;
+}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ─── GRAIN OVERLAY ─── */
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:999;opacity:.5;
+}
+
+/* ─── PROGRESS BAR ─── */
+#prog{
+  position:fixed;top:0;left:var(--nav-w);right:0;height:2px;z-index:1000;
+  background:linear-gradient(90deg,var(--amber),var(--blue));
+  transform-origin:left;transform:scaleX(0);transition:transform .08s linear;
+}
+
+/* ─── SIDENAV ─── */
+.nav{
+  position:fixed;top:0;left:0;bottom:0;width:var(--nav-w);
+  background:var(--bg2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow-y:auto;z-index:100;
+  padding-bottom:2rem;
+}
+.nav-brand{
+  padding:1.6rem 1.4rem 1.4rem;
+  border-bottom:1px solid var(--border);
+}
+.nav-brand .eyebrow{
+  font-family:var(--mono);font-size:9px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--amber);margin-bottom:.4rem;display:block;
+}
+.nav-brand .name{
+  font-family:var(--display);font-size:13px;font-weight:700;
+  color:var(--text);line-height:1.35;
+}
+.nav-brand .version{
+  font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:.3rem;display:block;
+}
+.nav-group-label{
+  padding:.9rem 1.4rem .3rem;
+  font-family:var(--mono);font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--text3);
+}
+.nav a{
+  display:flex;align-items:center;gap:.5rem;
+  padding:.32rem 1.4rem;
+  font-size:12.5px;color:var(--text2);
+  text-decoration:none;
+  border-left:2px solid transparent;
+  transition:all .15s;
+  font-family:var(--mono);
+}
+.nav a .n{
+  font-size:9px;color:var(--text3);min-width:18px;
+  font-family:var(--mono);
+}
+.nav a:hover,.nav a.active{
+  color:var(--amber);border-left-color:var(--amber);
+  background:var(--amber-glow);
+}
+.nav-spacer{flex:1}
+
+/* ─── MAIN ─── */
+.main{margin-left:var(--nav-w);}
+
+/* ─── HERO ─── */
+.hero{
+  min-height:360px;
+  background:
+    radial-gradient(ellipse 60% 80% at 80% 50%,rgba(245,158,11,.07) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 60% at 20% 80%,rgba(96,165,250,.06) 0%,transparent 55%),
+    var(--bg2);
+  border-bottom:1px solid var(--border);
+  padding:4rem 4.5rem 3.5rem;
+  position:relative;overflow:hidden;
+}
+.hero-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(var(--border) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:40px 40px;
+  opacity:.3;
+  mask-image:radial-gradient(ellipse 80% 100% at 50% 0%,black 0%,transparent 70%);
+}
+.hero-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--amber);
+  display:flex;align-items:center;gap:.6rem;margin-bottom:1.2rem;
+}
+.hero-tag::before{content:'';display:inline-block;width:28px;height:1px;background:var(--amber);}
+.hero h1{
+  font-family:var(--display);font-size:clamp(1.8rem,3.5vw,3rem);
+  font-weight:800;line-height:1.1;color:var(--text);margin-bottom:.8rem;
+  max-width:680px;letter-spacing:-.02em;
+}
+.hero h1 em{color:var(--amber);font-style:normal;}
+.hero-sub{
+  font-size:14.5px;color:var(--text2);max-width:560px;margin-bottom:2rem;
+  font-weight:300;
+}
+.hero-badges{display:flex;flex-wrap:wrap;gap:.6rem;}
+.badge{
+  font-family:var(--mono);font-size:10.5px;
+  padding:.28rem .75rem;border-radius:3px;
+  background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text2);white-space:nowrap;
+}
+.badge.a{border-color:rgba(245,158,11,.4);color:var(--amber);background:var(--amber-glow);}
+.badge.b{border-color:rgba(96,165,250,.3);color:var(--blue);background:rgba(96,165,250,.06);}
+.badge.g{border-color:rgba(52,211,153,.3);color:var(--green);background:rgba(52,211,153,.06);}
+
+/* ─── CONTENT WRAPPER ─── */
+.content{padding:3rem 4.5rem 5rem;max-width:1060px;}
+
+/* ─── SECTIONS ─── */
+section{margin-bottom:4.5rem;scroll-margin-top:2rem;}
+
+/* ─── SECTION HEADER ─── */
+.sh{
+  display:flex;align-items:center;gap:.9rem;
+  margin-bottom:1.8rem;padding-bottom:.9rem;
+  border-bottom:1px solid var(--border);
+}
+.sh-num{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;
+  color:var(--amber);background:var(--amber-glow);
+  border:1px solid rgba(245,158,11,.25);
+  padding:.2rem .55rem;border-radius:3px;white-space:nowrap;
+}
+.sh h2{
+  font-family:var(--display);font-size:1.25rem;font-weight:700;
+  color:var(--text);letter-spacing:-.015em;
+}
+h3{
+  font-family:var(--display);font-size:1rem;font-weight:600;
+  color:var(--blue);margin:2rem 0 .7rem;letter-spacing:-.01em;
+}
+h4{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  color:var(--amber);text-transform:uppercase;letter-spacing:.12em;
+  margin:1.4rem 0 .5rem;
+}
+p{color:var(--text2);margin-bottom:.9rem;font-size:14.5px;}
+p strong{color:var(--text);font-weight:600;}
+ul,ol{color:var(--text2);padding-left:1.4rem;margin-bottom:.9rem;}
+li{font-size:14.5px;margin-bottom:.25rem;}
+li strong{color:var(--text);font-weight:600;}
+
+/* ─── CODE BLOCKS ─── */
+pre{
+  background:var(--bg);border:1px solid var(--border2);border-radius:6px;
+  padding:1.3rem 1.5rem;overflow-x:auto;margin:1rem 0;
+  position:relative;
+}
+pre[data-lang]::before{
+  content:attr(data-lang);position:absolute;top:.5rem;right:.8rem;
+  font-family:var(--mono);font-size:9px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--text3);
+}
+code{font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#93c5fd;}
+p code,li code,td code{
+  background:rgba(147,197,253,.07);border:1px solid rgba(147,197,253,.15);
+  border-radius:3px;padding:.08em .35em;font-size:12px;color:#7dd3fc;
+}
+.kw{color:var(--violet);}
+.str{color:var(--green);}
+.cm{color:var(--text3);font-style:italic;}
+.fn{color:var(--amber);}
+.num{color:var(--cyan);}
+.type{color:#f9a8d4;}
+
+/* ─── CALLOUTS ─── */
+.call{
+  border-left:2px solid var(--blue-dim);
+  background:rgba(96,165,250,.05);
+  border-radius:0 5px 5px 0;
+  padding:.9rem 1.2rem;margin:1.1rem 0;
+}
+.call.warn{border-color:var(--amber);background:var(--amber-glow);}
+.call.danger{border-color:var(--rose);background:rgba(251,113,133,.05);}
+.call.success{border-color:var(--green);background:rgba(52,211,153,.05);}
+.call.purple{border-color:var(--violet);background:rgba(167,139,250,.05);}
+.call-title{
+  font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.15em;margin-bottom:.35rem;
+}
+.call.warn .call-title{color:var(--amber);}
+.call.danger .call-title{color:var(--rose);}
+.call.success .call-title{color:var(--green);}
+.call.purple .call-title{color:var(--violet);}
+.call .call-title{color:var(--blue);}
+.call p{margin-bottom:0;font-size:13.5px;}
+
+/* ─── TABLES ─── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:1.1rem 0;}
+.tbl th{
+  text-align:left;padding:.65rem 1rem;
+  font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--text3);background:var(--bg2);border-bottom:1px solid var(--border2);
+}
+.tbl td{
+  padding:.6rem 1rem;border-bottom:1px solid var(--border);
+  color:var(--text2);vertical-align:top;font-size:13.5px;
+}
+.tbl td:first-child{
+  font-family:var(--mono);font-size:11.5px;color:var(--amber);white-space:nowrap;
+}
+.tbl tr:hover td{background:rgba(255,255,255,.015);}
+.tbl tr:last-child td{border-bottom:none;}
+
+/* ─── GRID LAYOUTS ─── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1.1rem 0;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin:1.1rem 0;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin:1.1rem 0;}
+
+/* ─── CARDS ─── */
+.card{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:7px;padding:1.1rem 1.2rem;
+}
+.card-title{
+  font-family:var(--mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.12em;margin-bottom:.6rem;padding-bottom:.5rem;
+  border-bottom:1px solid var(--border);
+}
+.card p{font-size:13px;margin-bottom:0;}
+.card ul{font-size:13px;margin-bottom:0;}
+
+/* ─── ARCHITECTURE DIAGRAM ─── */
+.arch{
+  border:1px solid var(--border2);border-radius:8px;
+  overflow:hidden;margin:1.4rem 0;
+}
+.arch-row{
+  display:grid;grid-template-columns:140px 1fr;
+  border-bottom:1px solid var(--border);
+}
+.arch-row:last-child{border-bottom:none;}
+.arch-label{
+  padding:.85rem 1rem;
+  font-family:var(--mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.1em;display:flex;align-items:center;
+  border-right:1px solid var(--border);
+  background:var(--bg2);
+}
+.arch-body{
+  padding:.85rem 1.2rem;background:var(--bg3);
+  display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;
+}
+.chip{
+  font-family:var(--mono);font-size:11px;
+  padding:.22rem .65rem;border-radius:100px;border:1px solid;
+  white-space:nowrap;
+}
+.arch-note{font-size:12px;color:var(--text3);margin-left:.3rem;}
+
+/* ─── FLOW DIAGRAM ─── */
+.flow{display:flex;flex-direction:column;gap:0;margin:1.4rem 0;}
+.fstep{display:flex;gap:1rem;}
+.fconn{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+.fdot{
+  width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-family:var(--mono);font-size:10px;font-weight:600;
+  border:1px solid;flex-shrink:0;z-index:1;
+}
+.fline{width:1px;flex:1;min-height:16px;background:var(--border);margin:2px 0;}
+.fstep:last-child .fline{display:none;}
+.fbody{padding-bottom:1.6rem;flex:1;}
+.ftitle{
+  font-size:13.5px;font-weight:600;color:var(--text);
+  margin-bottom:.3rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+}
+.ftag{
+  font-family:var(--mono);font-size:9px;padding:.15rem .5rem;
+  border-radius:3px;text-transform:uppercase;letter-spacing:.1em;
+}
+.fbody p{font-size:13.5px;}
+
+/* ─── FORK ─── */
+.fork{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:.8rem 0;}
+.fork-box{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;padding:1rem 1.1rem;
+}
+.fork-label{
+  font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.12em;margin-bottom:.6rem;padding-bottom:.4rem;
+  border-bottom:1px solid var(--border);
+}
+.fork-box ul{margin-bottom:0;list-style:none;padding:0;}
+.fork-box li{
+  font-size:12.5px;color:var(--text2);padding:.15rem 0;
+  display:flex;align-items:flex-start;gap:.4rem;
+}
+.fork-box li::before{content:'›';color:var(--text3);flex-shrink:0;}
+
+/* ─── PIPELINE STAGES ─── */
+.pipeline{
+  display:flex;align-items:stretch;gap:0;
+  margin:1.3rem 0;overflow-x:auto;padding-bottom:.3rem;
+}
+.pipe-stage{
+  flex:1;min-width:110px;
+  background:var(--bg3);border:1px solid var(--border);
+  padding:.8rem .9rem;text-align:center;position:relative;
+  margin-right:-1px;
+}
+.pipe-stage:first-child{border-radius:6px 0 0 6px;}
+.pipe-stage:last-child{border-radius:0 6px 6px 0;}
+.pipe-stage::after{
+  content:'›';position:absolute;right:-10px;top:50%;
+  transform:translateY(-50%);color:var(--text3);font-size:16px;z-index:2;
+}
+.pipe-stage:last-child::after{display:none;}
+.pipe-stage-label{
+  font-family:var(--mono);font-size:9px;text-transform:uppercase;
+  letter-spacing:.1em;margin-bottom:.3rem;display:block;
+}
+.pipe-stage-name{font-size:12px;font-weight:600;color:var(--text);line-height:1.3;}
+
+/* ─── K8S SPEC BLOCKS ─── */
+.spec-block{
+  border:1px solid var(--border);border-radius:6px;
+  overflow:hidden;margin:1rem 0;
+}
+.spec-header{
+  background:var(--bg2);padding:.6rem 1rem;
+  font-family:var(--mono);font-size:10px;color:var(--text3);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.5rem;
+}
+.spec-header .fname{color:var(--amber);}
+.spec-header .ftype{color:var(--text3);}
+.spec-block pre{border:none;border-radius:0;margin:0;background:var(--bg);}
+
+/* ─── METRIC CARDS ─── */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin:1.2rem 0;}
+.metric{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;padding:.9rem 1rem;
+}
+.metric-val{
+  font-family:var(--mono);font-size:1.4rem;font-weight:600;
+  color:var(--amber);line-height:1;margin-bottom:.3rem;display:block;
+}
+.metric-label{font-size:12px;color:var(--text3);}
+
+/* ─── TIMELINE ─── */
+.timeline{display:flex;flex-direction:column;gap:0;margin:1.3rem 0;}
+.tl-item{display:flex;gap:1rem;}
+.tl-left{
+  display:flex;flex-direction:column;align-items:center;
+  width:80px;min-width:80px;
+}
+.tl-badge{
+  font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.1em;padding:.2rem .5rem;border-radius:3px;
+  border:1px solid;text-align:center;white-space:nowrap;
+}
+.tl-vline{width:1px;flex:1;min-height:20px;background:var(--border);margin:3px 0;}
+.tl-item:last-child .tl-vline{display:none;}
+.tl-body{padding-bottom:1.4rem;flex:1;}
+.tl-title{font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:.3rem;}
+.tl-body ul{font-size:13px;margin-bottom:0;}
+
+/* ─── DECISION MATRIX ─── */
+.matrix{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:7px;overflow:hidden;margin:1.2rem 0;
+}
+
+/* ─── FOOTER ─── */
+footer{
+  border-top:1px solid var(--border);
+  padding:1.6rem 4.5rem;margin-left:var(--nav-w);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:.8rem;
+}
+footer span{font-family:var(--mono);font-size:10.5px;color:var(--text3);}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:960px){
+  .nav{display:none;}
+  .main,footer{margin-left:0;}
+  .content,.hero{padding-left:1.5rem;padding-right:1.5rem;}
+  .g2,.g3,.g4,.fork,.metrics{grid-template-columns:1fr;}
+  #prog{left:0;}
+}
+</style>
+</head>
+<body>
+<div id="prog"></div>
+
+<!-- ══ SIDENAV ══ -->
+<nav class="nav">
+  <div class="nav-brand">
+    <span class="eyebrow">Architecture Spec</span>
+    <span class="name">Conversational Analytics Platform</span>
+    <span class="version">v2.0 · Product-Ready · 2024</span>
+  </div>
+
+  <span class="nav-group-label">Foundation</span>
+  <a href="#overview"><span class="n">00</span>System Overview</a>
+  <a href="#topology"><span class="n">01</span>Service Topology</a>
+  <a href="#obt"><span class="n">02</span>OBT Data Design</a>
+
+  <span class="nav-group-label">Ingestion & Inference</span>
+  <a href="#pipeline"><span class="n">03</span>Data Ingestion Pipeline</a>
+  <a href="#llm"><span class="n">04</span>vLLM Cluster</a>
+  <a href="#rag"><span class="n">05</span>RAG Engine</a>
+
+  <span class="nav-group-label">Orchestration</span>
+  <a href="#api"><span class="n">06</span>FastAPI Service</a>
+  <a href="#router"><span class="n">07</span>Intent Router FSM</a>
+  <a href="#state"><span class="n">08</span>Redis State Layer</a>
+  <a href="#reflection"><span class="n">09</span>Agentic Reflection</a>
+
+  <span class="nav-group-label">Platform</span>
+  <a href="#security"><span class="n">10</span>Security & AuthZ</a>
+  <a href="#multitenancy"><span class="n">11</span>Multi-Tenancy</a>
+  <a href="#k8s"><span class="n">12</span>Kubernetes Deploy</a>
+  <a href="#cicd"><span class="n">13</span>CI/CD Pipeline</a>
+  <a href="#observability"><span class="n">14</span>Observability</a>
+  <a href="#dr"><span class="n">15</span>HA & DR</a>
+  <a href="#perf"><span class="n">16</span>Performance</a>
+  <a href="#api-contract"><span class="n">17</span>API Contract</a>
+  <a href="#testing"><span class="n">18</span>Testing Strategy</a>
+
+  <div class="nav-spacer"></div>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-tag">Product Architecture Document · Deep Dive</div>
+  <h1>Conversational Analytics<br/><em>Platform Architecture</em></h1>
+  <p class="hero-sub">A complete product-ready engineering specification for a stateful, multilingual Text-to-SQL analytics platform built on Qwen, Vanna AI, StarRocks OBT, and Kubernetes.</p>
+  <div class="hero-badges">
+    <span class="badge a">Qwen2.5-Coder-7B</span>
+    <span class="badge a">vLLM Cluster</span>
+    <span class="badge">StarRocks OBT</span>
+    <span class="badge">Vanna AI RAG</span>
+    <span class="badge b">Kubernetes + Helm</span>
+    <span class="badge b">Redis Cluster</span>
+    <span class="badge g">Multi-Tenant</span>
+    <span class="badge g">OAuth2/OIDC</span>
+    <span class="badge">OpenTelemetry</span>
+    <span class="badge">GitOps</span>
+  </div>
+</header>
+
+<div class="content">
+
+<!-- ══════════════════════════════════════════════
+     00 — SYSTEM OVERVIEW
+══════════════════════════════════════════════ -->
+<section id="overview">
+<div class="sh"><span class="sh-num">00</span><h2>System Overview & Design Principles</h2></div>
+
+<p>This document specifies the complete production architecture for a <strong>stateful, multilingual Conversational Analytics Platform</strong> that translates natural-language questions into analytical queries across a StarRocks One Big Table (OBT). It is designed for multi-tenant enterprise deployment, targeting sub-3-second end-to-end latency at P95 with 99.9% availability SLO.</p>
+
+<div class="g4">
+  <div class="card">
+    <div class="card-title" style="color:var(--amber)">Latency Target</div>
+    <p><strong style="font-size:1.3rem;color:var(--amber);font-family:var(--mono)">P95 &lt;3s</strong><br/>End-to-end: prompt → chart rendered</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--blue)">Availability SLO</div>
+    <p><strong style="font-size:1.3rem;color:var(--blue);font-family:var(--mono)">99.9%</strong><br/>≤8.7 hrs/year planned downtime</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--green)">Throughput</div>
+    <p><strong style="font-size:1.3rem;color:var(--green);font-family:var(--mono)">500 RPS</strong><br/>Concurrent queries per region</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--violet)">SQL Accuracy</div>
+    <p><strong style="font-size:1.3rem;color:var(--violet);font-family:var(--mono)">&gt;92%</strong><br/>Correct SQL on first attempt (RAG + OBT)</p>
+  </div>
+</div>
+
+<h3>Guiding Design Principles</h3>
+<div class="g2">
+  <div class="card">
+    <div class="card-title">No JOIN Hallucinations</div>
+    <p>The OBT schema forces the model to emit only <code>SELECT … WHERE … GROUP BY</code> patterns. Multi-table JOIN paths — the primary source of Text-to-SQL failure — are eliminated by design.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Stateful by Default</div>
+    <p>Every turn reads and writes to a Redis session store. Context persists across chart updates, filter refinements, and follow-up questions without enlarging the LLM context window.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Separation of Concerns</div>
+    <p>Intent classification, SQL generation, Plotly code generation, and validation are independent calls. Each is independently retryable, observable, and replaceable.</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Defense in Depth</div>
+    <p>Security is enforced at four independent layers: API gateway, application, database (read-only SA), and network policy. A compromise at any single layer does not grant data access.</p>
+  </div>
+</div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     01 — SERVICE TOPOLOGY
+══════════════════════════════════════════════ -->
+<section id="topology">
+<div class="sh"><span class="sh-num">01</span><h2>Service Topology & Inter-Service Communication</h2></div>
+
+<p>The platform is decomposed into eight independently deployable services, each with its own scaling policy and health contract. Services communicate over internal Kubernetes DNS with mTLS enforced by Istio.</p>
+
+<div class="arch">
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--blue)">Edge / CDN</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--blue);color:var(--blue)">Cloudflare</span>
+      <span class="chip" style="border-color:var(--blue);color:var(--blue)">API Gateway (Kong)</span>
+      <span class="chip" style="border-color:var(--blue);color:var(--blue)">WAF Rules</span>
+      <span class="chip" style="border-color:var(--blue);color:var(--blue)">Rate Limiter</span>
+      <span class="arch-note">→ JWT validation, tenant routing, DDoS mitigation at edge</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--cyan)">Frontend</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--cyan);color:var(--cyan)">Vite + React (SPA)</span>
+      <span class="chip" style="border-color:var(--cyan);color:var(--cyan)">react-plotly.js</span>
+      <span class="chip" style="border-color:var(--cyan);color:var(--cyan)">WebSocket Client</span>
+      <span class="arch-note">→ Statically served from CDN; real-time streaming via WS</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--amber)">Orchestration</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--amber);color:var(--amber)">query-service (FastAPI)</span>
+      <span class="chip" style="border-color:var(--amber);color:var(--amber)">session-service (FastAPI)</span>
+      <span class="chip" style="border-color:var(--amber);color:var(--amber)">Vanna Agent</span>
+      <span class="arch-note">→ Main business logic, SQL orchestration, Plotly gen</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--rose)">Intent / Routing</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--rose);color:var(--rose)">intent-service (FastAPI)</span>
+      <span class="chip" style="border-color:var(--rose);color:var(--rose)">Qwen @ temp=0</span>
+      <span class="arch-note">→ Isolated microservice; horizontally scaled independently of SQL gen</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--violet)">Inference</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--violet);color:var(--violet)">vLLM Primary (L4)</span>
+      <span class="chip" style="border-color:var(--violet);color:var(--violet)">vLLM Shadow (fallback)</span>
+      <span class="chip" style="border-color:var(--violet);color:var(--violet)">Milvus Vector DB</span>
+      <span class="arch-note">→ OpenAI-compatible API; batched inference; GPU autoscaling</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--amber)">State / Cache</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--amber);color:var(--amber)">Redis Cluster (6-node)</span>
+      <span class="chip" style="border-color:var(--amber);color:var(--amber)">Redis Sentinel</span>
+      <span class="arch-note">→ Session context, DataFrame cache, intent history, rate-limit counters</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--green)">Data</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--green);color:var(--green)">StarRocks FE×3</span>
+      <span class="chip" style="border-color:var(--green);color:var(--green)">StarRocks BE×6</span>
+      <span class="chip" style="border-color:var(--green);color:var(--green)">Apache Spark</span>
+      <span class="chip" style="border-color:var(--green);color:var(--green)">Apache Kafka</span>
+      <span class="arch-note">→ OBT analytics layer; Spark ingestion; Kafka CDC feed</span>
+    </div>
+  </div>
+  <div class="arch-row">
+    <div class="arch-label" style="color:var(--slate)">Observability</div>
+    <div class="arch-body">
+      <span class="chip" style="border-color:var(--slate);color:var(--slate)">OpenTelemetry Collector</span>
+      <span class="chip" style="border-color:var(--slate);color:var(--slate)">Prometheus</span>
+      <span class="chip" style="border-color:var(--slate);color:var(--slate)">Grafana</span>
+      <span class="chip" style="border-color:var(--slate);color:var(--slate)">Jaeger Tracing</span>
+      <span class="arch-note">→ Distributed traces, metrics, structured logs, alerting</span>
+    </div>
+  </div>
+</div>
+
+<h3>Service Communication Matrix</h3>
+<table class="tbl">
+  <thead><tr><th>Caller</th><th>Callee</th><th>Protocol</th><th>Auth</th><th>Timeout / Retry</th></tr></thead>
+  <tbody>
+    <tr><td>React SPA</td><td>Kong API Gateway</td><td>HTTPS + WebSocket</td><td>JWT (OIDC)</td><td>30s / 0</td></tr>
+    <tr><td>Kong Gateway</td><td>query-service</td><td>HTTP/2 gRPC</td><td>mTLS + Service Account</td><td>28s / 1</td></tr>
+    <tr><td>query-service</td><td>intent-service</td><td>HTTP/2 internal</td><td>mTLS</td><td>2s / 2 fast-fail</td></tr>
+    <tr><td>query-service</td><td>vLLM (OpenAI API)</td><td>HTTP/1.1 streaming</td><td>API Key (k8s secret)</td><td>25s / 1</td></tr>
+    <tr><td>query-service</td><td>Milvus</td><td>gRPC</td><td>mTLS</td><td>500ms / 3</td></tr>
+    <tr><td>query-service</td><td>StarRocks</td><td>MySQL protocol</td><td>TLS + read-only SA</td><td>15s / 1</td></tr>
+    <tr><td>query-service</td><td>Redis Cluster</td><td>RESP3 TLS</td><td>ACL + password</td><td>200ms / 3</td></tr>
+    <tr><td>Spark jobs</td><td>StarRocks BE</td><td>StarRocks Spark Connector</td><td>TLS + write SA</td><td>600s / 3</td></tr>
+    <tr><td>Kafka Consumer</td><td>StarRocks BE (stream)</td><td>StarRocks Routine Load</td><td>SASL + TLS</td><td>stream</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     02 — OBT DATA DESIGN
+══════════════════════════════════════════════ -->
+<section id="obt">
+<div class="sh"><span class="sh-num">02</span><h2>One Big Table (OBT) Schema Design</h2></div>
+
+<p>The OBT is the cornerstone of this architecture's SQL accuracy. By pre-joining all dimensional attributes into a single wide table, we eliminate the primary failure mode of Text-to-SQL systems: incorrect or missing JOIN predicates. The trade-off is controlled data redundancy, which is acceptable in an analytics-read workload.</p>
+
+<div class="call warn">
+  <div class="call-title">Why OBT Eliminates Hallucinations</div>
+  <p>Standard star-schema prompting requires the model to know table relationships, foreign keys, and JOIN cardinalities — none of which are reliably inferable from column names alone. OBT reduces the entire schema to <code>SELECT [metrics] FROM analytics_obt WHERE [dimensions]</code>. There is exactly <strong>one table</strong> for the model to reason about.</p>
+</div>
+
+<h3>Primary OBT Table Definition</h3>
+<pre data-lang="sql"><code><span class="kw">CREATE TABLE</span> analytics_obt (
+  <span class="cm">-- ─── Partition & Bucketing Keys ────────────────────────────────</span>
+  event_date          DATE           <span class="kw">NOT NULL</span>,    <span class="cm">-- PARTITION KEY</span>
+  tenant_id           VARCHAR(<span class="num">36</span>)   <span class="kw">NOT NULL</span>,    <span class="cm">-- row-level tenant isolation</span>
+
+  <span class="cm">-- ─── Time Dimensions ────────────────────────────────────────────</span>
+  event_datetime      DATETIME       <span class="kw">NOT NULL</span>,
+  event_year          SMALLINT,
+  event_quarter       TINYINT,
+  event_month         TINYINT,
+  event_week_of_year  TINYINT,
+  event_day_of_week   TINYINT,
+  is_weekend          BOOLEAN,
+
+  <span class="cm">-- ─── Geography Dimensions ───────────────────────────────────────</span>
+  country_code        VARCHAR(<span class="num">3</span>),
+  region_name         VARCHAR(<span class="num">128</span>),
+  province_name       VARCHAR(<span class="num">128</span>),
+  district_name       VARCHAR(<span class="num">128</span>),
+  store_id            BIGINT,
+  store_name          VARCHAR(<span class="num">256</span>),
+  store_tier          VARCHAR(<span class="num">32</span>),    <span class="cm">-- 'flagship','standard','kiosk'</span>
+
+  <span class="cm">-- ─── Product Dimensions ─────────────────────────────────────────</span>
+  product_id          BIGINT,
+  product_name        VARCHAR(<span class="num">512</span>),
+  sku_code            VARCHAR(<span class="num">64</span>),
+  category_l1         VARCHAR(<span class="num">128</span>),
+  category_l2         VARCHAR(<span class="num">128</span>),
+  category_l3         VARCHAR(<span class="num">128</span>),
+  brand_name          VARCHAR(<span class="num">128</span>),
+  unit_cost           DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+
+  <span class="cm">-- ─── Customer Dimensions ────────────────────────────────────────</span>
+  customer_id         BIGINT,
+  customer_segment    VARCHAR(<span class="num">64</span>),   <span class="cm">-- 'VIP','regular','new'</span>
+  customer_age_band   VARCHAR(<span class="num">16</span>),   <span class="cm">-- '18-24','25-34', etc.</span>
+  customer_gender     VARCHAR(<span class="num">16</span>),
+  acquisition_channel VARCHAR(<span class="num">64</span>),
+
+  <span class="cm">-- ─── Sales Agent Dimensions ─────────────────────────────────────</span>
+  agent_id            BIGINT,
+  agent_name          VARCHAR(<span class="num">256</span>),
+  agent_team          VARCHAR(<span class="num">128</span>),
+  agent_region        VARCHAR(<span class="num">128</span>),
+
+  <span class="cm">-- ─── Fact / Measures ────────────────────────────────────────────</span>
+  order_id            BIGINT         <span class="kw">NOT NULL</span>,
+  order_line_id       BIGINT         <span class="kw">NOT NULL</span>,
+  quantity            INT,
+  unit_price          DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  gross_revenue       DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  discount_amount     DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  net_revenue         DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  cogs                DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  gross_margin        DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+  return_flag         BOOLEAN,
+  return_amount       DECIMAL(<span class="num">18</span>,<span class="num">4</span>),
+
+  <span class="cm">-- ─── Metadata ───────────────────────────────────────────────────</span>
+  ingested_at         DATETIME,
+  source_system       VARCHAR(<span class="num">64</span>),
+  _row_hash           VARCHAR(<span class="num">64</span>)    <span class="cm">-- dedup key from source</span>
+)
+<span class="kw">DUPLICATE KEY</span>(event_date, tenant_id, order_id, order_line_id)
+<span class="kw">PARTITION BY RANGE</span>(event_date) (
+  <span class="kw">START</span> (<span class="str">"2022-01-01"</span>) <span class="kw">END</span> (<span class="str">"2027-01-01"</span>) <span class="kw">EVERY</span> (<span class="kw">INTERVAL</span> <span class="num">1</span> MONTH)
+)
+<span class="kw">DISTRIBUTED BY HASH</span>(tenant_id, store_id) <span class="kw">BUCKETS</span> <span class="num">128</span>
+<span class="kw">PROPERTIES</span> (
+  <span class="str">"replication_num"</span> = <span class="str">"3"</span>,
+  <span class="str">"compression"</span>     = <span class="str">"ZSTD"</span>,
+  <span class="str">"enable_persistent_index"</span> = <span class="str">"true"</span>
+);</code></pre>
+
+<h3>Materialised Views for Common Aggregations</h3>
+<p>StarRocks supports <strong>synchronous materialised views</strong> that are automatically maintained on write. Pre-computing high-frequency aggregations reduces query latency for common patterns without changing the OBT interface the model interacts with.</p>
+
+<pre data-lang="sql"><code><span class="cm">-- Daily revenue rollup — covers 80% of "revenue by day" queries</span>
+<span class="kw">CREATE MATERIALIZED VIEW</span> mv_daily_revenue
+<span class="kw">REFRESH ASYNC EVERY</span>(<span class="kw">INTERVAL</span> <span class="num">1</span> HOUR)
+<span class="kw">AS</span>
+<span class="kw">SELECT</span>
+  event_date, tenant_id, province_name, category_l1,
+  <span class="fn">SUM</span>(gross_revenue) <span class="kw">AS</span> total_gross,
+  <span class="fn">SUM</span>(net_revenue)   <span class="kw">AS</span> total_net,
+  <span class="fn">SUM</span>(quantity)      <span class="kw">AS</span> total_units,
+  <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> order_id) <span class="kw">AS</span> order_count
+<span class="kw">FROM</span> analytics_obt
+<span class="kw">GROUP BY</span> event_date, tenant_id, province_name, category_l1;
+
+<span class="cm">-- Monthly KPI rollup — used for YoY comparison queries</span>
+<span class="kw">CREATE MATERIALIZED VIEW</span> mv_monthly_kpi
+<span class="kw">REFRESH ASYNC EVERY</span>(<span class="kw">INTERVAL</span> <span class="num">6</span> HOUR)
+<span class="kw">AS</span>
+<span class="kw">SELECT</span>
+  event_year, event_month, tenant_id, category_l1, brand_name,
+  <span class="fn">SUM</span>(net_revenue) <span class="kw">AS</span> monthly_revenue,
+  <span class="fn">AVG</span>(gross_margin) <span class="kw">AS</span> avg_margin,
+  <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> customer_id) <span class="kw">AS</span> unique_customers
+<span class="kw">FROM</span> analytics_obt
+<span class="kw">GROUP BY</span> event_year, event_month, tenant_id, category_l1, brand_name;</code></pre>
+
+<div class="call success">
+  <div class="call-title">Query Rewrite</div>
+  <p>StarRocks' query planner automatically rewrites eligible queries against materialised views at runtime — the LLM always targets <code>analytics_obt</code>, and the engine transparently serves from the fastest available materialised view.</p>
+</div>
+
+<h3>Partitioning & Bucketing Strategy</h3>
+<table class="tbl">
+  <thead><tr><th>Strategy</th><th>Key</th><th>Rationale</th></tr></thead>
+  <tbody>
+    <tr><td>Range Partition</td><td>event_date (monthly)</td><td>Enables partition pruning on all date-filtered queries; reduces scan from 100% to &lt;5% of data for typical 30-day windows</td></tr>
+    <tr><td>Hash Distribution</td><td>tenant_id + store_id</td><td>Co-locates all data for a tenant+store pair on the same BE node; eliminates shuffle for GROUP BY store queries</td></tr>
+    <tr><td>Colosseum Buckets</td><td>128 buckets</td><td>Sized for 6 BE nodes with room to scale to 24; each bucket ≈ 200MB compressed at 5TB total</td></tr>
+    <tr><td>ZSTD Compression</td><td>all columns</td><td>Typical 4–6× compression ratio for analytics data; decompression CPU cost is sub-millisecond on L4</td></tr>
+    <tr><td>Persistent Index</td><td>primary key</td><td>Enables O(1) point lookups for dedup checks during ingestion without scanning BTree pages</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     03 — DATA INGESTION PIPELINE
+══════════════════════════════════════════════ -->
+<section id="pipeline">
+<div class="sh"><span class="sh-num">03</span><h2>Data Ingestion Pipeline</h2></div>
+
+<p>The ingestion pipeline maintains a fresh OBT through two complementary flows: a <strong>batch ETL</strong> path via Spark for historical loads and large-scale reprocessing, and a <strong>streaming CDC</strong> path via Kafka for near-real-time updates. Both paths write through StarRocks' native connectors.</p>
+
+<div class="pipeline">
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--blue)">Source</span><div class="pipe-stage-name">OLTP DBs / APIs / S3</div></div>
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--amber)">Extract</span><div class="pipe-stage-name">Debezium CDC / Spark Read</div></div>
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--rose)">Transform</span><div class="pipe-stage-name">Spark OBT Flatten Job</div></div>
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--violet)">Validate</span><div class="pipe-stage-name">Great Expectations</div></div>
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--green)">Load</span><div class="pipe-stage-name">StarRocks Connector / Routine Load</div></div>
+  <div class="pipe-stage"><span class="pipe-stage-label" style="color:var(--cyan)">Refresh</span><div class="pipe-stage-name">MV Async Refresh</div></div>
+</div>
+
+<h3>Spark OBT Flatten Job</h3>
+<p>The core transformation logic joins all source dimension tables onto the fact table, computes derived columns, and writes the flattened output directly to StarRocks partitions. The job is idempotent — re-running for any date range produces identical output.</p>
+
+<pre data-lang="pyspark"><code><span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession
+<span class="kw">from</span> pyspark.sql.functions <span class="kw">import</span> col, to_date, md5, concat_ws, year, month, weekofyear, dayofweek, when
+
+spark = SparkSession.builder \
+    .appName(<span class="str">"OBT-Flatten-Daily"</span>) \
+    .config(<span class="str">"spark.starrocks.fe.http.url"</span>, <span class="str">"http://starrocks-fe:8030"</span>) \
+    .config(<span class="str">"spark.starrocks.user"</span>, <span class="str">"etl_writer"</span>) \
+    .getOrCreate()
+
+<span class="cm"># ── 1. Load source tables from Data Lake (Hudi/Delta on S3) ──</span>
+orders     = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/orders"</span>)
+order_lines = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/order_lines"</span>)
+products   = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/products"</span>)
+stores     = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/stores"</span>)
+customers  = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/customers"</span>)
+agents     = spark.read.format(<span class="str">"delta"</span>).load(<span class="str">"s3://lake/agents"</span>)
+
+<span class="cm"># ── 2. Flatten join (broadcast small dims, shuffle large fact) ──</span>
+obt = order_lines \
+    .join(orders,    <span class="str">"order_id"</span>,   <span class="str">"inner"</span>) \
+    .join(products.hint(<span class="str">"broadcast"</span>),  <span class="str">"product_id"</span>, <span class="str">"left"</span>) \
+    .join(stores.hint(<span class="str">"broadcast"</span>),    <span class="str">"store_id"</span>,   <span class="str">"left"</span>) \
+    .join(customers.hint(<span class="str">"broadcast"</span>), <span class="str">"customer_id"</span>,<span class="str">"left"</span>) \
+    .join(agents.hint(<span class="str">"broadcast"</span>),   <span class="str">"agent_id"</span>,   <span class="str">"left"</span>)
+
+<span class="cm"># ── 3. Derive time columns ──</span>
+obt = obt.withColumns({
+    <span class="str">"event_date"</span>:       to_date(<span class="str">"event_datetime"</span>),
+    <span class="str">"event_year"</span>:       year(<span class="str">"event_datetime"</span>),
+    <span class="str">"event_month"</span>:      month(<span class="str">"event_datetime"</span>),
+    <span class="str">"event_week_of_year"</span>: weekofyear(<span class="str">"event_datetime"</span>),
+    <span class="str">"event_day_of_week"</span>: dayofweek(<span class="str">"event_datetime"</span>),
+    <span class="str">"is_weekend"</span>:       dayofweek(<span class="str">"event_datetime"</span>).isin([<span class="num">1</span>,<span class="num">7</span>]),
+    <span class="str">"_row_hash"</span>:        md5(concat_ws(<span class="str">"|"</span>, col(<span class="str">"order_id"</span>), col(<span class="str">"order_line_id"</span>))),
+    <span class="str">"ingested_at"</span>:      current_timestamp(),
+})
+
+<span class="cm"># ── 4. Write to StarRocks (overwrite target partition only) ──</span>
+obt.write.format(<span class="str">"starrocks"</span>) \
+    .option(<span class="str">"starrocks.table.identifier"</span>, <span class="str">"analytics.analytics_obt"</span>) \
+    .option(<span class="str">"starrocks.write.properties.transaction_timeout_sec"</span>, <span class="str">"3600"</span>) \
+    .option(<span class="str">"starrocks.write.properties.partial_update"</span>, <span class="str">"false"</span>) \
+    .mode(<span class="str">"overwrite"</span>) \
+    .partitionBy(<span class="str">"event_date"</span>, <span class="str">"tenant_id"</span>) \
+    .save()</code></pre>
+
+<h3>Kafka CDC Streaming Path</h3>
+<p>For near-real-time updates (order status changes, returns), StarRocks' <strong>Routine Load</strong> feature creates a persistent Kafka consumer that streams rows directly into the OBT without any intermediate processing layer.</p>
+
+<pre data-lang="sql"><code><span class="kw">CREATE ROUTINE LOAD</span> analytics.kafka_obt_load <span class="kw">ON</span> analytics_obt
+<span class="kw">COLUMNS TERMINATED BY</span> <span class="str">","</span>,
+<span class="kw">COLUMNS</span> (event_date, tenant_id, order_id, order_line_id,
+          net_revenue, quantity, return_flag, ingested_at)
+<span class="kw">PROPERTIES</span> (
+    <span class="str">"max_batch_interval"</span> = <span class="str">"10"</span>,      <span class="cm">-- seconds; controls CDC latency</span>
+    <span class="str">"max_batch_rows"</span>     = <span class="str">"100000"</span>,
+    <span class="str">"format"</span>             = <span class="str">"json"</span>,
+    <span class="str">"strip_outer_array"</span>  = <span class="str">"true"</span>
+)
+<span class="kw">FROM KAFKA</span> (
+    <span class="str">"kafka_broker_list"</span>  = <span class="str">"kafka-0:9092,kafka-1:9092,kafka-2:9092"</span>,
+    <span class="str">"kafka_topic"</span>        = <span class="str">"analytics.obt.cdc"</span>,
+    <span class="str">"kafka_partitions"</span>   = <span class="str">"0,1,2,3,4,5"</span>,
+    <span class="str">"property.security.protocol"</span> = <span class="str">"SASL_SSL"</span>
+);</code></pre>
+
+<h3>Data Quality Gates</h3>
+<p>Great Expectations suites run as a Spark post-action after each batch load. Failures trigger an alert and prevent the partition from being served to the query engine until resolved.</p>
+<div class="g3">
+  <div class="card"><div class="card-title" style="color:var(--rose)">Completeness</div><p><code>net_revenue NOT NULL</code> on all rows; no orphaned order lines without a parent order.</p></div>
+  <div class="card"><div class="card-title" style="color:var(--amber)">Range Checks</div><p><code>net_revenue BETWEEN -50000 AND 500000</code>; <code>quantity BETWEEN 1 AND 10000</code>.</p></div>
+  <div class="card"><div class="card-title" style="color:var(--green)">Referential</div><p>All <code>tenant_id</code> values exist in the tenant registry; all <code>store_id</code> values have a matching store record.</p></div>
+</div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     04 — vLLM CLUSTER
+══════════════════════════════════════════════ -->
+<section id="llm">
+<div class="sh"><span class="sh-num">04</span><h2>vLLM Inference Cluster</h2></div>
+
+<p>The inference layer is built on <strong>vLLM</strong> with the OpenAI-compatible server API, hosted on dedicated NVIDIA L4 GPU nodes. It serves two model deployments simultaneously: the primary SQL/Plotly code generator (Qwen2.5-Coder-7B) and the intent classifier (same model, separate deployment with different sampling config).</p>
+
+<h3>vLLM Server Configuration</h3>
+<pre data-lang="yaml"><code><span class="cm"># helm/vllm/values.yaml</span>
+<span class="kw">model:</span>
+  name: <span class="str">qwen2.5-coder-7b-instruct</span>
+  hf_repo: <span class="str">Qwen/Qwen2.5-Coder-7B-Instruct</span>
+  dtype: <span class="str">bfloat16</span>
+  quantization: <span class="kw">null</span>          <span class="cm"># AWQ optional for cost reduction</span>
+  max_model_len: <span class="num">32768</span>
+  gpu_memory_utilization: <span class="num">0.90</span>
+
+<span class="kw">serving:</span>
+  tensor_parallel_size: <span class="num">1</span>      <span class="cm"># 1× L4 24GB sufficient for 7B BF16</span>
+  max_num_seqs: <span class="num">256</span>            <span class="cm"># PagedAttention batch size</span>
+  enable_prefix_caching: <span class="kw">true</span>  <span class="cm"># cache system prompt KV for ~40% TTFT reduction</span>
+  scheduler_delay_factor: <span class="num">0.0</span>
+
+<span class="kw">autoscaling:</span>
+  min_replicas: <span class="num">2</span>
+  max_replicas: <span class="num">8</span>
+  target_gpu_utilization: <span class="num">75</span>  <span class="cm"># %</span>
+  scale_up_cooldown: <span class="str">60s</span>
+  scale_down_cooldown: <span class="str">300s</span>
+
+<span class="kw">resources:</span>
+  requests:
+    nvidia.com/gpu: <span class="num">1</span>
+    memory: <span class="str">32Gi</span>
+    cpu: <span class="str">8</span>
+  limits:
+    nvidia.com/gpu: <span class="num">1</span>
+    memory: <span class="str">40Gi</span></code></pre>
+
+<h3>Prefix Caching Strategy</h3>
+<p>vLLM's prefix caching stores the KV tensors for repeated prompt prefixes (system prompts, DDL context). Since every SQL generation call begins with the same multi-kilobyte system prompt and OBT DDL, prefix caching yields a <strong>35–45% reduction</strong> in Time-To-First-Token for all non-cold-start requests.</p>
+
+<pre data-lang="python"><code><span class="cm"># The system prompt prefix is identical for all tenants (DDL is in the suffix)</span>
+<span class="cm"># vLLM caches KV tensors for this block automatically</span>
+SYSTEM_PROMPT_PREFIX = <span class="str">"""
+You are an expert SQL analyst for a StarRocks analytics database.
+The database contains exactly ONE table: analytics_obt
+You MUST generate only SELECT queries — no DDL, no DML, no subqueries
+unless strictly necessary for the logic.
+Output ONLY the raw SQL. No explanation, no markdown fences.
+Column reference:
+"""</span>
+
+<span class="cm"># The DDL block appended per-request (also cached after first use per tenant)</span>
+<span class="kw">def</span> <span class="fn">build_sql_system_prompt</span>(tenant_ddl_excerpt: str) -> str:
+    <span class="kw">return</span> SYSTEM_PROMPT_PREFIX + tenant_ddl_excerpt</code></pre>
+
+<h3>Model Deployment Split: SQL vs Intent</h3>
+<table class="tbl">
+  <thead><tr><th>Deployment</th><th>Use Case</th><th>Temperature</th><th>Max Tokens</th><th>Timeout</th></tr></thead>
+  <tbody>
+    <tr><td>vllm-sql-gen</td><td>SQL generation + Plotly code gen</td><td>0.1</td><td>2048</td><td>25s</td></tr>
+    <tr><td>vllm-intent</td><td>Intent classification only</td><td>0.0</td><td>16</td><td>2s</td></tr>
+    <tr><td>vllm-reflect</td><td>Agentic reflection loop validation</td><td>0.0</td><td>256</td><td>5s</td></tr>
+  </tbody>
+</table>
+
+<div class="call purple">
+  <div class="call-title">AWQ Quantization Option</div>
+  <p>Applying 4-bit AWQ quantization reduces VRAM from ~14GB to ~5GB per replica, allowing 4 replicas per L4 GPU (24GB) instead of 1. Accuracy benchmarks on the OBT SQL task show a &lt;1.5% quality degradation — acceptable for intent and reflection deployments, optional for SQL gen.</p>
+</div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     05 — RAG ENGINE
+══════════════════════════════════════════════ -->
+<section id="rag">
+<div class="sh"><span class="sh-num">05</span><h2>RAG Engine — Vanna AI Deep Dive</h2></div>
+
+<p>Vanna AI provides the Retrieval-Augmented Generation layer, which enriches every SQL generation call with semantically similar historical question–SQL pairs. The production deployment replaces Vanna's default ChromaDB backend with Milvus for horizontal scalability and tenant isolation.</p>
+
+<h3>Vector Store Schema (Milvus)</h3>
+<pre data-lang="python"><code><span class="kw">from</span> pymilvus <span class="kw">import</span> CollectionSchema, FieldSchema, DataType, Collection
+
+<span class="cm"># One collection per corpus type; tenant_id field enables filtered search</span>
+schema = CollectionSchema(fields=[
+    FieldSchema(<span class="str">"id"</span>,          DataType.VARCHAR,      max_length=<span class="num">64</span>, is_primary=<span class="kw">True</span>),
+    FieldSchema(<span class="str">"tenant_id"</span>,   DataType.VARCHAR,      max_length=<span class="num">36</span>),  <span class="cm"># scalar filter</span>
+    FieldSchema(<span class="str">"corpus_type"</span>, DataType.VARCHAR,      max_length=<span class="num">16</span>),  <span class="cm"># 'ddl','qa','doc'</span>
+    FieldSchema(<span class="str">"content"</span>,     DataType.VARCHAR,      max_length=<span class="num">8192</span>),
+    FieldSchema(<span class="str">"embedding"</span>,   DataType.FLOAT_VECTOR, dim=<span class="num">1024</span>),        <span class="cm"># bge-m3 dim</span>
+    FieldSchema(<span class="str">"created_at"</span>,  DataType.INT64),
+    FieldSchema(<span class="str">"hit_count"</span>,   DataType.INT64),       <span class="cm"># popularity signal</span>
+], description=<span class="str">"Vanna RAG corpus"</span>)
+
+coll = Collection(<span class="str">"vanna_corpus"</span>, schema)
+
+<span class="cm"># HNSW index for sub-10ms ANN search on 1M+ vectors</span>
+coll.create_index(<span class="str">"embedding"</span>, {
+    <span class="str">"index_type"</span>: <span class="str">"HNSW"</span>,
+    <span class="str">"metric_type"</span>: <span class="str">"COSINE"</span>,
+    <span class="str">"params"</span>: {<span class="str">"M"</span>: <span class="num">16</span>, <span class="str">"efConstruction"</span>: <span class="num">200</span>}
+})</code></pre>
+
+<h3>Embedding Model: BGE-M3</h3>
+<p>BGE-M3 is selected over OpenAI Ada because it supports multilingual dense retrieval natively (including Vietnamese), runs on-premise (no egress cost), and achieves comparable BEIR benchmark scores for code and SQL retrieval tasks.</p>
+
+<div class="g2">
+  <div class="card">
+    <div class="card-title" style="color:var(--amber)">Embedding Service</div>
+    <p>BGE-M3 served via <strong>text-embeddings-inference</strong> (Hugging Face TEI) as a sidecar to the vLLM cluster. 1024-dimensional dense vectors with optional sparse colBERT late interaction.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--blue)">Hybrid Search</div>
+    <p>Production retrieval uses <strong>sparse + dense fusion</strong>: BM25 keyword recall + HNSW ANN, ranked by Reciprocal Rank Fusion (RRF). This handles both exact column-name matches and semantic paraphrases.</p>
+  </div>
+</div>
+
+<h3>RAG Retrieval Pipeline</h3>
+<pre data-lang="python"><code><span class="kw">class</span> <span class="type">VannaProductionRAG</span>(VannaBase):
+
+    <span class="kw">async def</span> <span class="fn">get_sql_prompt_context</span>(self, question: str, tenant_id: str) -> dict:
+        <span class="cm"># 1. Embed the user question</span>
+        q_vector = <span class="kw">await</span> self.embed_service.embed(question)  <span class="cm"># BGE-M3</span>
+
+        <span class="cm"># 2. Hybrid search: tenant-scoped, top-K=8 across all corpus types</span>
+        hits = <span class="kw">await</span> self.milvus.hybrid_search(
+            collection=<span class="str">"vanna_corpus"</span>,
+            dense_vector=q_vector,
+            sparse_query=question,           <span class="cm"># BM25 tokenised</span>
+            expr=<span class="str">f"tenant_id == '{tenant_id}'"</span>,
+            limit=<span class="num">8</span>,
+            ranker=<span class="str">"RRF"</span>,                   <span class="cm"># Reciprocal Rank Fusion</span>
+        )
+
+        <span class="cm"># 3. Separate DDL, QA pairs, and documentation fragments</span>
+        ddl_context = [h.content <span class="kw">for</span> h <span class="kw">in</span> hits <span class="kw">if</span> h.corpus_type == <span class="str">"ddl"</span>]
+        qa_examples = [h.content <span class="kw">for</span> h <span class="kw">in</span> hits <span class="kw">if</span> h.corpus_type == <span class="str">"qa"</span>]
+        doc_context  = [h.content <span class="kw">for</span> h <span class="kw">in</span> hits <span class="kw">if</span> h.corpus_type == <span class="str">"doc"</span>]
+
+        <span class="cm"># 4. Increment hit counters asynchronously (popularity signal for future ranking)</span>
+        asyncio.create_task(self.milvus.increment_hits([h.id <span class="kw">for</span> h <span class="kw">in</span> hits]))
+
+        <span class="kw">return</span> {
+            <span class="str">"ddl"</span>:      <span class="str">"\n\n"</span>.join(ddl_context),
+            <span class="str">"examples"</span>: qa_examples,   <span class="cm"># 3-shot examples in prompt</span>
+            <span class="str">"docs"</span>:     <span class="str">"\n"</span>.join(doc_context),
+        }</code></pre>
+
+<h3>Training the Corpus</h3>
+<p>Vanna's corpus is seeded and continuously updated from three sources:</p>
+<table class="tbl">
+  <thead><tr><th>Source</th><th>Corpus Type</th><th>Update Frequency</th><th>Volume</th></tr></thead>
+  <tbody>
+    <tr><td>OBT DDL + column descriptions</td><td>ddl</td><td>On schema change (CI pipeline)</td><td>~50 entries</td></tr>
+    <tr><td>Human-curated Q&amp;SQL pairs</td><td>qa</td><td>Weekly review cycle</td><td>200–500 entries/tenant</td></tr>
+    <tr><td>Feedback loop: user-confirmed queries</td><td>qa</td><td>Real-time on thumbs-up</td><td>Grows with usage</td></tr>
+    <tr><td>Business logic documentation</td><td>doc</td><td>On wiki update (webhook)</td><td>~100 entries</td></tr>
+    <tr><td>Synthetic augmentation (GPT-4o)</td><td>qa</td><td>Monthly batch job</td><td>1000+ paraphrases</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     06 — FastAPI SERVICE
+══════════════════════════════════════════════ -->
+<section id="api">
+<div class="sh"><span class="sh-num">06</span><h2>FastAPI Query Service — Internals</h2></div>
+
+<p>The <code>query-service</code> is an async FastAPI application that orchestrates the full request lifecycle. It runs on Uvicorn with Gunicorn workers inside the pod, and exposes both a REST endpoint and a WebSocket streaming endpoint for progressive response rendering.</p>
+
+<h3>Application Layer Architecture</h3>
+<pre data-lang="python"><code><span class="cm"># src/query_service/main.py</span>
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, WebSocket, Depends, HTTPException
+<span class="kw">from</span> fastapi.middleware.cors <span class="kw">import</span> CORSMiddleware
+<span class="kw">from</span> opentelemetry.instrumentation.fastapi <span class="kw">import</span> FastAPIInstrumentor
+
+app = FastAPI(title=<span class="str">"query-service"</span>, version=<span class="str">"2.0"</span>)
+
+<span class="cm"># ── Middleware stack (order matters) ──────────────────────────</span>
+app.add_middleware(TenantMiddleware)          <span class="cm"># extract + validate tenant from JWT</span>
+app.add_middleware(RateLimitMiddleware)       <span class="cm"># Redis sliding window per tenant</span>
+app.add_middleware(RequestLoggingMiddleware)  <span class="cm"># structured JSON logs to OTel</span>
+app.add_middleware(CORSMiddleware, allow_origins=[<span class="str">"https://*.yourapp.com"</span>])
+
+FastAPIInstrumentor.instrument_app(app)       <span class="cm"># OTel auto-instrumentation</span>
+
+<span class="cm"># ── Dependency providers ──────────────────────────────────────</span>
+<span class="kw">async def</span> <span class="fn">get_session_repo</span>() -> SessionRepository:   <span class="kw">yield</span> redis_session_repo
+<span class="kw">async def</span> <span class="fn">get_vanna_agent</span>() -> VannaAgent:            <span class="kw">yield</span> vanna_agent_singleton
+<span class="kw">async def</span> <span class="fn">get_starrocks</span>() -> StarRocksPool:           <span class="kw">yield</span> starrocks_pool
+
+<span class="cm"># ── Primary query endpoint ────────────────────────────────────</span>
+@app.post(<span class="str">"/v1/query"</span>)
+<span class="kw">async def</span> <span class="fn">query_endpoint</span>(
+    req: QueryRequest,
+    tenant: TenantContext = Depends(verify_jwt),
+    session: SessionRepository = Depends(get_session_repo),
+    vanna: VannaAgent = Depends(get_vanna_agent),
+    db: StarRocksPool = Depends(get_starrocks),
+):
+    <span class="kw">with</span> tracer.start_as_current_span(<span class="str">"query.full_pipeline"</span>) <span class="kw">as</span> span:
+        span.set_attribute(<span class="str">"tenant.id"</span>, tenant.id)
+        span.set_attribute(<span class="str">"session.id"</span>, req.session_id)
+
+        <span class="cm"># Fetch prior state — zero DB round-trips if cached</span>
+        ctx = <span class="kw">await</span> session.load(req.session_id, tenant.id)
+
+        <span class="cm"># Classify intent (fast, isolated, 2s timeout)</span>
+        intent = <span class="kw">await</span> intent_client.classify(req.prompt, ctx.history)
+
+        <span class="cm"># Execute the appropriate path</span>
+        result = <span class="kw">await</span> execute_intent(intent, req, ctx, tenant, vanna, db)
+
+        <span class="cm"># Generate Plotly JSON (server-side only)</span>
+        plotly_json = <span class="kw">await</span> vanna.generate_plotly_json(result.dataframe, result.chart_spec)
+
+        <span class="cm"># Persist updated state</span>
+        <span class="kw">await</span> session.save(req.session_id, tenant.id, result.to_session_state())
+
+        <span class="kw">return</span> QueryResponse(
+            plotly_json=plotly_json,
+            sql=result.sql,
+            row_count=len(result.dataframe),
+            intent=intent.value,
+            from_cache=result.from_cache,
+        )
+
+<span class="cm"># ── WebSocket streaming endpoint (token-by-token SQL gen) ─────</span>
+@app.websocket(<span class="str">"/v1/query/stream"</span>)
+<span class="kw">async def</span> <span class="fn">query_stream</span>(ws: WebSocket, session_id: str, token: str):
+    <span class="kw">await</span> ws.accept()
+    tenant = verify_ws_token(token)
+    <span class="kw">async for</span> chunk <span class="kw">in</span> vanna_agent.stream_sql_gen(session_id, tenant):
+        <span class="kw">await</span> ws.send_json({<span class="str">"type"</span>: <span class="str">"sql_token"</span>, <span class="str">"content"</span>: chunk})
+    <span class="kw">await</span> ws.send_json({<span class="str">"type"</span>: <span class="str">"done"</span>})</code></pre>
+
+<h3>Connection Pool Configuration</h3>
+<table class="tbl">
+  <thead><tr><th>Resource</th><th>Pool Size</th><th>Max Overflow</th><th>Recycle (s)</th><th>Library</th></tr></thead>
+  <tbody>
+    <tr><td>StarRocks (MySQL)</td><td>20</td><td>10</td><td>3600</td><td>aiomysql + SQLAlchemy async</td></tr>
+    <tr><td>Redis Cluster</td><td>50</td><td>—</td><td>—</td><td>redis-py async cluster client</td></tr>
+    <tr><td>vLLM HTTP</td><td>25</td><td>10</td><td>—</td><td>httpx AsyncClient</td></tr>
+    <tr><td>Milvus gRPC</td><td>10</td><td>5</td><td>—</td><td>pymilvus async</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     07 — INTENT ROUTER FSM
+══════════════════════════════════════════════ -->
+<section id="router">
+<div class="sh"><span class="sh-num">07</span><h2>Intent Router — Finite State Machine</h2></div>
+
+<p>The Intent Router is modelled as a deterministic FSM over the session's conversation state. Each transition consumes the new user prompt and produces an intent token that determines the execution path. The FSM is implemented as a separate microservice (<code>intent-service</code>) to enable independent scaling and A/B testing of classification logic.</p>
+
+<h3>FSM State Transitions</h3>
+<pre data-lang="python"><code><span class="kw">from</span> enum <span class="kw">import</span> StrEnum
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+
+<span class="kw">class</span> <span class="type">Intent</span>(StrEnum):
+    NEW_QUERY     = <span class="str">"NEW_QUERY"</span>     <span class="cm"># no prior state required</span>
+    DATA_FILTER   = <span class="str">"DATA_FILTER"</span>   <span class="cm"># refines existing query; needs prior SQL</span>
+    VISUAL_UPDATE = <span class="str">"VISUAL_UPDATE"</span> <span class="cm"># chart type change; needs cached DF only</span>
+    CLARIFY       = <span class="str">"CLARIFY"</span>       <span class="cm"># model asks for more info (agentic mode)</span>
+    RESET         = <span class="str">"RESET"</span>         <span class="cm"># explicit conversation restart</span>
+
+<span class="kw">class</span> <span class="type">IntentFSM</span>:
+    <span class="cm">"""
+    State machine that validates intent transitions.
+    DATA_FILTER and VISUAL_UPDATE are only valid if session has prior data.
+    """</span>
+    VALID_TRANSITIONS = {
+        <span class="kw">None</span>:               {Intent.NEW_QUERY, Intent.RESET},
+        Intent.NEW_QUERY:   {Intent.NEW_QUERY, Intent.DATA_FILTER, Intent.VISUAL_UPDATE, Intent.RESET},
+        Intent.DATA_FILTER: {Intent.NEW_QUERY, Intent.DATA_FILTER, Intent.VISUAL_UPDATE, Intent.RESET},
+        Intent.VISUAL_UPDATE:{Intent.NEW_QUERY, Intent.DATA_FILTER, Intent.VISUAL_UPDATE, Intent.RESET},
+        Intent.CLARIFY:     {Intent.NEW_QUERY, Intent.CLARIFY, Intent.RESET},
+        Intent.RESET:       {Intent.NEW_QUERY},
+    }
+
+    <span class="kw">def</span> <span class="fn">validate</span>(self, current: Intent | <span class="kw">None</span>, proposed: Intent, has_cached_df: bool) -> Intent:
+        <span class="kw">if</span> proposed <span class="kw">not in</span> self.VALID_TRANSITIONS[current]:
+            <span class="cm"># Illegal transition: e.g. VISUAL_UPDATE on a fresh session</span>
+            <span class="kw">return</span> Intent.NEW_QUERY   <span class="cm"># safe fallback</span>
+        <span class="kw">if</span> proposed <span class="kw">in</span> {Intent.DATA_FILTER, Intent.VISUAL_UPDATE} <span class="kw">and not</span> has_cached_df:
+            <span class="kw">return</span> Intent.NEW_QUERY   <span class="cm"># no cache available; force full query</span>
+        <span class="kw">return</span> proposed</code></pre>
+
+<h3>Intent Classification Prompt (Production)</h3>
+<pre data-lang="text"><code>SYSTEM:
+You are a query intent classifier for a conversational analytics system.
+Respond with EXACTLY one of these tokens — nothing else, no punctuation:
+  NEW_QUERY     — a new data question unrelated to prior conversation
+  DATA_FILTER   — refines or narrows the SAME question with a scope change
+  VISUAL_UPDATE — changes only the chart type / appearance; data unchanged
+  RESET         — the user explicitly wants to start over
+
+Rules:
+  - Temperature: 0 (caller enforces; you must be deterministic)
+  - Classify across ALL input languages (English, Vietnamese, etc.)
+  - Requests like "show only top 5" or "filter to Q1" → DATA_FILTER
+  - Requests like "pie chart", "bar graph", "đổi biểu đồ" → VISUAL_UPDATE
+  - Requests like "now show me costs" (new metric) → NEW_QUERY
+
+CONVERSATION HISTORY (last 6 turns):
+{history_json}
+
+CURRENT USER MESSAGE:
+{prompt}
+
+INTENT TOKEN:</code></pre>
+
+<h3>Fallback & Confidence Scoring</h3>
+<p>Because the intent model outputs a single token deterministically, there is no probability distribution to measure confidence. Instead, the service uses a secondary <strong>validation pass</strong>: if the output token is not in the valid token set (due to model drift or token encoding issues), it defaults to <code>NEW_QUERY</code> and emits a warning metric to Prometheus.</p>
+
+<pre data-lang="python"><code><span class="kw">async def</span> <span class="fn">classify_intent</span>(prompt: str, history: list[dict]) -> Intent:
+    raw = <span class="kw">await</span> vllm_intent.complete(
+        system=INTENT_SYSTEM_PROMPT.format(history_json=history),
+        user=prompt,
+        max_tokens=<span class="num">16</span>,
+        temperature=<span class="num">0.0</span>,
+        stop=[<span class="str">"\n"</span>, <span class="str">" "</span>],  <span class="cm"># stop immediately after token</span>
+    )
+    token = raw.strip().upper()
+    <span class="kw">if</span> token <span class="kw">not in</span> Intent.__members__:
+        intent_classification_errors.inc()   <span class="cm"># Prometheus counter</span>
+        logger.warning(<span class="str">"Invalid intent token"</span>, token=token, prompt=prompt[:200])
+        <span class="kw">return</span> Intent.NEW_QUERY              <span class="cm"># safe default</span>
+    <span class="kw">return</span> Intent(token)</code></pre>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     08 — REDIS STATE LAYER
+══════════════════════════════════════════════ -->
+<section id="state">
+<div class="sh"><span class="sh-num">08</span><h2>Redis State Layer — Session & Cache Design</h2></div>
+
+<p>Redis serves as the stateful memory of the platform. Rather than relying on the LLM context window to maintain conversation history (which inflates token costs and has a hard limit), all session state is externalised to a 6-node Redis Cluster with 3 primary and 3 replica shards.</p>
+
+<h3>Key Schema</h3>
+<table class="tbl">
+  <thead><tr><th>Key Pattern</th><th>Type</th><th>TTL</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>sess:{tenant}:{session_id}</code></td><td>Hash</td><td>4 hours (sliding)</td><td>last_intent, last_sql, last_chart_spec, turn_count, user_locale</td></tr>
+    <tr><td><code>df:{tenant}:{session_id}</code></td><td>String (binary)</td><td>4 hours (sliding)</td><td>Compressed Arrow IPC bytes of last DataFrame (&lt;5MB limit)</td></tr>
+    <tr><td><code>hist:{tenant}:{session_id}</code></td><td>List (capped)</td><td>4 hours</td><td>Last 10 turns: [{role, content, intent, ts}]</td></tr>
+    <tr><td><code>rl:{tenant}:minute</code></td><td>String (counter)</td><td>60s</td><td>Requests in current sliding window (rate limiting)</td></tr>
+    <tr><td><code>sql_cache:{tenant}:{prompt_hash}</code></td><td>String</td><td>1 hour</td><td>Pre-validated SQL for common questions (dedup identical prompts)</td></tr>
+    <tr><td><code>tenant:{tenant_id}</code></td><td>Hash</td><td>no expiry</td><td>Tenant config: rate_limit, allowed_tables, locale, schema_version</td></tr>
+  </tbody>
+</table>
+
+<h3>DataFrame Caching with Arrow IPC</h3>
+<p>Pandas DataFrames are serialised to <strong>Apache Arrow IPC format</strong> before Redis storage. Arrow is used instead of Pickle for three reasons: it is language-neutral (future Go/Rust consumers), faster to serialise/deserialise than Pickle, and has a well-defined schema that can be validated on read.</p>
+
+<pre data-lang="python"><code><span class="kw">import</span> pyarrow <span class="kw">as</span> pa
+<span class="kw">import</span> pyarrow.ipc <span class="kw">as</span> pa_ipc
+<span class="kw">import</span> lz4.frame
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+
+<span class="kw">class</span> <span class="type">DataFrameCache</span>:
+    MAX_BYTES = <span class="num">5</span> * <span class="num">1024</span> * <span class="num">1024</span>  <span class="cm"># 5 MB ceiling</span>
+
+    <span class="kw">async def</span> <span class="fn">set</span>(self, key: str, df: pd.DataFrame, ttl: int = <span class="num">14400</span>):
+        table  = pa.Table.from_pandas(df, preserve_index=<span class="kw">False</span>)
+        sink   = pa.BufferOutputStream()
+        writer = pa_ipc.new_stream(sink, table.schema)
+        writer.write_table(table)
+        writer.close()
+        raw_bytes = sink.getvalue().to_pybytes()
+
+        compressed = lz4.frame.compress(raw_bytes, compression_level=<span class="num">3</span>)
+        <span class="kw">if</span> len(compressed) > self.MAX_BYTES:
+            <span class="cm"># Truncate to first 10_000 rows and warn</span>
+            logger.warning(<span class="str">"DataFrame exceeds 5MB; truncating to 10k rows"</span>, key=key)
+            df = df.head(<span class="num">10_000</span>)
+            <span class="kw">return await</span> self.set(key, df, ttl)   <span class="cm"># recurse once</span>
+
+        <span class="kw">await</span> self.redis.set(key, compressed, ex=ttl)
+
+    <span class="kw">async def</span> <span class="fn">get</span>(self, key: str) -> pd.DataFrame | <span class="kw">None</span>:
+        raw = <span class="kw">await</span> self.redis.get(key)
+        <span class="kw">if not</span> raw: <span class="kw">return None</span>
+        decompressed = lz4.frame.decompress(raw)
+        reader = pa_ipc.open_stream(decompressed)
+        <span class="kw">return</span> reader.read_all().to_pandas()</code></pre>
+
+<h3>Redis Cluster Topology</h3>
+<div class="g2">
+  <div class="card">
+    <div class="card-title" style="color:var(--amber)">Primary Shards (×3)</div>
+    <p>16384 hash slots split evenly across 3 primaries. Each primary is co-located in a separate availability zone for failure isolation. Writes go to the primary only.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--green)">Replica Shards (×3)</div>
+    <p>Each primary has one replica in a <em>different</em> AZ. Replicas are read-eligible. If a primary fails, Redis Cluster automatically promotes the replica within &lt;30s.</p>
+  </div>
+</div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     09 — AGENTIC REFLECTION LOOP
+══════════════════════════════════════════════ -->
+<section id="reflection">
+<div class="sh"><span class="sh-num">09</span><h2>Agentic Reflection Loop</h2></div>
+
+<p>The reflection loop is an automated self-correction mechanism. After SQL generation and execution, a lightweight validation model checks whether the returned data is semantically consistent with the original user question. If not, the loop rewrites the SQL and retries. This is the primary mechanism for catching model hallucinations that pass syntax validation but return wrong results.</p>
+
+<div class="flow">
+
+  <div class="fstep">
+    <div class="fconn">
+      <div class="fdot" style="color:var(--amber);border-color:var(--amber);background:rgba(245,158,11,.1)">R1</div>
+      <div class="fline"></div>
+    </div>
+    <div class="fbody">
+      <div class="ftitle">SQL Execution
+        <span class="ftag" style="background:rgba(52,211,153,.1);color:var(--green)">StarRocks</span>
+      </div>
+      <p>Generated SQL is executed. Execution errors (syntax, unknown column) are caught immediately and trigger the rewrite path without consuming a reflection token budget.</p>
+    </div>
+  </div>
+
+  <div class="fstep">
+    <div class="fconn">
+      <div class="fdot" style="color:var(--blue);border-color:var(--blue);background:rgba(96,165,250,.1)">R2</div>
+      <div class="fline"></div>
+    </div>
+    <div class="fbody">
+      <div class="ftitle">Result Sampling
+        <span class="ftag" style="background:rgba(96,165,250,.1);color:var(--blue)">In-Process</span>
+      </div>
+      <p>The first 5 rows and column statistics (min, max, dtype, null rate) are extracted from the result DataFrame and formatted into a compact evidence summary for the reflection prompt.</p>
+      <pre data-lang="python"><code>evidence = {
+  <span class="str">"columns"</span>:     list(df.columns),
+  <span class="str">"row_count"</span>:   len(df),
+  <span class="str">"sample_rows"</span>: df.head(<span class="num">5</span>).to_dict(<span class="str">"records"</span>),
+  <span class="str">"numeric_stats"</span>: df.describe().to_dict(),
+  <span class="str">"null_rates"</span>:  (df.isnull().mean() * <span class="num">100</span>).round(<span class="num">1</span>).to_dict(),
+}</code></pre>
+    </div>
+  </div>
+
+  <div class="fstep">
+    <div class="fconn">
+      <div class="fdot" style="color:var(--violet);border-color:var(--violet);background:rgba(167,139,250,.1)">R3</div>
+      <div class="fline"></div>
+    </div>
+    <div class="fbody">
+      <div class="ftitle">Reflection LLM Call
+        <span class="ftag" style="background:rgba(167,139,250,.1);color:var(--violet)">Qwen @ temp=0 · max 256 tokens</span>
+      </div>
+      <p>A zero-temperature pass asks the model to evaluate whether the evidence matches the intent of the original question. It outputs a structured JSON verdict: <code>{"valid": bool, "reason": str, "rewrite_hint": str}</code>.</p>
+      <pre data-lang="text"><code>SYSTEM: You are a SQL result validator. Given the user question, the generated SQL,
+and a sample of results, output ONLY a JSON object:
+{"valid": bool, "reason": "...", "rewrite_hint": "..."}
+
+USER_QUESTION: {original_prompt}
+GENERATED_SQL: {sql}
+RESULT_EVIDENCE: {evidence_json}
+
+Respond with JSON only:</code></pre>
+    </div>
+  </div>
+
+  <div class="fstep">
+    <div class="fconn">
+      <div class="fdot" style="color:var(--rose);border-color:var(--rose);background:rgba(251,113,133,.1)">R4</div>
+      <div class="fline"></div>
+    </div>
+    <div class="fbody">
+      <div class="ftitle">Verdict Routing
+        <span class="ftag" style="background:rgba(251,113,133,.1);color:var(--rose)">FSM gate</span>
+      </div>
+      <div class="fork">
+        <div class="fork-box">
+          <div class="fork-label" style="color:var(--green)">VALID → Proceed to Plotly Gen</div>
+          <ul>
+            <li>DataFrame forwarded to visualisation stage</li>
+            <li>SQL and reflection result logged to audit store</li>
+            <li>Confirmed Q+SQL pair added to Vanna corpus (async)</li>
+          </ul>
+        </div>
+        <div class="fork-box">
+          <div class="fork-label" style="color:var(--rose)">INVALID → Rewrite (max N=3 attempts)</div>
+          <ul>
+            <li><code>rewrite_hint</code> appended to next SQL gen prompt</li>
+            <li>Retry counter incremented in session state</li>
+            <li>After 3 failures: return error with explanation to user</li>
+            <li>All failed attempts logged for human review queue</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="call warn">
+  <div class="call-title">Reflection Budget Management</div>
+  <p>Each reflection call adds ~1.5s to the request latency. The loop is <strong>gated</strong>: reflection only runs for <code>NEW_QUERY</code> and <code>DATA_FILTER</code> intents. <code>VISUAL_UPDATE</code> never triggers reflection because no new SQL is executed. Tenants on the base tier run a single reflection pass; enterprise tenants can configure up to 3 passes via tenant config.</p>
+</div>
+</section>
+
+</div><!-- /content -->
+
+<!-- ══ CONTENT PAGE 2 ══ -->
+<div class="content">
+
+<!-- ══════════════════════════════════════════════
+     10 — SECURITY & AUTHZ
+══════════════════════════════════════════════ -->
+<section id="security">
+<div class="sh"><span class="sh-num">10</span><h2>Security Architecture & Authorization</h2></div>
+
+<p>Security is enforced in four independent layers: edge (Kong Gateway), transport (mTLS via Istio), application (FastAPI middleware), and data (StarRocks read-only service account). A compromise at any single layer does not grant access to data or the ability to execute write operations.</p>
+
+<h3>Authentication Flow: OAuth2/OIDC + JWT</h3>
+<pre data-lang="python"><code><span class="cm"># TenantMiddleware: validates JWT and injects TenantContext on every request</span>
+<span class="kw">class</span> <span class="type">TenantMiddleware</span>(BaseHTTPMiddleware):
+    <span class="kw">async def</span> <span class="fn">dispatch</span>(self, request: Request, call_next):
+        token = request.headers.get(<span class="str">"Authorization"</span>, <span class="str">""</span>).removeprefix(<span class="str">"Bearer "</span>)
+        <span class="kw">if not</span> token:
+            <span class="kw">raise</span> HTTPException(<span class="num">401</span>, <span class="str">"Missing bearer token"</span>)
+
+        <span class="kw">try</span>:
+            <span class="cm"># Verify signature against OIDC provider JWKS (cached 1h)</span>
+            payload = jwt.decode(
+                token,
+                key=<span class="kw">await</span> jwks_cache.get_public_keys(),
+                algorithms=[<span class="str">"RS256"</span>],
+                audience=settings.JWT_AUDIENCE,
+            )
+        <span class="kw">except</span> JWTError <span class="kw">as</span> e:
+            <span class="kw">raise</span> HTTPException(<span class="num">401</span>, str(e))
+
+        ctx = TenantContext(
+            id=payload[<span class="str">"tenant_id"</span>],
+            user_id=payload[<span class="str">"sub"</span>],
+            roles=payload.get(<span class="str">"roles"</span>, []),
+            rate_limit=payload.get(<span class="str">"rate_limit"</span>, <span class="num">60</span>),   <span class="cm"># req/min</span>
+        )
+        request.state.tenant = ctx
+        <span class="kw">return await</span> call_next(request)</code></pre>
+
+<h3>SQL Injection & DDL Prevention</h3>
+<pre data-lang="python"><code><span class="kw">import</span> re, sqlparse
+
+BLOCKED_KEYWORDS = re.compile(
+    <span class="str">r"\b(DROP|CREATE|ALTER|TRUNCATE|INSERT|UPDATE|DELETE|EXEC|EXECUTE|"</span>
+    <span class="str">r"GRANT|REVOKE|LOAD|EXPORT|KILL|SHOW PROCESSLIST)\b"</span>,
+    re.IGNORECASE
+)
+
+<span class="kw">def</span> <span class="fn">validate_sql</span>(sql: str, tenant_id: str) -> str:
+    <span class="cm"># 1. Must start with SELECT (or WITH for CTEs)</span>
+    parsed = sqlparse.parse(sql.strip())[<span class="num">0</span>]
+    <span class="kw">if</span> parsed.get_type() <span class="kw">not in</span> (<span class="str">"SELECT"</span>, <span class="kw">None</span>):  <span class="cm"># None = WITH/CTE</span>
+        <span class="kw">raise</span> SQLValidationError(<span class="str">"Only SELECT statements are permitted"</span>)
+
+    <span class="cm"># 2. No dangerous keywords</span>
+    <span class="kw">if</span> BLOCKED_KEYWORDS.search(sql):
+        <span class="kw">raise</span> SQLValidationError(<span class="str">"Blocked keyword detected"</span>)
+
+    <span class="cm"># 3. Tenant isolation: inject row-level filter</span>
+    <span class="cm"># Wrap the generated SQL as a subquery with the tenant predicate</span>
+    safe_sql = <span class="str">f"""
+        SELECT * FROM ({sql}) AS _gen
+        WHERE tenant_id = '{tenant_id}'
+    """</span>
+
+    <span class="cm"># 4. EXPLAIN only — validate execution plan without running</span>
+    <span class="kw">return</span> safe_sql</code></pre>
+
+<h3>Security Control Summary</h3>
+<table class="tbl">
+  <thead><tr><th>Control</th><th>Layer</th><th>Mechanism</th></tr></thead>
+  <tbody>
+    <tr><td>Authentication</td><td>Edge + App</td><td>JWT/OIDC via Kong plugin; RS256 signature verification</td></tr>
+    <tr><td>Transport Encryption</td><td>Network</td><td>mTLS (Istio service mesh); TLS 1.3 minimum on all ingress</td></tr>
+    <tr><td>DDoS / Rate Limit</td><td>Edge</td><td>Cloudflare + Kong rate limiting; per-tenant Redis sliding window</td></tr>
+    <tr><td>SQL Injection</td><td>Application</td><td>Regex + sqlparse AST validation; parameterised queries for filters</td></tr>
+    <tr><td>DDL Prevention</td><td>Application + DB</td><td>Keyword blocklist AND read-only StarRocks service account</td></tr>
+    <tr><td>Tenant Isolation</td><td>Application + DB</td><td>Row-level <code>tenant_id</code> filter injected server-side; verified in DB</td></tr>
+    <tr><td>Plotly Code Exec</td><td>Application</td><td>Server-side only in restricted subprocess; client never executes code</td></tr>
+    <tr><td>Secret Management</td><td>Infrastructure</td><td>HashiCorp Vault; k8s External Secrets Operator; no secrets in code/env files</td></tr>
+    <tr><td>Audit Logging</td><td>Application</td><td>Every SQL + tenant + user_id logged to immutable append-only store (S3 + Athena)</td></tr>
+    <tr><td>Dependency Scanning</td><td>CI/CD</td><td>Trivy image scan + Dependabot PRs; CVE-blocking quality gate</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     11 — MULTI-TENANCY
+══════════════════════════════════════════════ -->
+<section id="multitenancy">
+<div class="sh"><span class="sh-num">11</span><h2>Multi-Tenancy Architecture</h2></div>
+
+<p>The platform uses a <strong>shared-infrastructure, isolated-data</strong> tenancy model. All tenants share the same Kubernetes cluster, vLLM pods, and Redis cluster, but are isolated at the data and configuration level via row-level security and tenant-scoped namespacing.</p>
+
+<h3>Tenancy Isolation Levels</h3>
+<table class="tbl">
+  <thead><tr><th>Resource</th><th>Isolation Method</th><th>Guarantee</th></tr></thead>
+  <tbody>
+    <tr><td>StarRocks OBT</td><td>Row-level <code>WHERE tenant_id = ?</code> injected server-side</td><td>Strong: no cross-tenant row visibility possible</td></tr>
+    <tr><td>Redis Keys</td><td>Key prefix <code>sess:{tenant_id}:…</code>; ACL rules prevent cross-prefix reads</td><td>Strong: ACL enforced at Redis server level</td></tr>
+    <tr><td>Vanna RAG Corpus</td><td>Milvus scalar filter <code>tenant_id == X</code> on all retrievals</td><td>Strong: embedded in retrieval query, not just post-filter</td></tr>
+    <tr><td>vLLM Inference</td><td>Shared pods; tenant data only exists in the prompt context (not persisted)</td><td>Soft: memory isolation via stateless request model</td></tr>
+    <tr><td>Rate Limiting</td><td>Per-tenant Redis counter; configurable in tenant config hash</td><td>Strict: higher-tier tenants get higher limits</td></tr>
+    <tr><td>Audit Logs</td><td>Separate S3 prefix per tenant; cross-tenant IAM deny policy</td><td>Strong: enforced at S3 bucket policy level</td></tr>
+  </tbody>
+</table>
+
+<h3>Tenant Configuration Model</h3>
+<pre data-lang="python"><code><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+
+<span class="kw">class</span> <span class="type">TenantConfig</span>(BaseModel):
+    tenant_id:           str
+    display_name:        str
+    tier:                str          <span class="cm"># 'starter' | 'growth' | 'enterprise'</span>
+
+    <span class="cm"># Access control</span>
+    allowed_tables:      list[str]    <span class="cm"># subset of OBT columns accessible</span>
+    row_filter_expr:     str | <span class="kw">None</span>   <span class="cm"># additional SQL predicate beyond tenant_id</span>
+
+    <span class="cm"># Rate limits</span>
+    queries_per_minute:  int = <span class="num">60</span>
+    max_result_rows:     int = <span class="num">50_000</span>
+
+    <span class="cm"># Feature flags</span>
+    reflection_passes:   int = <span class="num">1</span>     <span class="cm"># 1 for starter, 3 for enterprise</span>
+    streaming_enabled:   bool = <span class="kw">True</span>
+    custom_corpus:       bool = <span class="kw">False</span> <span class="cm"># enterprise: own Milvus collection</span>
+
+    <span class="cm"># Locale</span>
+    default_locale:      str = <span class="str">"en"</span>
+    currency_symbol:     str = <span class="str">"$"</span>
+    date_format:         str = <span class="str">"YYYY-MM-DD"</span></code></pre>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     12 — KUBERNETES DEPLOY
+══════════════════════════════════════════════ -->
+<section id="k8s">
+<div class="sh"><span class="sh-num">12</span><h2>Kubernetes Deployment</h2></div>
+
+<p>All services are packaged as Helm charts and deployed to a managed Kubernetes cluster (GKE Autopilot or EKS Managed Node Groups). GPU workloads (vLLM) run on dedicated node pools with taint/toleration policies to prevent CPU workloads from scheduling on expensive GPU nodes.</p>
+
+<h3>Namespace Layout</h3>
+<pre data-lang="yaml"><code><span class="cm"># Namespaces</span>
+analytics-platform-prod    <span class="cm"># all production application services</span>
+analytics-platform-staging <span class="cm"># staging ring</span>
+analytics-infra            <span class="cm"># Redis, Milvus, monitoring (shared)</span>
+analytics-gpu              <span class="cm"># vLLM pods (GPU node pool only)</span>
+istio-system               <span class="cm"># service mesh control plane</span></code></pre>
+
+<h3>query-service Deployment Spec</h3>
+<div class="spec-block">
+  <div class="spec-header"><span class="fname">query-service-deploy.yaml</span> <span class="ftype">Deployment</span></div>
+<pre data-lang="yaml"><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: query-service
+  namespace: analytics-platform-prod
+  labels:
+    app: query-service
+    version: v2.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 2}
+  selector:
+    matchLabels: {app: query-service}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: <span class="str">"true"</span>
+        prometheus.io/port: <span class="str">"9090"</span>
+        sidecar.istio.io/inject: <span class="str">"true"</span>
+    spec:
+      serviceAccountName: query-service-sa
+      containers:
+      - name: query-service
+        image: registry.example.com/query-service:2.0.0
+        ports:
+        - {containerPort: 8000, name: http}
+        - {containerPort: 9090, name: metrics}
+        env:
+        - {name: VLLM_BASE_URL, valueFrom: {secretKeyRef: {name: vllm-creds, key: url}}}
+        - {name: REDIS_URL,     valueFrom: {secretKeyRef: {name: redis-creds, key: url}}}
+        - {name: STARROCKS_DSN, valueFrom: {secretKeyRef: {name: sr-creds, key: dsn}}}
+        resources:
+          requests: {cpu: <span class="str">"500m"</span>, memory: <span class="str">"1Gi"</span>}
+          limits:   {cpu: <span class="str">"2"</span>,     memory: <span class="str">"4Gi"</span>}
+        livenessProbe:
+          httpGet: {path: /health/live, port: 8000}
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        readinessProbe:
+          httpGet: {path: /health/ready, port: 8000}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector: {matchLabels: {app: query-service}}</code></pre>
+</div>
+
+<h3>HPA for vLLM GPU Pods</h3>
+<div class="spec-block">
+  <div class="spec-header"><span class="fname">vllm-hpa.yaml</span> <span class="ftype">HorizontalPodAutoscaler</span></div>
+<pre data-lang="yaml"><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-sql-gen-hpa
+  namespace: analytics-gpu
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: vllm-sql-gen}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Pods
+    pods:
+      metric: {name: vllm_gpu_cache_usage_perc}  <span class="cm"># custom Prometheus metric</span>
+      target: {type: AverageValue, averageValue: <span class="str">"75"</span>}
+  - type: Pods
+    pods:
+      metric: {name: vllm_num_requests_waiting}
+      target: {type: AverageValue, averageValue: <span class="str">"5"</span>}   <span class="cm"># &gt;5 waiting → scale up</span>
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies: [{type: Pods, value: 2, periodSeconds: 60}]
+    scaleDown:
+      stabilizationWindowSeconds: 300</code></pre>
+</div>
+
+<h3>Service Resource Sizing (Production Baseline)</h3>
+<table class="tbl">
+  <thead><tr><th>Service</th><th>Replicas (min/max)</th><th>CPU Request/Limit</th><th>Memory</th><th>Special</th></tr></thead>
+  <tbody>
+    <tr><td>query-service</td><td>3 / 12</td><td>500m / 2</td><td>1Gi / 4Gi</td><td>—</td></tr>
+    <tr><td>intent-service</td><td>2 / 8</td><td>250m / 1</td><td>512Mi / 2Gi</td><td>—</td></tr>
+    <tr><td>session-service</td><td>2 / 6</td><td>250m / 1</td><td>512Mi / 1Gi</td><td>—</td></tr>
+    <tr><td>vllm-sql-gen</td><td>2 / 8</td><td>8 / 8</td><td>32Gi / 40Gi</td><td>1× NVIDIA L4 per pod</td></tr>
+    <tr><td>vllm-intent</td><td>2 / 4</td><td>4 / 4</td><td>16Gi / 24Gi</td><td>AWQ 4-bit; 0.5× L4</td></tr>
+    <tr><td>Redis primary</td><td>3 (fixed)</td><td>2 / 4</td><td>16Gi / 16Gi</td><td>PVC 50Gi SSD</td></tr>
+    <tr><td>Milvus standalone</td><td>1 / 3</td><td>2 / 8</td><td>8Gi / 32Gi</td><td>PVC 200Gi SSD</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     13 — CI/CD PIPELINE
+══════════════════════════════════════════════ -->
+<section id="cicd">
+<div class="sh"><span class="sh-num">13</span><h2>CI/CD Pipeline — GitOps</h2></div>
+
+<p>The delivery pipeline follows a <strong>GitOps</strong> model: all cluster state is described declaratively in a Git repository, and ArgoCD reconciles the desired state against the live cluster. Application code and infrastructure manifests live in separate repositories with different access controls.</p>
+
+<h3>Pipeline Stages</h3>
+<div class="timeline">
+
+  <div class="tl-item">
+    <div class="tl-left">
+      <span class="tl-badge" style="border-color:var(--blue);color:var(--blue)">PR Stage</span>
+      <div class="tl-vline"></div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-title">Pull Request Checks (GitHub Actions)</div>
+      <ul>
+        <li>Ruff lint + mypy type-check (Python); ESLint + TypeScript tsc (Frontend)</li>
+        <li>Unit tests + integration tests against testcontainers (StarRocks + Redis in Docker)</li>
+        <li>SQL accuracy regression suite: 200 golden question-SQL pairs, must pass &gt;95%</li>
+        <li>Trivy container scan — block on CRITICAL CVEs</li>
+        <li>Coverage gate: &gt;80% line coverage required to merge</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-left">
+      <span class="tl-badge" style="border-color:var(--amber);color:var(--amber)">Build</span>
+      <div class="tl-vline"></div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-title">Build & Publish (main branch merge)</div>
+      <ul>
+        <li>Docker multi-stage build → push to internal OCI registry with digest tag</li>
+        <li>Helm chart linting (<code>helm lint</code>) + unit tests (helm-unittest plugin)</li>
+        <li>SBOM (Software Bill of Materials) generated and attached to image manifest</li>
+        <li>ArgoCD image-updater writes new digest to the staging manifests repo (automated PR)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-left">
+      <span class="tl-badge" style="border-color:var(--violet);color:var(--violet)">Staging</span>
+      <div class="tl-vline"></div>
+    </div>
+    <div class="tl-body">
+      <div class="tl-title">Staging Ring (automated)</div>
+      <ul>
+        <li>ArgoCD auto-syncs staging namespace — full RollingUpdate deployment</li>
+        <li>Smoke tests run against staging endpoint (k6 load script: 50 RPS for 5 min)</li>
+        <li>LLM accuracy eval on staging: 500-question eval set must score &gt;92% correct SQL</li>
+        <li>Canary comparison: compare P50/P95 latency against previous stable release</li>
+        <li>Slack notification with metrics diff; auto-promote if all gates pass</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-left">
+      <span class="tl-badge" style="border-color:var(--green);color:var(--green)">Prod</span>
+    </div>
+    <div class="tl-body">
+      <div class="tl-title">Production Deployment (manual approval gate)</div>
+      <ul>
+        <li>ArgoCD production sync requires human approval from &gt;1 senior engineer</li>
+        <li>Blue-green traffic split via Istio VirtualService: 10% canary → 50% → 100% over 30 min</li>
+        <li>Automated rollback trigger: error rate &gt;1% or P95 latency &gt;5s during rollout</li>
+        <li>Post-deploy: 15-minute burn-in Grafana dashboard manually reviewed before full 100%</li>
+        <li>Release notes auto-generated from conventional commits and posted to Slack</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     14 — OBSERVABILITY
+══════════════════════════════════════════════ -->
+<section id="observability">
+<div class="sh"><span class="sh-num">14</span><h2>Observability Stack</h2></div>
+
+<p>The observability stack is built on the OpenTelemetry standard for portability. Traces, metrics, and logs all flow through a centralised OTel Collector before being routed to their respective backends.</p>
+
+<h3>The Three Pillars</h3>
+<div class="g3">
+  <div class="card">
+    <div class="card-title" style="color:var(--blue)">Distributed Tracing</div>
+    <p><strong>Jaeger</strong> (or Tempo). Every request gets a trace that spans: Kong → query-service → intent-service → vLLM → StarRocks. The LLM call and SQL execution appear as separate child spans with token counts and query plans attached.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--amber)">Metrics</div>
+    <p><strong>Prometheus + Grafana</strong>. Custom metrics: <code>query_latency_seconds{intent,tenant}</code>, <code>sql_accuracy_rate{tenant}</code>, <code>reflection_attempts_total</code>, <code>vllm_gpu_cache_usage_perc</code>.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--green)">Structured Logs</div>
+    <p><strong>Loki or OpenSearch</strong>. All logs emitted as JSON with <code>trace_id</code>, <code>tenant_id</code>, <code>session_id</code>, <code>intent</code>, and SQL digest fields. Enables cross-pillar correlation in Grafana.</p>
+  </div>
+</div>
+
+<h3>Key Metrics & Alerting Rules</h3>
+<pre data-lang="yaml"><code><span class="cm"># prometheus/alerts/query-service.yaml</span>
+groups:
+- name: query-service
+  rules:
+
+  - alert: HighQueryLatency
+    expr: histogram_quantile(0.95, query_latency_seconds_bucket) > 5
+    for: 5m
+    labels: {severity: warning}
+    annotations:
+      summary: <span class="str">"P95 query latency > 5s for 5 minutes"</span>
+
+  - alert: SQLAccuracyDrop
+    expr: rate(sql_reflection_rewrites_total[10m]) /
+          rate(sql_queries_total[10m]) > 0.15
+    for: 10m
+    labels: {severity: critical}
+    annotations:
+      summary: <span class="str">"SQL rewrite rate > 15% — model accuracy degraded"</span>
+
+  - alert: VLLMQueueBuildup
+    expr: vllm_num_requests_waiting > 20
+    for: 2m
+    labels: {severity: warning}
+    annotations:
+      summary: <span class="str">"vLLM request queue > 20 — consider scaling"</span>
+
+  - alert: RedisMemoryHigh
+    expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+    for: 5m
+    labels: {severity: warning}
+    annotations:
+      summary: <span class="str">"Redis memory utilisation > 85%"</span></code></pre>
+
+<h3>SQL Accuracy Dashboard</h3>
+<p>A dedicated Grafana dashboard tracks LLM quality over time — not just infrastructure health:</p>
+<table class="tbl">
+  <thead><tr><th>Panel</th><th>Query</th><th>Alert Threshold</th></tr></thead>
+  <tbody>
+    <tr><td>First-pass SQL accuracy rate (7d)</td><td><code>1 - (rewrites / total_queries)</code></td><td>&lt;90% → critical</td></tr>
+    <tr><td>Reflection rewrite attempts distribution</td><td>Histogram of attempts-per-query</td><td>p99 &gt; 2 → warning</td></tr>
+    <tr><td>User thumbs-up/down ratio</td><td>Feedback events from React frontend</td><td>&lt;0.75 → warning</td></tr>
+    <tr><td>Corpus hit rate by intent type</td><td>RAG hits per query intent</td><td>NEW_QUERY hits &lt;3 → warning</td></tr>
+    <tr><td>Token usage by tenant (cost tracking)</td><td>vLLM prompt+completion tokens</td><td>Budget alert per tenant</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     15 — HA & DR
+══════════════════════════════════════════════ -->
+<section id="dr">
+<div class="sh"><span class="sh-num">15</span><h2>High Availability & Disaster Recovery</h2></div>
+
+<h3>Availability Architecture</h3>
+<table class="tbl">
+  <thead><tr><th>Component</th><th>HA Mechanism</th><th>RTO</th><th>RPO</th></tr></thead>
+  <tbody>
+    <tr><td>query-service / intent-service</td><td>3+ replicas across 3 AZs; HPA min=3; PodDisruptionBudget maxUnavailable=1</td><td>&lt;30s</td><td>0 (stateless)</td></tr>
+    <tr><td>vLLM pods</td><td>2 replicas minimum; model weights pre-loaded on all nodes via DaemonSet preloading job</td><td>&lt;60s (new pod)</td><td>0 (stateless)</td></tr>
+    <tr><td>Redis Cluster</td><td>3 primaries + 3 replicas across 3 AZs; auto-failover by Redis Sentinel &lt;30s</td><td>&lt;30s</td><td>&lt;100ms (async replica lag)</td></tr>
+    <tr><td>StarRocks FE</td><td>3 FE nodes with leader election via Paxos; any FE can serve queries</td><td>&lt;15s (leader re-elect)</td><td>0</td></tr>
+    <tr><td>StarRocks BE</td><td>3× replication factor on all tablets; automatic tablet migration on node failure</td><td>&lt;120s (tablet re-balance)</td><td>0 (sync replication)</td></tr>
+    <tr><td>Milvus</td><td>Standalone with persistent volume snapshot every 1h; restore from snapshot</td><td>&lt;300s</td><td>&lt;1h (last snapshot)</td></tr>
+  </tbody>
+</table>
+
+<h3>Disaster Recovery Runbooks</h3>
+
+<h4>Scenario: vLLM Pod OOMKilled</h4>
+<pre data-lang="bash"><code><span class="cm"># Automatic: k8s restarts pod; model weights loaded from NodeLocal cache (~45s)</span>
+<span class="cm"># During restart: intent-service returns 503; query-service falls back to cached SQL if available</span>
+
+<span class="cm"># Manual verification:</span>
+kubectl get pods -n analytics-gpu -l app=vllm-sql-gen
+kubectl logs -n analytics-gpu vllm-sql-gen-xxx --previous  <span class="cm"># check OOM cause</span>
+
+<span class="cm"># If weights not cached on node, force reschedule to pre-loaded node:</span>
+kubectl label node &lt;node&gt; vllm-weights=loaded
+kubectl patch deployment vllm-sql-gen -p '{"spec":{"template":{"spec":{"nodeSelector":{"vllm-weights":"loaded"}}}}}'</code></pre>
+
+<h4>Scenario: Redis Primary Failure</h4>
+<pre data-lang="bash"><code><span class="cm"># Automatic: Redis Cluster promotes replica in ~30s</span>
+<span class="cm"># Impact: active sessions may lose their Redis key during 30s window</span>
+<span class="cm"># Mitigation: query-service falls back to NEW_QUERY path on cache miss (degraded but functional)</span>
+
+<span class="cm"># Verify cluster health after failover:</span>
+redis-cli -h redis-cluster.analytics-infra.svc.cluster.local \
+          -p 6379 --cluster check</code></pre>
+
+<h4>Scenario: StarRocks Full Cluster Failure (Region-Level)</h4>
+<pre data-lang="bash"><code><span class="cm"># Cross-region DR: secondary StarRocks cluster in DR region seeded daily from S3 Parquet snapshots</span>
+
+<span class="cm"># Step 1: Update DNS to point to DR region endpoint</span>
+kubectl apply -f manifests/dr-region/starrocks-service-patch.yaml
+
+<span class="cm"># Step 2: Restore latest daily snapshot (Spark job)</span>
+spark-submit --master k8s://dr-cluster \
+  s3://backup-bucket/snapshots/2024-01-15/ \
+  --output starrocks://dr-fe:9030/analytics.analytics_obt
+
+<span class="cm"># Step 3: Verify partition completeness</span>
+mysql -h dr-fe -e "SELECT MAX(event_date) FROM analytics.analytics_obt;" analytics</code></pre>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     16 — PERFORMANCE ENGINEERING
+══════════════════════════════════════════════ -->
+<section id="perf">
+<div class="sh"><span class="sh-num">16</span><h2>Performance Engineering</h2></div>
+
+<h3>Latency Budget Breakdown (P95 target: 3s)</h3>
+<table class="tbl">
+  <thead><tr><th>Stage</th><th>P50</th><th>P95</th><th>Optimisation</th></tr></thead>
+  <tbody>
+    <tr><td>Kong Gateway + JWT verify</td><td>5ms</td><td>15ms</td><td>JWKS in-memory cache (1h TTL)</td></tr>
+    <tr><td>Redis session load</td><td>3ms</td><td>10ms</td><td>RESP3 pipelining; LZ4 decompressed locally</td></tr>
+    <tr><td>Intent classification (vLLM)</td><td>150ms</td><td>400ms</td><td>max_tokens=16; AWQ quantized; prefix cache</td></tr>
+    <tr><td>Milvus hybrid search (RAG)</td><td>8ms</td><td>25ms</td><td>HNSW index; in-memory collection; ef=64</td></tr>
+    <tr><td>SQL generation (vLLM)</td><td>800ms</td><td>1800ms</td><td>Prefix caching of system prompt (35% TTFT reduction)</td></tr>
+    <tr><td>SQL validation (EXPLAIN)</td><td>20ms</td><td>60ms</td><td>Separate read-only FE node for EXPLAIN calls</td></tr>
+    <tr><td>StarRocks query execution</td><td>150ms</td><td>600ms</td><td>MV rewrite; partition pruning; result cache 30s</td></tr>
+    <tr><td>Reflection LLM call</td><td>300ms</td><td>700ms</td><td>Gated: only NEW_QUERY/DATA_FILTER; AWQ model</td></tr>
+    <tr><td>Plotly code gen + exec</td><td>200ms</td><td>500ms</td><td>Plotly template library; code gen streamed</td></tr>
+    <tr><td>Redis session write</td><td>5ms</td><td>15ms</td><td>Arrow IPC + LZ4; async (non-blocking response path)</td></tr>
+    <tr><td><strong>Total (NEW_QUERY path)</strong></td><td><strong>~1.6s</strong></td><td><strong>~4.1s</strong></td><td>VISUAL_UPDATE: ~600ms P95 (no DB, no SQL gen)</td></tr>
+  </tbody>
+</table>
+
+<div class="call warn">
+  <div class="call-title">P95 Headroom</div>
+  <p>The NEW_QUERY P95 of ~4.1s slightly exceeds the 3s target on the nominal path. This is addressed by: (1) streaming SQL tokens to the frontend via WebSocket so the user sees progress immediately, (2) shifting reflection to an async post-send operation for latency-sensitive tenants, and (3) StarRocks result caching for repeated identical prompts.</p>
+</div>
+
+<h3>StarRocks Query Result Cache</h3>
+<pre data-lang="sql"><code><span class="cm">-- Enable result cache globally (StarRocks 3.x)</span>
+<span class="kw">SET GLOBAL</span> enable_query_cache = <span class="kw">true</span>;
+<span class="kw">SET GLOBAL</span> query_cache_size   = <span class="num">4294967296</span>;  <span class="cm">-- 4GB shared result cache</span>
+
+<span class="cm">-- Per-query hint for high-frequency queries (optional override)</span>
+<span class="kw">SELECT</span> <span class="cm">/*+ SET_VAR(query_cache_type=2, query_cache_min_count=2) */</span>
+  province_name,
+  <span class="fn">SUM</span>(net_revenue) <span class="kw">AS</span> total_revenue
+<span class="kw">FROM</span> analytics_obt
+<span class="kw">WHERE</span> event_date <span class="kw">BETWEEN</span> <span class="str">'2024-01-01'</span> <span class="kw">AND</span> <span class="str">'2024-01-31'</span>
+  <span class="kw">AND</span> tenant_id = <span class="str">'tenant-abc'</span>
+<span class="kw">GROUP BY</span> province_name
+<span class="kw">ORDER BY</span> total_revenue <span class="kw">DESC</span>;</code></pre>
+
+<h3>Redis SQL Prompt Cache (Deduplication)</h3>
+<pre data-lang="python"><code><span class="kw">import</span> hashlib
+
+<span class="kw">async def</span> <span class="fn">get_or_generate_sql</span>(
+    prompt: str, tenant_id: str, vanna: VannaAgent, redis: Redis
+) -> str:
+    <span class="cm"># Normalise prompt → stable hash (strip whitespace, lowercase)</span>
+    normalised = <span class="str">" "</span>.join(prompt.lower().split())
+    cache_key  = <span class="str">f"sql_cache:{tenant_id}:{hashlib.sha256(normalised.encode()).hexdigest()[:16]}"</span>
+
+    cached = <span class="kw">await</span> redis.get(cache_key)
+    <span class="kw">if</span> cached:
+        sql_cache_hits.inc()    <span class="cm"># Prometheus counter</span>
+        <span class="kw">return</span> cached.decode()
+
+    sql = <span class="kw">await</span> vanna.generate_sql(prompt, tenant_id)
+    <span class="kw">await</span> redis.set(cache_key, sql, ex=<span class="num">3600</span>)   <span class="cm"># 1-hour TTL</span>
+    <span class="kw">return</span> sql</code></pre>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     17 — API CONTRACT
+══════════════════════════════════════════════ -->
+<section id="api-contract">
+<div class="sh"><span class="sh-num">17</span><h2>API Contract Specification</h2></div>
+
+<p>The query-service exposes a versioned REST API (<code>/v1</code>) and a WebSocket endpoint for streaming. Backwards-incompatible changes increment the major version. All responses include a <code>X-Trace-Id</code> header for observability correlation.</p>
+
+<h3>POST /v1/query</h3>
+<pre data-lang="json"><code><span class="cm">// Request</span>
+{
+  <span class="str">"session_id"</span>: <span class="str">"string (UUIDv4, required)"</span>,
+  <span class="str">"prompt"</span>:     <span class="str">"string (1–2000 chars, required)"</span>,
+  <span class="str">"locale"</span>:     <span class="str">"string (BCP47, optional, default: tenant config)"</span>,
+  <span class="str">"chart_hint"</span>: <span class="str">"string | null (optional explicit chart type override)"</span>
+}
+
+<span class="cm">// Response 200 OK</span>
+{
+  <span class="str">"request_id"</span>:   <span class="str">"uuid"</span>,
+  <span class="str">"intent"</span>:       <span class="str">"NEW_QUERY | DATA_FILTER | VISUAL_UPDATE | RESET"</span>,
+  <span class="str">"sql"</span>:          <span class="str">"string | null"</span>,
+  <span class="str">"row_count"</span>:    <span class="num">1234</span>,
+  <span class="str">"from_cache"</span>:   <span class="kw">false</span>,
+  <span class="str">"reflection"</span>:   {
+    <span class="str">"attempts"</span>: <span class="num">1</span>,
+    <span class="str">"valid"</span>: <span class="kw">true</span>
+  },
+  <span class="str">"plotly_json"</span>:  {
+    <span class="str">"data"</span>:    [...],    <span class="cm">// Plotly trace objects</span>
+    <span class="str">"layout"</span>:  {...},   <span class="cm">// Plotly layout config</span>
+    <span class="str">"config"</span>:  {...}    <span class="cm">// Plotly display config (responsive: true, etc.)</span>
+  },
+  <span class="str">"latency_ms"</span>:   {
+    <span class="str">"total"</span>:     <span class="num">1842</span>,
+    <span class="str">"intent"</span>:    <span class="num">210</span>,
+    <span class="str">"sql_gen"</span>:   <span class="num">890</span>,
+    <span class="str">"db_query"</span>:  <span class="num">340</span>,
+    <span class="str">"plotly"</span>:    <span class="num">280</span>
+  }
+}
+
+<span class="cm">// Response 422 Unprocessable (SQL validation failure)</span>
+{
+  <span class="str">"error"</span>:   <span class="str">"SQL_VALIDATION_FAILED"</span>,
+  <span class="str">"detail"</span>:  <span class="str">"Generated SQL contained blocked keyword: DROP"</span>,
+  <span class="str">"request_id"</span>: <span class="str">"uuid"</span>
+}
+
+<span class="cm">// Response 429 Too Many Requests</span>
+{
+  <span class="str">"error"</span>:        <span class="str">"RATE_LIMIT_EXCEEDED"</span>,
+  <span class="str">"retry_after"</span>:  <span class="num">12</span>,   <span class="cm">// seconds</span>
+  <span class="str">"limit"</span>:        <span class="num">60</span>    <span class="cm">// requests/minute for this tenant</span>
+}</code></pre>
+
+<h3>WebSocket /v1/query/stream — Message Protocol</h3>
+<pre data-lang="json"><code><span class="cm">// Client → Server: start</span>
+{<span class="str">"type"</span>: <span class="str">"start"</span>, <span class="str">"session_id"</span>: <span class="str">"..."</span>, <span class="str">"prompt"</span>: <span class="str">"..."</span>}
+
+<span class="cm">// Server → Client: streaming tokens (SQL gen phase)</span>
+{<span class="str">"type"</span>: <span class="str">"sql_token"</span>,   <span class="str">"content"</span>: <span class="str">"SELECT"</span>}
+{<span class="str">"type"</span>: <span class="str">"sql_token"</span>,   <span class="str">"content"</span>: <span class="str">" province_name,"</span>}
+
+<span class="cm">// Server → Client: phase change events</span>
+{<span class="str">"type"</span>: <span class="str">"phase"</span>,      <span class="str">"phase"</span>: <span class="str">"db_query"</span>}
+{<span class="str">"type"</span>: <span class="str">"phase"</span>,      <span class="str">"phase"</span>: <span class="str">"plotly_gen"</span>}
+
+<span class="cm">// Server → Client: final result</span>
+{<span class="str">"type"</span>: <span class="str">"result"</span>,     <span class="str">"plotly_json"</span>: {...}, <span class="str">"row_count"</span>: 24}
+
+<span class="cm">// Server → Client: error</span>
+{<span class="str">"type"</span>: <span class="str">"error"</span>,      <span class="str">"code"</span>: <span class="str">"REFLECTION_MAX_RETRIES"</span>, <span class="str">"message"</span>: <span class="str">"..."</span>}</code></pre>
+
+<h3>Additional Endpoints</h3>
+<table class="tbl">
+  <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>/v1/session/{id}</code></td><td>DELETE</td><td>Explicit session reset; clears Redis keys for this session</td></tr>
+    <tr><td><code>/v1/feedback</code></td><td>POST</td><td>Submit thumbs-up/down; triggers async Vanna corpus update on thumbs-up</td></tr>
+    <tr><td><code>/v1/sessions/{id}/history</code></td><td>GET</td><td>Return conversation history for the session (last 10 turns)</td></tr>
+    <tr><td><code>/v1/admin/corpus/reload</code></td><td>POST (admin)</td><td>Force-reload Milvus collection from source (post Vanna retraining)</td></tr>
+    <tr><td><code>/health/live</code></td><td>GET</td><td>Liveness probe; always 200 if process is alive</td></tr>
+    <tr><td><code>/health/ready</code></td><td>GET</td><td>Readiness probe; checks Redis + vLLM reachability</td></tr>
+    <tr><td><code>/metrics</code></td><td>GET</td><td>Prometheus metrics endpoint (port 9090)</td></tr>
+  </tbody>
+</table>
+</section>
+
+
+<!-- ══════════════════════════════════════════════
+     18 — TESTING STRATEGY
+══════════════════════════════════════════════ -->
+<section id="testing">
+<div class="sh"><span class="sh-num">18</span><h2>Testing Strategy</h2></div>
+
+<h3>Test Pyramid</h3>
+<div class="g3">
+  <div class="card">
+    <div class="card-title" style="color:var(--green)">Unit Tests (~500)</div>
+    <p>Pytest. Cover: SQL validator, intent FSM transitions, DataFrame cache serialisation, OBT column name resolver, rate limit logic. Mocked external dependencies. Target: &lt;10s run time in CI.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--blue)">Integration Tests (~150)</div>
+    <p>Testcontainers: real StarRocks + Redis containers. Cover: full request pipeline for all 3 intent paths, session state persistence, multi-turn conversation, rate limiting, SQL injection blocking.</p>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--amber)">LLM Accuracy Eval (~500)</div>
+    <p>Golden dataset of question–expected-SQL pairs evaluated against the real model. Run against staging on every deploy. Broken down by intent type, complexity tier, and language (EN/VI).</p>
+  </div>
+</div>
+
+<h3>SQL Accuracy Evaluation Framework</h3>
+<pre data-lang="python"><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+
+@dataclass
+<span class="kw">class</span> <span class="type">EvalCase</span>:
+    question: str
+    language: str               <span class="cm"># 'en' | 'vi'</span>
+    complexity: str             <span class="cm"># 'simple' | 'medium' | 'complex'</span>
+    expected_columns: list[str] <span class="cm"># columns that MUST appear in result</span>
+    expected_row_range: tuple[int,int]  <span class="cm"># (min_rows, max_rows)</span>
+    golden_sql: str | <span class="kw">None</span>    <span class="cm"># exact SQL comparison (optional, brittle)</span>
+    semantic_check_fn: callable <span class="cm"># e.g. lambda df: df['net_revenue'].sum() > 0</span>
+
+<span class="kw">async def</span> <span class="fn">run_eval_suite</span>(cases: list[EvalCase], vanna: VannaAgent, db) -> dict:
+    results = []
+    <span class="kw">for</span> case <span class="kw">in</span> cases:
+        sql = <span class="kw">await</span> vanna.generate_sql(case.question, tenant_id=<span class="str">"eval_tenant"</span>)
+        df  = <span class="kw">await</span> db.execute(sql)
+
+        col_check  = <span class="fn">all</span>(c <span class="kw">in</span> df.columns <span class="kw">for</span> c <span class="kw">in</span> case.expected_columns)
+        row_check  = case.expected_row_range[<span class="num">0</span>] <= len(df) <= case.expected_row_range[<span class="num">1</span>]
+        sem_check  = case.semantic_check_fn(df)
+        passed     = col_check <span class="kw">and</span> row_check <span class="kw">and</span> sem_check
+
+        results.append({<span class="str">"question"</span>: case.question, <span class="str">"passed"</span>: passed,
+                        <span class="str">"language"</span>: case.language, <span class="str">"complexity"</span>: case.complexity})
+
+    df_results = pd.DataFrame(results)
+    overall_accuracy = df_results[<span class="str">"passed"</span>].mean()
+    <span class="kw">return</span> {
+        <span class="str">"overall_accuracy"</span>: overall_accuracy,
+        <span class="str">"by_language"</span>:    df_results.groupby(<span class="str">"language"</span>)[<span class="str">"passed"</span>].mean().to_dict(),
+        <span class="str">"by_complexity"</span>:  df_results.groupby(<span class="str">"complexity"</span>)[<span class="str">"passed"</span>].mean().to_dict(),
+        <span class="str">"passed_gate"</span>:    overall_accuracy >= <span class="num">0.92</span>,   <span class="cm"># CI blocker threshold</span>
+    }</code></pre>
+
+<h3>Load Testing (k6)</h3>
+<pre data-lang="javascript"><code><span class="cm">// k6/load-test.js — runs in CI staging pipeline</span>
+<span class="kw">import</span> http <span class="kw">from</span> <span class="str">'k6/http'</span>;
+<span class="kw">import</span> { check, sleep } <span class="kw">from</span> <span class="str">'k6'</span>;
+
+<span class="kw">export const</span> options = {
+  stages: [
+    { duration: <span class="str">'2m'</span>, target: <span class="num">50</span>  },   <span class="cm">// ramp to 50 RPS</span>
+    { duration: <span class="str">'5m'</span>, target: <span class="num">200</span> },   <span class="cm">// sustain 200 RPS</span>
+    { duration: <span class="str">'2m'</span>, target: <span class="num">500</span> },   <span class="cm">// spike to 500 RPS</span>
+    { duration: <span class="str">'2m'</span>, target: <span class="num">0</span>   },   <span class="cm">// ramp down</span>
+  ],
+  thresholds: {
+    <span class="str">'http_req_duration{percentile:95}'</span>: [<span class="str">'p(95) < 3000'</span>],  <span class="cm">// P95 &lt; 3s</span>
+    <span class="str">'http_req_failed'</span>: [<span class="str">'rate < 0.005'</span>],                   <span class="cm">// &lt;0.5% error rate</span>
+  },
+};
+
+<span class="kw">const</span> PROMPTS = [
+  <span class="str">"Show revenue by province this month"</span>,
+  <span class="str">"Tính tổng doanh thu theo khu vực"</span>,
+  <span class="str">"Top 10 products by gross margin Q1 2024"</span>,
+];
+
+<span class="kw">export default function</span> () {
+  <span class="kw">const</span> res = http.post(<span class="str">`${__ENV.BASE_URL}/v1/query`</span>,
+    JSON.stringify({
+      session_id: <span class="str">`load-test-${__VU}`</span>,  <span class="cm">// unique session per VU</span>
+      prompt: PROMPTS[Math.floor(Math.random() * PROMPTS.length)],
+    }),
+    { headers: { <span class="str">'Authorization'</span>: <span class="str">`Bearer ${__ENV.TEST_TOKEN}`</span>,
+                 <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> } }
+  );
+  check(res, { <span class="str">'status 200'</span>: r => r.status === <span class="num">200</span> });
+  sleep(<span class="num">0.5</span>);
+}</code></pre>
+
+<div class="call success">
+  <div class="call-title">Continuous SQL Quality Monitoring</div>
+  <p>Beyond CI evals, a nightly batch job re-runs the 500-question eval suite against production (using a shadow tenant with synthetic data) and posts results to a Slack channel and Grafana dashboard. Any regression &gt;2% triggers a P2 incident and pauses the next deployment until investigated. All user thumbs-down events are automatically added to a human review queue for Vanna corpus improvement.</p>
+</div>
+</section>
+
+</div><!-- /content page 2 -->
+
+<footer>
+  <span>Conversational Analytics Platform — Product Architecture v2.0</span>
+  <span>Qwen · vLLM · Vanna AI · StarRocks OBT · Redis Cluster · Kubernetes · ArgoCD · OpenTelemetry</span>
+  <span>18 Sections · Product-Ready Specification</span>
+</footer>
+
+</div><!-- /main -->
+<script>
+const prog = document.getElementById('prog');
+window.addEventListener('scroll',()=>{
+  const h = document.documentElement;
+  const pct = h.scrollTop/(h.scrollHeight-h.clientHeight);
+  prog.style.transform=`scaleX(${pct})`;
+},{passive:true});
+// highlight active nav link
+const sections = document.querySelectorAll('section[id]');
+const links = document.querySelectorAll('.nav a');
+const obs = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      links.forEach(l=>{l.classList.remove('active');
+        if(l.getAttribute('href')==='#'+e.target.id) l.classList.add('active');
+      });
+    }
+  });
+},{threshold:0.3});
+sections.forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Databricks Lakehouse Platform — Principal Architect's Technical Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #f4f7fb;
+    --bg-white: #ffffff;
+    --bg-soft: #eef2f8;
+    --bg-softer: #f8fafd;
+    --blue: #3b82f6;
+    --blue-light: #eff6ff;
+    --blue-mid: #bfdbfe;
+    --blue-dark: #1d4ed8;
+    --orange: #f97316;
+    --orange-light: #fff7ed;
+    --orange-mid: #fed7aa;
+    --purple: #8b5cf6;
+    --purple-light: #f5f3ff;
+    --purple-mid: #ddd6fe;
+    --green: #22c55e;
+    --green-light: #f0fdf4;
+    --green-mid: #bbf7d0;
+    --red: #ef4444;
+    --red-light: #fef2f2;
+    --red-mid: #fecaca;
+    --teal: #14b8a6;
+    --teal-light: #f0fdfa;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --border: #e2e8f0;
+    --border-light: #f1f5f9;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+    --shadow-xl: 0 20px 50px rgba(0,0,0,0.10), 0 8px 20px rgba(0,0,0,0.06);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; font-size: 17px; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* ─── TYPOGRAPHY ─── */
+  h1, h2, h3, h4 { font-family: 'Sora', 'Inter', sans-serif; line-height: 1.2; }
+  h1 { font-size: 2.8rem; font-weight: 800; }
+  h2 { font-size: 2rem; font-weight: 700; }
+  h3 { font-size: 1.35rem; font-weight: 700; }
+  h4 { font-size: 1.05rem; font-weight: 600; }
+  p { font-size: 1rem; color: var(--text-secondary); line-height: 1.75; }
+  code, pre, .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+  a { color: var(--blue-dark); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ─── LAYOUT ─── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 80px 0; }
+  .section-sm { padding: 48px 0; }
+
+  /* ─── NAV ─── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px; max-width: 1200px; margin: 0 auto; padding: 0 24px;
+  }
+  .nav-brand {
+    font-family: 'Sora', sans-serif; font-weight: 800; font-size: 1rem;
+    color: var(--text-primary); letter-spacing: -0.3px;
+  }
+  .nav-brand span { color: var(--blue); }
+  .nav-links { display: flex; gap: 6px; flex-wrap: wrap; }
+  .nav-links a {
+    font-size: 0.78rem; font-weight: 500; padding: 5px 10px;
+    border-radius: var(--radius-sm); color: var(--text-muted);
+    transition: all 0.2s; white-space: nowrap;
+  }
+  .nav-links a:hover { background: var(--bg-soft); color: var(--text-primary); text-decoration: none; }
+  .nav-links a.active { background: var(--blue-light); color: var(--blue-dark); }
+
+  /* ─── HERO ─── */
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f2744 100%);
+    padding: 90px 0 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 30% 50%, rgba(59,130,246,0.25) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 20%, rgba(139,92,246,0.18) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(249,115,22,0.12) 0%, transparent 40%);
+  }
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .hero-inner { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4);
+    color: #93c5fd; font-size: 0.75rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 24px; letter-spacing: 0.5px;
+  }
+  .hero-badge::before { content: '●'; font-size: 0.6rem; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .hero h1 { color: #ffffff; margin-bottom: 16px; letter-spacing: -1px; }
+  .hero h1 span { 
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero-subtitle { font-size: 1.1rem; color: #94a3b8; max-width: 700px; margin-bottom: 36px; }
+  .hero-meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  .hero-meta-item { display: flex; align-items: center; gap: 8px; }
+  .hero-meta-item .label { font-size: 0.78rem; font-weight: 500; color: #64748b; }
+  .hero-meta-item .value { font-size: 0.82rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #cbd5e1; }
+  .hero-pillars { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 40px; }
+  .hero-pillar-tag {
+    padding: 6px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+    border: 1px solid; cursor: pointer; transition: all 0.2s;
+  }
+  .hero-pillar-tag:hover { transform: translateY(-1px); }
+  .tag-blue { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); color: #93c5fd; }
+  .tag-orange { background: rgba(249,115,22,0.15); border-color: rgba(249,115,22,0.4); color: #fb923c; }
+  .tag-purple { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
+  .tag-green { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.4); color: #86efac; }
+  .tag-teal { background: rgba(20,184,166,0.15); border-color: rgba(20,184,166,0.4); color: #5eead4; }
+
+  /* ─── TOC ─── */
+  .toc-wrapper {
+    background: var(--bg-white); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-md);
+    margin: 48px 0;
+  }
+  .toc-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-light); margin-bottom: 20px; }
+  .toc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .toc-item {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-radius: var(--radius-md); border: 1px solid var(--border-light);
+    cursor: pointer; transition: all 0.2s; text-decoration: none; color: var(--text-secondary);
+  }
+  .toc-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); text-decoration: none; }
+  .toc-num { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+  .toc-text { font-size: 0.82rem; font-weight: 600; line-height: 1.3; }
+  .toc-item.p1:hover { background: var(--blue-light); border-color: var(--blue-mid); color: var(--blue-dark); }
+  .toc-item.p1 .toc-num { background: var(--blue-light); color: var(--blue-dark); }
+  .toc-item.p2:hover { background: var(--orange-light); border-color: var(--orange-mid); color: #c2410c; }
+  .toc-item.p2 .toc-num { background: var(--orange-light); color: var(--orange); }
+  .toc-item.p3:hover { background: var(--purple-light); border-color: var(--purple-mid); color: #6d28d9; }
+  .toc-item.p3 .toc-num { background: var(--purple-light); color: var(--purple); }
+  .toc-item.p4:hover { background: var(--green-light); border-color: var(--green-mid); color: #15803d; }
+  .toc-item.p4 .toc-num { background: var(--green-light); color: var(--green); }
+  .toc-item.p5:hover { background: var(--teal-light); border-color: #99f6e4; color: #0f766e; }
+  .toc-item.p5 .toc-num { background: var(--teal-light); color: var(--teal); }
+  .toc-item.summary:hover { background: #fafafa; border-color: #cbd5e1; color: var(--text-primary); }
+  .toc-item.summary .toc-num { background: #f1f5f9; color: var(--text-muted); }
+
+  /* ─── PILLAR HEADER ─── */
+  .pillar-header {
+    display: flex; align-items: flex-start; gap: 20px;
+    padding: 32px 36px; border-radius: var(--radius-xl);
+    margin-bottom: 36px; position: relative; overflow: hidden;
+  }
+  .pillar-header::after {
+    content: attr(data-label);
+    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+    font-family: 'JetBrains Mono', monospace; font-size: 5rem; font-weight: 700;
+    opacity: 0.06; color: currentColor; white-space: nowrap; pointer-events: none;
+    letter-spacing: -4px;
+  }
+  .pillar-header.blue { background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #bfdbfe; }
+  .pillar-header.orange { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fed7aa; }
+  .pillar-header.purple { background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border: 1px solid #ddd6fe; }
+  .pillar-header.green { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #bbf7d0; }
+  .pillar-header.teal { background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%); border: 1px solid #99f6e4; }
+  .pillar-icon { font-size: 2.2rem; flex-shrink: 0; margin-top: 2px; }
+  .pillar-meta { flex: 1; }
+  .pillar-num { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; opacity: 0.7; }
+  .pillar-header h2 { font-size: 1.7rem; margin-bottom: 8px; }
+  .pillar-header.blue .pillar-num, .pillar-header.blue h2 { color: var(--blue-dark); }
+  .pillar-header.orange .pillar-num, .pillar-header.orange h2 { color: #c2410c; }
+  .pillar-header.purple .pillar-num, .pillar-header.purple h2 { color: #6d28d9; }
+  .pillar-header.green .pillar-num, .pillar-header.green h2 { color: #15803d; }
+  .pillar-header.teal .pillar-num, .pillar-header.teal h2 { color: #0f766e; }
+  .pillar-desc { font-size: 0.9rem; color: var(--text-muted); }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--bg-white); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 28px 32px;
+    box-shadow: var(--shadow-sm); transition: box-shadow 0.2s, transform 0.2s;
+    margin-bottom: 24px;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+  .card-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-light);
+  }
+  .card-title .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue { background: var(--blue); }
+  .dot-orange { background: var(--orange); }
+  .dot-purple { background: var(--purple); }
+  .dot-green { background: var(--green); }
+  .dot-teal { background: var(--teal); }
+  .dot-red { background: var(--red); }
+
+  /* ─── CODE BLOCKS ─── */
+  .code-block {
+    background: #0f172a; border-radius: var(--radius-md);
+    padding: 20px 24px; overflow-x: auto; margin: 16px 0;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: var(--shadow-md);
+  }
+  .code-block pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem; line-height: 1.7;
+    color: #e2e8f0; white-space: pre; tab-size: 2;
+  }
+  .code-label {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px; background: rgba(59,130,246,0.2);
+    color: #60a5fa; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .code-dots { display: flex; gap: 6px; margin-left: auto; }
+  .code-dots span { width: 10px; height: 10px; border-radius: 50%; }
+  .code-dots span:nth-child(1) { background: #ef4444; }
+  .code-dots span:nth-child(2) { background: #f59e0b; }
+  .code-dots span:nth-child(3) { background: #22c55e; }
+  .cm-keyword { color: #c084fc; }
+  .cm-string { color: #86efac; }
+  .cm-comment { color: #475569; font-style: italic; }
+  .cm-func { color: #60a5fa; }
+  .cm-type { color: #fb923c; }
+  .cm-num { color: #f472b6; }
+  .cm-var { color: #e2e8f0; }
+  .cm-op { color: #94a3b8; }
+
+  /* ─── INLINE CODE ─── */
+  .ic {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.82em; font-weight: 500;
+    background: #f1f5f9; color: #0f172a; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* ─── GRID LAYOUTS ─── */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+
+  /* ─── CALLOUTS ─── */
+  .callout {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 16px 20px; border-radius: var(--radius-md);
+    margin: 16px 0; border-left: 3px solid;
+  }
+  .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+  .callout-content p { font-size: 0.9rem; line-height: 1.6; }
+  .callout-content strong { font-weight: 600; }
+  .callout.info { background: var(--blue-light); border-color: var(--blue); }
+  .callout.warning { background: var(--orange-light); border-color: var(--orange); }
+  .callout.success { background: var(--green-light); border-color: var(--green); }
+  .callout.error { background: var(--red-light); border-color: var(--red); }
+  .callout.note { background: var(--purple-light); border-color: var(--purple); }
+
+  /* ─── COMPARISON TABLE ─── */
+  .table-wrapper { overflow-x: auto; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+  table {
+    width: 100%; border-collapse: collapse;
+    background: var(--bg-white); font-size: 0.88rem;
+  }
+  thead { background: #0f172a; }
+  thead th {
+    padding: 14px 18px; text-align: left; font-size: 0.78rem;
+    font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;
+    border-bottom: 2px solid #1e293b; white-space: nowrap;
+  }
+  thead th:first-child { color: #ffffff; font-size: 0.8rem; }
+  tbody tr { border-bottom: 1px solid var(--border-light); transition: background 0.15s; }
+  tbody tr:hover { background: var(--bg-softer); }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 13px 18px; font-size: 0.88rem; vertical-align: top; }
+  td:first-child { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-blue { background: var(--blue-light); color: var(--blue-dark); }
+  .badge-orange { background: var(--orange-light); color: #c2410c; }
+  .badge-purple { background: var(--purple-light); color: #6d28d9; }
+  .badge-green { background: var(--green-light); color: #15803d; }
+  .badge-red { background: var(--red-light); color: #b91c1c; }
+  .badge-teal { background: var(--teal-light); color: #0f766e; }
+  .badge-gray { background: #f1f5f9; color: #475569; }
+
+  /* ─── METRIC CARDS ─── */
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 20px 0; }
+  .metric-card {
+    background: var(--bg-white); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 20px;
+    box-shadow: var(--shadow-sm); text-align: center; transition: all 0.2s;
+  }
+  .metric-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .metric-num { font-family: 'Sora', sans-serif; font-size: 2.2rem; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+  .metric-label { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
+
+  /* ─── ARCHITECTURE DIAGRAM ─── */
+  .arch-box {
+    background: var(--bg-white); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 24px;
+    box-shadow: var(--shadow-sm); margin: 20px 0;
+  }
+  .arch-layer {
+    display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap;
+    padding: 12px; border-radius: var(--radius-md);
+    margin-bottom: 10px;
+  }
+  .arch-layer-label {
+    writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg);
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--text-light); min-width: 20px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .arch-block {
+    flex: 1; min-width: 100px; padding: 10px 14px;
+    border-radius: var(--radius-sm); text-align: center;
+    font-size: 0.78rem; font-weight: 600; line-height: 1.3;
+  }
+  .arch-arrow { text-align: center; font-size: 1.1rem; color: var(--text-light); margin: 4px 0; }
+
+  /* ─── PROS/CONS ─── */
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 16px 0; }
+  .pros-box, .cons-box {
+    border-radius: var(--radius-md); padding: 20px 22px;
+  }
+  .pros-box { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .cons-box { background: #fef2f2; border: 1px solid #fecaca; }
+  .pros-box h4 { color: #15803d; margin-bottom: 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+  .cons-box h4 { color: #b91c1c; margin-bottom: 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+  .item-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .item-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.88rem; line-height: 1.5; color: var(--text-secondary); }
+  .item-list li::before { content: ''; flex-shrink: 0; margin-top: 6px; }
+  .pros-box .item-list li::before { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .cons-box .item-list li::before { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+
+  /* ─── SECTION SEPARATOR ─── */
+  .sep { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+  .pillar-section { padding: 72px 0; }
+  .pillar-section + .pillar-section { border-top: 1px solid var(--border); }
+
+  /* ─── DETAIL GRID ─── */
+  .detail-item { padding: 16px 0; border-bottom: 1px solid var(--border-light); }
+  .detail-item:last-child { border-bottom: none; }
+  .detail-item h4 { margin-bottom: 6px; font-size: 0.9rem; }
+  .detail-item p { font-size: 0.88rem; }
+
+  /* ─── FINAL TABLE SPECIAL ─── */
+  .final-table thead th { font-size: 0.82rem; }
+  .final-table td { font-size: 0.86rem; }
+  .score-bar { display: flex; align-items: center; gap: 10px; }
+  .score-track { flex: 1; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; min-width: 60px; }
+  .score-fill { height: 100%; border-radius: 999px; transition: width 0.3s; }
+  .score-label { font-size: 0.75rem; font-weight: 700; min-width: 24px; text-align: right; }
+
+  /* ─── FOOTER ─── */
+  footer {
+    background: #0f172a; color: #64748b; padding: 48px 0 32px;
+    margin-top: 80px;
+  }
+  .footer-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+  .footer-brand { font-family: 'Sora', sans-serif; font-size: 1.1rem; font-weight: 800; color: #ffffff; margin-bottom: 12px; }
+  .footer-brand span { color: #60a5fa; }
+  .footer-desc { font-size: 0.83rem; line-height: 1.7; color: #475569; }
+  .footer-col-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #475569; margin-bottom: 14px; }
+  .footer-refs { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .footer-refs li { font-size: 0.8rem; }
+  .footer-refs a { color: #64748b; font-size: 0.8rem; }
+  .footer-refs a:hover { color: #93c5fd; }
+  .footer-bottom { border-top: 1px solid #1e293b; padding-top: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; gap: 12px; }
+  .footer-bottom p { font-size: 0.78rem; color: #475569; }
+  .footer-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footer-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+    padding: 3px 8px; border-radius: 4px; background: #1e293b; color: #475569;
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 900px) {
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.6rem; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .pros-cons { grid-template-columns: 1fr; }
+    .footer-top { grid-template-columns: 1fr; gap: 24px; }
+    .nav-links { display: none; }
+    .pillar-header::after { display: none; }
+    .hero { padding: 60px 0 50px; }
+  }
+  @media (max-width: 640px) {
+    html { font-size: 15px; }
+    .card { padding: 20px; }
+    .pillar-header { flex-direction: column; padding: 24px; }
+    .arch-layer { flex-direction: column; }
+    .arch-layer-label { writing-mode: horizontal-tb; transform: none; }
+    .toc-grid { grid-template-columns: 1fr; }
+  }
+  @media print {
+    nav, footer { display: none; }
+    .card:hover { box-shadow: none; transform: none; }
+  }
+
+  /* ─── SMOOTH SCROLL OFFSET ─── */
+  [id] { scroll-margin-top: 70px; }
+
+  /* ─── LOADING ANIMATION ─── */
+  .fade-in {
+    opacity: 0; transform: translateY(20px);
+    animation: fadeUp 0.6s ease forwards;
+  }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- ═══ NAVIGATION ═══ -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">Databricks <span>Lakehouse</span> · Deep Dive</div>
+    <div class="nav-links">
+      <a href="#pillar1" class="p1">Δ Delta Lake</a>
+      <a href="#pillar2" class="p2">⚡ Photon</a>
+      <a href="#pillar3" class="p3">🔒 Unity Catalog</a>
+      <a href="#pillar4" class="p4">🔁 DLT</a>
+      <a href="#pillar5" class="p5">🔗 Ecosystem</a>
+      <a href="#summary">📊 Summary</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">Principal Architect Analysis · v2025</div>
+    <h1 class="fade-in">Databricks <span>Lakehouse</span><br>Platform Architecture</h1>
+    <p class="hero-subtitle fade-in delay-1">A comprehensive, low-level technical analysis across five core architectural pillars — Delta Lake, Photon, Unity Catalog, Delta Live Tables, and Ecosystem Integration. Built for Senior Data Engineers operating at petabyte scale.</p>
+    <div class="hero-meta fade-in delay-2">
+      <div class="hero-meta-item"><span class="label">Scope</span><span class="value">5 Pillars · Petabyte Scale</span></div>
+      <div class="hero-meta-item"><span class="label">Compared Against</span><span class="value">Iceberg · Hudi · Trino · dbt</span></div>
+      <div class="hero-meta-item"><span class="label">Architecture Layer</span><span class="value">Storage → Compute → Governance</span></div>
+    </div>
+    <div class="hero-pillars fade-in delay-3">
+      <a href="#pillar1" class="hero-pillar-tag tag-blue">01 · Delta Lake</a>
+      <a href="#pillar2" class="hero-pillar-tag tag-orange">02 · Photon Engine</a>
+      <a href="#pillar3" class="hero-pillar-tag tag-purple">03 · Unity Catalog</a>
+      <a href="#pillar4" class="hero-pillar-tag tag-green">04 · Delta Live Tables</a>
+      <a href="#pillar5" class="hero-pillar-tag tag-teal">05 · Ecosystem</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="container">
+
+  <!-- TOC -->
+  <div class="toc-wrapper">
+    <div class="toc-title">Contents</div>
+    <div class="toc-grid">
+      <a href="#pillar1" class="toc-item p1"><span class="toc-num">01</span><span class="toc-text">Storage Layer &amp; Transactional Integrity (Delta Lake)</span></a>
+      <a href="#pillar2" class="toc-item p2"><span class="toc-num">02</span><span class="toc-text">High-Performance Compute Engine (Photon)</span></a>
+      <a href="#pillar3" class="toc-item p3"><span class="toc-num">03</span><span class="toc-text">Data Governance &amp; Privacy (Unity Catalog)</span></a>
+      <a href="#pillar4" class="toc-item p4"><span class="toc-num">04</span><span class="toc-text">Declarative Pipelines (Delta Live Tables)</span></a>
+      <a href="#pillar5" class="toc-item p5"><span class="toc-num">05</span><span class="toc-text">Integration &amp; Infrastructure (Ecosystem)</span></a>
+      <a href="#summary" class="toc-item summary"><span class="toc-num">Σ</span><span class="toc-text">Final Comparison: Databricks vs. Vanilla Spark</span></a>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PILLAR 1: DELTA LAKE
+  ════════════════════════════════════════════════════════ -->
+  <section class="pillar-section" id="pillar1">
+    <div class="pillar-header blue" data-label="DELTA">
+      <div class="pillar-icon">🗄️</div>
+      <div class="pillar-meta">
+        <div class="pillar-num">Pillar 01 — Storage Layer &amp; Transactional Integrity</div>
+        <h2>Delta Lake</h2>
+        <p class="pillar-desc">ACID-compliant open-source storage layer built atop Parquet, resolving the fundamental mismatch between object storage semantics and transactional database requirements.</p>
+      </div>
+    </div>
+
+    <!-- 1.1 Problem Statement -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Definition &amp; Problem Statement</div>
+      <div class="grid-2">
+        <div>
+          <h3 style="color:var(--blue-dark);margin-bottom:12px;">The Legacy Failure Modes</h3>
+          <p>Traditional Hadoop/HDFS-based data lakes suffered from the <strong>"swamp" problem</strong>: schema drift, failed job debris, and the complete absence of isolation guarantees. Reading a partition mid-write on HDFS returned partial data. Hive's per-partition, client-side locking via <span class="ic">ZooKeeper</span> created deadlock vectors at scale and didn't enforce atomicity across multi-partition writes.</p>
+          <br>
+          <p>Object stores like S3, GCS, and ADLS compounded this: they offer <em>eventual consistency</em> per object (S3 only became strongly consistent in December 2020 per AWS documentation), lack native rename atomicity, and the <span class="ic">LIST</span> operation is O(n) with high latency — a fundamental architectural impedance mismatch with the "directory-as-partition" model Hive depended on.</p>
+          <br>
+          <p>The result: production pipelines at petabyte scale required elaborate workarounds — two-phase writes, external transaction coordinators, and manual repair scripts — all outside the engine, un-auditable, and brittle.</p>
+        </div>
+        <div>
+          <div class="callout warning">
+            <span class="callout-icon">⚠️</span>
+            <div class="callout-content"><p><strong>HDFS/Hive ACID Isolation Gap:</strong> Hive's AcidUtils provides only <em>statement-level</em> isolation using row-level deltas (ORC format), requiring a separate <span class="ic">Metastore</span> lock manager and <span class="ic">compactor</span> daemon. This architecture cannot scale beyond ~thousands of concurrent writers and enforces no true Snapshot Isolation at the engine level.</p></div>
+          </div>
+          <div class="callout error">
+            <span class="callout-icon">🔴</span>
+            <div class="callout-content"><p><strong>Standard Cloud Lake Problems:</strong> S3-compatible stores use <strong>CAS (Compare-And-Swap)</strong> semantics only at object granularity. There is no directory-level atomic rename. AWS S3 <span class="ic">PUT</span> is atomic but <span class="ic">multipart upload + complete</span> is not crash-safe. Listing 100M+ objects in a prefix can cost seconds and $$$.</p></div>
+          </div>
+          <div class="callout info">
+            <span class="callout-icon">ℹ️</span>
+            <div class="callout-content"><p><strong>Delta Lake's Answer:</strong> Serialize all table mutations through an optimistic concurrency control (OCC) protocol backed by an append-only, JSON-based transaction log. No ZooKeeper. No distributed lock server. No schema registry required.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1.2 Architecture -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Internal Architecture &amp; Mechanics — The Delta Transaction Log</div>
+      
+      <p style="margin-bottom:20px;">Every Delta table is a directory in object storage containing two subdirectories: data files (Parquet) and the <strong>Delta Log</strong> at <span class="ic">_delta_log/</span>. The log is the source of truth — the data files are immutable blobs; only the log defines what "the table" is at any point in time.</p>
+
+      <div class="arch-box">
+        <div style="text-align:center;font-size:0.72rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Delta Table On-Disk Structure</div>
+        <div class="arch-layer" style="background:#eff6ff;border:1px solid #bfdbfe;">
+          <div class="arch-layer-label" style="color:var(--blue-dark);">Object Storage</div>
+          <div class="arch-block" style="background:#dbeafe;color:#1e40af;">part-00001.snappy.parquet<br><small style="font-weight:400;font-size:0.72rem;">Immutable data file</small></div>
+          <div class="arch-block" style="background:#dbeafe;color:#1e40af;">part-00002.snappy.parquet<br><small style="font-weight:400;font-size:0.72rem;">Immutable data file</small></div>
+          <div class="arch-block" style="background:#bfdbfe;color:#1d4ed8;border:1px solid #93c5fd;">_delta_log/<br>00000000000.json<br>00000000001.json<br>…<br>00000000010.checkpoint.parquet<br><small style="font-weight:400;font-size:0.72rem;">Transaction Log</small></div>
+          <div class="arch-block" style="background:#dbeafe;color:#1e40af;">_delta_log/<br>_last_checkpoint<br><small style="font-weight:400;font-size:0.72rem;">Checkpoint pointer</small></div>
+        </div>
+      </div>
+
+      <h4 style="margin:20px 0 12px;color:var(--blue-dark);">Transaction Log Entry Anatomy</h4>
+      <p style="margin-bottom:12px;">Each commit produces one JSON file named with a zero-padded monotonically increasing 20-digit number. The JSON contains a sequence of actions:</p>
+
+      <div class="code-block">
+        <div class="code-label"><span class="code-lang">JSON</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">_delta_log/00000000003.json</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+        <pre><span class="cm-comment">// Action 1: Protocol & metadata</span>
+{<span class="cm-string">"protocol"</span>: {<span class="cm-string">"minReaderVersion"</span>: <span class="cm-num">2</span>, <span class="cm-string">"minWriterVersion"</span>: <span class="cm-num">5</span>}}
+{<span class="cm-string">"metaData"</span>: {
+  <span class="cm-string">"id"</span>: <span class="cm-string">"3a5f2a40-..."</span>,
+  <span class="cm-string">"schemaString"</span>: <span class="cm-string">"{\"type\":\"struct\",\"fields\":[...]}"</span>,
+  <span class="cm-string">"partitionColumns"</span>: [<span class="cm-string">"event_date"</span>],
+  <span class="cm-string">"configuration"</span>: {<span class="cm-string">"delta.enableDeletionVectors"</span>: <span class="cm-string">"true"</span>}
+}}
+<span class="cm-comment">// Action 2: New file additions (stats embedded per-file)</span>
+{<span class="cm-string">"add"</span>: {
+  <span class="cm-string">"path"</span>: <span class="cm-string">"event_date=2024-01-15/part-00001.snappy.parquet"</span>,
+  <span class="cm-string">"size"</span>: <span class="cm-num">134217728</span>,
+  <span class="cm-string">"modificationTime"</span>: <span class="cm-num">1705363200000</span>,
+  <span class="cm-string">"dataChange"</span>: <span class="cm-keyword">true</span>,
+  <span class="cm-string">"stats"</span>: <span class="cm-string">"{\"numRecords\":2500000,\"minValues\":{\"user_id\":1001},
+    \"maxValues\":{\"user_id\":9999999},
+    \"nullCount\":{\"revenue\":0}}"</span>
+}}
+<span class="cm-comment">// Action 3: Files removed (logical delete — Parquet file still exists until VACUUM)</span>
+{<span class="cm-string">"remove"</span>: {
+  <span class="cm-string">"path"</span>: <span class="cm-string">"event_date=2024-01-15/part-00000.snappy.parquet"</span>,
+  <span class="cm-string">"deletionTimestamp"</span>: <span class="cm-num">1705363200000</span>,
+  <span class="cm-string">"dataChange"</span>: <span class="cm-keyword">true</span>
+}}
+<span class="cm-comment">// Action 4: CommitInfo for auditing</span>
+{<span class="cm-string">"commitInfo"</span>: {
+  <span class="cm-string">"timestamp"</span>: <span class="cm-num">1705363210000</span>,
+  <span class="cm-string">"operation"</span>: <span class="cm-string">"MERGE"</span>,
+  <span class="cm-string">"operationParameters"</span>: {<span class="cm-string">"predicate"</span>: <span class="cm-string">"[\"(source.id = target.id)\"]"</span>},
+  <span class="cm-string">"isolationLevel"</span>: <span class="cm-string">"WriteSerializable"</span>,
+  <span class="cm-string">"isBlindAppend"</span>: <span class="cm-keyword">false</span>
+}}</pre>
+      </div>
+
+      <div class="grid-2" style="margin-top:20px;">
+        <div>
+          <h4 style="color:var(--blue-dark);margin-bottom:10px;">Checkpoint Mechanics</h4>
+          <p style="font-size:0.88rem;">Every 10 commits (configurable via <span class="ic">delta.checkpointInterval</span>), Delta materializes the current table state into a Parquet checkpoint file. This collapses all prior <span class="ic">add</span>/<span class="ic">remove</span> actions into a single file. Reading a checkpoint + subsequent JSON entries is O(1) in the number of historical commits — critical at petabyte scale where transaction logs can have millions of entries. The <span class="ic">_last_checkpoint</span> JSON file stores a pointer to the latest checkpoint version number so clients skip full log replay.</p>
+        </div>
+        <div>
+          <h4 style="color:var(--blue-dark);margin-bottom:10px;">Optimistic Concurrency Control (OCC)</h4>
+          <p style="font-size:0.88rem;">Writers read the current version, compute changes, then attempt to atomically write version N+1. The write succeeds only if no conflicting transaction committed between read and write. Conflict detection is operation-aware: two concurrent <em>blind appends</em> to different partitions never conflict; a <em>MERGE</em> and a concurrent schema change will. The <span class="ic">WriteSerializable</span> isolation level (default) detects read-write conflicts; <span class="ic">Serializable</span> additionally prevents phantom reads — at higher abort rates.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1.3 Optimizations -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Internal Optimizations: Z-Order, Data Skipping &amp; Bloom Filters</div>
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div style="padding:18px;background:var(--blue-light);border-radius:var(--radius-md);border:1px solid var(--blue-mid);">
+          <h4 style="color:var(--blue-dark);margin-bottom:8px;">Z-Ordering (Multi-Dimensional Clustering)</h4>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Z-ordering interleaves bits of multiple column values using the <strong>Z-curve (Morton code)</strong> space-filling curve. Running <span class="ic">OPTIMIZE ... ZORDER BY (col_a, col_b)</span> physically co-locates rows with similar values across both columns into the same Parquet files. This maximizes the effectiveness of min/max column statistics for multi-column predicate pushdown, reducing files scanned from O(n) to O(log n) for selective point lookups. The compaction rewrites files to the target file size (default 1GB) while sorting by Z-value.</p>
+        </div>
+        <div style="padding:18px;background:var(--orange-light);border-radius:var(--radius-md);border:1px solid var(--orange-mid);">
+          <h4 style="color:#c2410c;margin-bottom:8px;">Data Skipping via Column Statistics</h4>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Every <span class="ic">add</span> action in the Delta Log embeds per-file column statistics: <span class="ic">minValues</span>, <span class="ic">maxValues</span>, and <span class="ic">nullCount</span> for the first 32 columns (configurable via <span class="ic">delta.dataSkippingNumIndexedCols</span>). At query time, the Delta reader evaluates the query predicate against the file-level stats — this is pure metadata I/O, no file data is read. Files with non-overlapping ranges are entirely skipped. On a 10TB table with good clustering, this can reduce physical I/O by 99%+ for selective queries.</p>
+        </div>
+        <div style="padding:18px;background:var(--purple-light);border-radius:var(--radius-md);border:1px solid var(--purple-mid);">
+          <h4 style="color:#6d28d9;margin-bottom:8px;">Bloom Filters (Delta 2.0+)</h4>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">For high-cardinality string columns where min/max is useless (e.g., UUID lookups), Delta supports Bloom filters at the column chunk level, stored in Parquet page footers. Configured per-column via <span class="ic">delta.bloomFilter.enabled</span> and <span class="ic">delta.bloomFilter.fpp</span> (false positive probability, default 1%). The Bloom filter acts as a probabilistic skip layer: a definitive <em>not-in-file</em> signal prevents reading data pages entirely. False positives result in unnecessary file reads but never incorrect results.</p>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span class="code-lang">SQL</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Optimization DDL examples</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+        <pre><span class="cm-comment">-- 1. Compaction + Z-ordering: rewrites files up to 1GB, sorted by Z-curve of (user_id, event_ts)</span>
+<span class="cm-keyword">OPTIMIZE</span> events <span class="cm-keyword">WHERE</span> event_date = <span class="cm-string">'2024-01-15'</span>
+<span class="cm-keyword">ZORDER BY</span> (user_id, event_ts);
+
+<span class="cm-comment">-- 2. Bloom filter DDL — persist in Parquet column statistics for UUID lookups</span>
+<span class="cm-keyword">ALTER TABLE</span> events
+<span class="cm-keyword">SET TBLPROPERTIES</span> (
+  <span class="cm-string">'delta.bloomFilter.columns'</span> = <span class="cm-string">'session_id,request_id'</span>,
+  <span class="cm-string">'delta.bloomFilter.fpp'</span>     = <span class="cm-string">'0.001'</span>
+);
+
+<span class="cm-comment">-- 3. Deletion Vectors (Delta 2.3+) — soft-delete without full file rewrite</span>
+<span class="cm-comment">--    Marks deleted row offsets in a separate .dvbin file, avoids MERGE amplification</span>
+<span class="cm-keyword">DELETE FROM</span> events <span class="cm-keyword">WHERE</span> user_id = <span class="cm-num">12345</span>;
+<span class="cm-comment">--    Produces: _delta_log/.../deletion_vector_abc123.dvbin (bitmap of deleted offsets)</span>
+
+<span class="cm-comment">-- 4. VACUUM — permanently removes unreferenced Parquet files, respects retention window</span>
+<span class="cm-keyword">VACUUM</span> events <span class="cm-keyword">RETAIN</span> <span class="cm-num">168</span> <span class="cm-keyword">HOURS</span>; <span class="cm-comment">-- 7-day default; Time Travel requires retention</span></pre>
+      </div>
+    </div>
+
+    <!-- 1.4 Pros/Cons -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Pros &amp; Cons — Objective Assessment</div>
+      <div class="pros-cons">
+        <div class="pros-box">
+          <h4>✅ Strengths</h4>
+          <ul class="item-list">
+            <li>True ACID semantics on object storage with no external coordinator — OCC-based protocol is lock-free and horizontally scalable</li>
+            <li>Deletion Vectors (DV) eliminate the O(file_size) rewrite penalty for DELETE/UPDATE, enabling GDPR/CCPA compliance at petabyte scale without prohibitive I/O amplification</li>
+            <li>Unified batch + streaming (Structured Streaming checkpoints embedded in Delta Log) — single table serves both consumers</li>
+            <li>Time Travel (historical queries via <span class="ic">VERSION AS OF</span> / <span class="ic">TIMESTAMP AS OF</span>) backed by the immutable log — no data copies required</li>
+            <li>Open-source (Apache 2.0) with published spec (Delta Protocol), enabling third-party read/write (Kernel, native connectors for DuckDB, StarRocks)</li>
+            <li>Native Change Data Feed (CDF) exposes row-level change events as a stream, enabling incremental processing patterns without CDC infrastructure</li>
+          </ul>
+        </div>
+        <div class="cons-box">
+          <h4>❌ Limitations &amp; Trade-offs</h4>
+          <ul class="item-list">
+            <li><strong>Metadata Scalability Wall:</strong> Delta's JSON transaction log and per-file statistics scale poorly beyond ~100M files — log replay and checkpoint size become bottlenecks. Iceberg's manifests handle billions of files more gracefully</li>
+            <li><strong>OPTIMIZE is Manual / Expensive:</strong> Z-Ordering compaction is a full file rewrite — it can consume enormous I/O and compute on large tables. It is not automatic (unlike Iceberg's auto-compaction spec)</li>
+            <li><strong>Vendor Gravity:</strong> While the spec is open, advanced features (Liquid Clustering, Enhanced Autoscaling, Predictive Optimization) are Databricks-proprietary and don't exist in the open-source version</li>
+            <li><strong>Lock-In via Proprietary Extensions:</strong> Deletion Vectors, Uniform (Iceberg-compatible metadata), and Row Tracking require Databricks Runtime or Delta-Kernel — not all engines support them equally</li>
+            <li><strong>CDF Cost:</strong> Change Data Feed doubles write amplification — each changed row is written both to the main data file and to a CDF <span class="ic">_change_data</span> file</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1.5 Comparison: Iceberg vs Hudi -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Open-Source Comparison: Delta Lake vs. Apache Iceberg vs. Apache Hudi</div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Delta Lake (OSS)</th>
+              <th>Apache Iceberg</th>
+              <th>Apache Hudi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Metadata Architecture</td>
+              <td>JSON transaction log + Parquet checkpoints. Stats in log entries. O(commits) replay cost.</td>
+              <td>Manifest files → Manifest list → Snapshot → Catalog. Hierarchical tree. O(1) snapshot switch.</td>
+              <td>Timeline + file group model. Row-level index in HFile. Hybrid approach.</td>
+            </tr>
+            <tr>
+              <td>Metadata Scalability (billions of files)</td>
+              <td><span class="badge badge-orange">Limited</span> — log replay becomes bottleneck; checkpoint size grows linearly</td>
+              <td><span class="badge badge-green">Excellent</span> — manifest pruning + partition evolution avoids full scan; supports 100B+ files</td>
+              <td><span class="badge badge-blue">Good</span> — HFile-based index scales well for upsert-heavy workloads</td>
+            </tr>
+            <tr>
+              <td>Schema Evolution</td>
+              <td>Column add/rename/nullability. Schema enforcement via <span class="ic">mergeSchema</span>. No column reordering without rewrite.</td>
+              <td>Full schema evolution: add, drop, rename, reorder, widen. Hidden partitioning. Partition evolution without rewrites.</td>
+              <td>Column add/rename. Schema on read via Avro GenericRecord. Less mature than Iceberg.</td>
+            </tr>
+            <tr>
+              <td>Upsert Performance</td>
+              <td><span class="badge badge-blue">Good</span> — MERGE INTO with file-level stats. Deletion Vectors reduce amplification since v2.3.</td>
+              <td><span class="badge badge-blue">Good</span> — Copy-on-Write or Merge-on-Read strategies. Row-delta files for low-latency updates.</td>
+              <td><span class="badge badge-green">Best</span> — purpose-built for upserts with record-level index; COPY_ON_WRITE and MERGE_ON_READ table types</td>
+            </tr>
+            <tr>
+              <td>ACID Isolation</td>
+              <td>Serializable / WriteSerializable via OCC on object store</td>
+              <td>Serializable via OCC; relies on catalog for atomicity (Hive, Nessie, REST)</td>
+              <td>MVCC with timeline; weaker multi-writer story without Hudi Table Services running</td>
+            </tr>
+            <tr>
+              <td>Engine Support</td>
+              <td>Spark (native), Flink (read/write), DuckDB, Trino/Presto (via Delta-Kernel, limited writes)</td>
+              <td><span class="badge badge-green">Broadest</span> — Spark, Flink, Trino, Presto, Hive, StarRocks, Snowflake (external tables)</td>
+              <td>Spark, Flink, Presto (read-only), Hive (read-only)</td>
+            </tr>
+            <tr>
+              <td>Streaming &amp; CDC</td>
+              <td>First-class: Structured Streaming writes directly. CDF for change propagation.</td>
+              <td>Flink connector mature. No native CDF; relies on CDC tools (Debezium → Iceberg sink).</td>
+              <td>Strongest native CDC — DeltaStreamer ingests from Kafka, DFS; built-in CDC absorption</td>
+            </tr>
+            <tr>
+              <td>Liquid Clustering</td>
+              <td><span class="badge badge-blue">Databricks-only</span> — replaces static partitions with adaptive multi-dimensional clustering; auto-maintained</td>
+              <td>Sorted data within partitions via writer config; no native auto-clustering framework</td>
+              <td>Clustering supported but manual; no adaptive strategy</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout note" style="margin-top:20px;">
+        <span class="callout-icon">💡</span>
+        <div class="callout-content"><p><strong>Architectural Verdict:</strong> For tables exceeding 1 billion files, <strong>Apache Iceberg</strong>'s manifest-level metadata hierarchy is architecturally superior to Delta's append-only log. Iceberg's partition evolution also eliminates the "partition anti-pattern" problem that forces costly rewrites in Delta. However, Delta's unified batch/streaming model, superior Spark integration, and Deletion Vectors make it the better choice for ML feature stores and real-time analytics on Databricks infrastructure.</p></div>
+      </div>
+    </div>
+
+    <!-- 1.6 Best Use Case -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-blue"></span>Optimal Real-World Use Case</div>
+      <div style="padding:20px;background:var(--blue-light);border-radius:var(--radius-md);border:1px solid var(--blue-mid);">
+        <h4 style="color:var(--blue-dark);margin-bottom:10px;">Scenario: Financial Services — Real-Time Trade Ledger + GDPR Compliance</h4>
+        <p style="font-size:0.9rem;color:var(--text-secondary);">A trading platform ingests 50M trade events/day via Structured Streaming into a Delta table partitioned by <span class="ic">trade_date</span>, Z-ordered by <span class="ic">(symbol, trader_id)</span>. The GDPR "right to erasure" requirement demands deletion of all rows for a given trader within 72 hours. <strong>Deletion Vectors</strong> allow a <span class="ic">DELETE WHERE trader_id = X</span> to execute in &lt;500ms by writing a DV bitmap — no file rewrite. A nightly <span class="ic">OPTIMIZE</span> consolidates DVs. Time Travel satisfies the regulatory audit requirement: queries against <span class="ic">VERSION AS OF 30</span> reconstruct the table state 30 versions ago for regulatory reporting, all from the immutable Delta Log — no snapshot storage overhead.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PILLAR 2: PHOTON
+  ════════════════════════════════════════════════════════ -->
+  <section class="pillar-section" id="pillar2">
+    <div class="pillar-header orange" data-label="PHOTON">
+      <div class="pillar-icon">⚡</div>
+      <div class="pillar-meta">
+        <div class="pillar-num">Pillar 02 — High-Performance Compute Engine</div>
+        <h2>Photon Engine</h2>
+        <p class="pillar-desc">Databricks' native vectorized C++ execution engine, replacing JVM-based Spark SQL operators with SIMD-optimized, cache-efficient columnar processing.</p>
+      </div>
+    </div>
+
+    <!-- 2.1 Problem Statement -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Definition &amp; Problem Statement — Why JVM-Based Spark Was the Bottleneck</div>
+      <div class="grid-2">
+        <div>
+          <h3 style="color:#c2410c;margin-bottom:12px;">The JVM Execution Overhead Stack</h3>
+          <p>Apache Spark's core execution model is <strong>Tungsten</strong> — an off-heap memory manager and whole-stage code generation (WSCG) framework introduced in Spark 2.0. WSCG compiles query plans into JVM bytecode via Janino, eliminating per-row virtual dispatch overhead. However, fundamental JVM constraints remain:</p>
+          <br>
+          <div class="detail-item">
+            <h4 style="color:#c2410c;">GC Pressure at Scale</h4>
+            <p style="font-size:0.88rem;">Even with Tungsten's off-heap <span class="ic">UnsafeRow</span> format, JVM object allocation for intermediate results, broadcast joins, and UDF execution triggers garbage collection pauses — stop-the-world GC events of 100ms–2s are common on executors processing multi-GB batches, causing task speculation and shuffle spills.</p>
+          </div>
+          <div class="detail-item">
+            <h4 style="color:#c2410c;">SIMD Inaccessibility</h4>
+            <p style="font-size:0.88rem;">JVM bytecode compiles to platform-independent instructions. The JIT compiler may (opportunistically) emit AVX2 SIMD instructions, but this is non-deterministic and cannot be relied upon for production performance SLAs. Modern CPUs expose AVX-512 (512-bit SIMD vectors) allowing 16 float32 operations per CPU clock cycle — inaccessible from JVM without JNI.</p>
+          </div>
+          <div class="detail-item">
+            <h4 style="color:#c2410c;">Cache Line Unfriendliness</h4>
+            <p style="font-size:0.88rem;">Spark's row-format <span class="ic">UnsafeRow</span> — while compact — interleaves column values from different columns contiguously per row. For column-scan workloads (aggregations, filters), this means every row access touches multiple cache lines, destroying L1/L2 cache utilization and forcing costly DRAM fetches.</p>
+          </div>
+        </div>
+        <div>
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="metric-num" style="color:var(--orange);">2–4×</div>
+              <div class="metric-label">Photon speedup vs. Spark for SQL aggregations (Databricks benchmarks)</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-num" style="color:var(--orange);">8–12×</div>
+              <div class="metric-label">Speedup on string-heavy operations (LIKE, REGEXP, CAST) vs. vanilla Spark</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-num" style="color:var(--orange);">~0</div>
+              <div class="metric-label">GC pause time — C++ malloc/free, no GC</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-num" style="color:var(--orange);">512-bit</div>
+              <div class="metric-label">AVX-512 SIMD register width leveraged by Photon</div>
+            </div>
+          </div>
+          <div class="callout warning" style="margin-top:12px;">
+            <span class="callout-icon">⚠️</span>
+            <div class="callout-content"><p><strong>JVM Benchmark Caveat:</strong> Published Databricks benchmarks (TPC-H, TPC-DS) compare Photon against stock Spark, not Spark with Apache Comet or Velox. The Velox project (Meta) and Apache Arrow DataFusion are C++ vectorized alternatives closing the gap.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.2 Architecture -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Internal Architecture — C++ Vectorized Execution, SIMD &amp; Memory Model</div>
+
+      <h4 style="color:#c2410c;margin-bottom:12px;">Vectorized Columnar Processing Model</h4>
+      <p style="margin-bottom:16px;">Photon adopts the <strong>Morsel-Driven Parallelism</strong> model from the HyPer database system. Instead of processing one row at a time (Volcano iterator model) or generating per-query JVM bytecode (WSCG), Photon processes columnar <em>batches</em> of 1024–8192 values using CPU-register-width SIMD instructions.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span class="code-lang">C++ Pseudocode</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Photon-style vectorized filter kernel (conceptual)</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+        <pre><span class="cm-comment">// Photon processes data in columnar batches — NOT row-by-row</span>
+<span class="cm-keyword">struct</span> <span class="cm-type">ColumnBatch</span> {
+  <span class="cm-type">int64_t</span>*  data;         <span class="cm-comment">// aligned to 64-byte cache line boundaries</span>
+  <span class="cm-type">uint8_t</span>*  validity_bitmap; <span class="cm-comment">// NULL tracking via SIMD-friendly bitmask</span>
+  <span class="cm-type">int32_t</span>   length;       <span class="cm-comment">// batch size: 1024–8192 rows</span>
+  <span class="cm-type">int32_t</span>   null_count;
+};
+
+<span class="cm-comment">// AVX-512 vectorized integer comparison: processes 8 int64 values per SIMD instruction</span>
+<span class="cm-type">void</span> <span class="cm-func">filter_greater_than</span>(<span class="cm-type">ColumnBatch</span>* col, <span class="cm-type">int64_t</span> threshold, <span class="cm-type">uint8_t</span>* sel_vector) {
+  <span class="cm-keyword">for</span> (<span class="cm-type">int</span> i = <span class="cm-num">0</span>; i &lt; col-&gt;length; i += <span class="cm-num">8</span>) {
+    <span class="cm-comment">// Load 8 int64 values into a 512-bit AVX-512 register (one cache line)</span>
+    <span class="cm-type">__m512i</span> values  = <span class="cm-func">_mm512_load_epi64</span>(&amp;col-&gt;data[i]);
+    <span class="cm-type">__m512i</span> thresh  = <span class="cm-func">_mm512_set1_epi64</span>(threshold);
+    <span class="cm-comment">// Compare 8 values simultaneously — outputs 8-bit mask in ONE CPU instruction</span>
+    <span class="cm-type">__mmask8</span> mask   = <span class="cm-func">_mm512_cmpgt_epi64_mask</span>(values, thresh);
+    <span class="cm-comment">// Store 8 selection bits — entire cache line processed, no branch mispredictions</span>
+    sel_vector[i/<span class="cm-num">8</span>] = (<span class="cm-type">uint8_t</span>)mask;
+  }
+}
+
+<span class="cm-comment">// Memory is NEVER allocated on JVM heap — uses C++ arena allocator</span>
+<span class="cm-keyword">class</span> <span class="cm-type">PhotonMemoryPool</span> {
+  <span class="cm-comment">// Pre-allocates from executor memory (off-JVM-heap, tracked by Spark's UnifiedMemory)</span>
+  <span class="cm-comment">// Uses jemalloc for thread-local allocation, avoiding malloc contention</span>
+  <span class="cm-comment">// Spill to disk via Arrow IPC format when memory pressure exceeds threshold</span>
+};</pre>
+      </div>
+
+      <div class="grid-2" style="margin-top:20px;">
+        <div>
+          <h4 style="color:#c2410c;margin-bottom:10px;">CPU Cache Locality Strategy</h4>
+          <p style="font-size:0.88rem;margin-bottom:10px;">Photon's in-memory columnar format aligns each column's data array to <strong>64-byte cache line boundaries</strong> (matching x86-64 hardware). When scanning a single column for filtering or aggregation, each cache-line load brings 8 × int64 or 16 × int32 values into L1 cache simultaneously. The access pattern is purely sequential — maximizing hardware prefetcher effectiveness. Compare this to row-format access where a 100-column table requires touching 100 cache lines to retrieve 100 values from the same conceptual column, even though only one column is needed.</p>
+          <div class="callout info">
+            <span class="callout-icon">📐</span>
+            <div class="callout-content"><p><strong>Cache Arithmetic:</strong> L1 cache hit: ~4 cycles. L2: ~12 cycles. L3: ~40 cycles. DRAM: ~200 cycles. Photon's sequential access pattern achieves near-100% L1/L2 hit rates for column scans vs. ~20-40% for row-format processing.</p></div>
+          </div>
+        </div>
+        <div>
+          <h4 style="color:#c2410c;margin-bottom:10px;">JVM Interoperability Layer</h4>
+          <p style="font-size:0.88rem;">Photon is not a separate engine — it runs <em>within</em> the existing Spark executor JVM process as a native shared library (<span class="ic">libphoton.so</span>). The Spark driver generates a logical plan (analyzed, optimized via Catalyst) which is then handed to Photon's C++ physical planner via JNI. Photon replaces individual Spark plan nodes (scans, filters, aggregations, joins, exchanges) with C++ equivalents where supported. Unsupported operators fall back transparently to Spark's Java operators — this is the <strong>mixed-mode execution</strong> model. Data handoff between Photon and Spark code paths uses the shared off-heap Arrow columnar format, avoiding serialization cost.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.3 Compatibility & Fallback -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Photon Coverage: Supported Operators vs. JVM Fallback</div>
+      <div class="grid-2">
+        <div>
+          <h4 style="color:var(--green);margin-bottom:10px;">✅ Photon-Accelerated Operators</h4>
+          <ul class="item-list">
+            <li>All scan operators: Parquet / Delta scan with predicate pushdown, column pruning, and dictionary encoding decoding</li>
+            <li>Hash aggregation (<span class="ic">GROUP BY</span>) and sort-based aggregation — SIMD-optimized hash tables</li>
+            <li>Broadcast hash join and sort-merge join — columnar build + probe phases</li>
+            <li>All arithmetic expressions, comparisons, boolean logic, conditional (<span class="ic">CASE WHEN</span>)</li>
+            <li>String functions: <span class="ic">LIKE</span>, <span class="ic">SUBSTR</span>, <span class="ic">UPPER/LOWER</span>, <span class="ic">REGEXP_LIKE</span> (PCRE via RE2)</li>
+            <li>Window functions: <span class="ic">RANK</span>, <span class="ic">ROW_NUMBER</span>, <span class="ic">LEAD/LAG</span>, <span class="ic">SUM OVER</span></li>
+            <li>Data type casts, date/timestamp arithmetic</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color:var(--red);margin-bottom:10px;">❌ JVM Fallback (Not Photon-Accelerated)</h4>
+          <ul class="item-list">
+            <li><strong>Python/Scala/Java UDFs</strong> — cross-JVM boundary; serialization cost eliminates vectorization benefit</li>
+            <li><strong>Python UDAFs (User-Defined Aggregate Functions)</strong></li>
+            <li><strong>Pandas UDFs (Arrow-based)</strong> — partially optimized but still bridges JVM/Python</li>
+            <li>Certain complex <span class="ic">LATERAL VIEW</span> explode operations on nested structs/maps</li>
+            <li>ML inference operators (<span class="ic">mlflow.pyfunc</span> model scoring) — Python GIL-bound</li>
+            <li><span class="ic">RDD API</span> operations — Photon is SQL/DataFrame-layer only</li>
+            <li>Some geospatial functions, custom encoders</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warning" style="margin-top:16px;">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-content"><p><strong>UDF Anti-Pattern at Scale:</strong> A single Python UDF in a query plan breaks the vectorized pipeline. Photon must serialize the entire columnar batch back to JVM row format, call Python via <span class="ic">PickleSerializer</span> over a local socket, then deserialize back. This can negate Photon's benefit entirely. Migration path: rewrite UDFs as native Spark SQL expressions or use the <span class="ic">pandas_udf</span> with <span class="ic">PandasUDFType.SCALAR_ITER</span> to amortize serialization cost across batches.</p></div>
+      </div>
+    </div>
+
+    <!-- 2.4 Pros/Cons -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Pros &amp; Cons</div>
+      <div class="pros-cons">
+        <div class="pros-box">
+          <h4>✅ Strengths</h4>
+          <ul class="item-list">
+            <li>Transparent acceleration — existing Spark SQL / DataFrame code runs faster with zero code changes; enabled per-cluster via <span class="ic">spark.databricks.photon.enabled true</span></li>
+            <li>Eliminates GC pauses on executor — critical for streaming workloads with latency SLAs</li>
+            <li>CPU cache efficiency translates to measurable cost reduction (fewer node-hours for same workload)</li>
+            <li>SIMD-optimized string processing: regex/LIKE on string columns is 5–10x faster than JVM implementations</li>
+            <li>Available on Serverless SQL Warehouses — cost shared across queries, not reserved cluster</li>
+          </ul>
+        </div>
+        <div class="cons-box">
+          <h4>❌ Limitations</h4>
+          <ul class="item-list">
+            <li><strong>Databricks-proprietary:</strong> Photon is closed-source, not available in Apache Spark OSS. Cannot reproduce performance outside Databricks environment</li>
+            <li><strong>UDF penalty:</strong> Python/Scala UDFs create pipeline breaks that can make Photon slower than Spark for UDF-heavy jobs due to additional columnar-row conversion overhead</li>
+            <li><strong>Memory overhead:</strong> Off-heap columnar buffers require adequate executor memory sizing — misconfigured clusters with tight <span class="ic">spark.executor.memory</span> can cause more spills than vanilla Spark</li>
+            <li>Comparable open-source alternatives exist: Apache Comet (Databricks-donated to ASF) and Velox (Meta) provide similar C++ vectorization for Spark/Presto</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.5 Comparison -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Comparison: Photon vs. Trino vs. Apache Spark (Vanilla)</div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Dimension</th><th>Photon (Databricks)</th><th>Trino (ex-PrestoSQL)</th><th>Vanilla Spark SQL (Tungsten)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Execution Model</td><td>C++ vectorized, SIMD, columnar batch (1024–8192 rows)</td><td>Java vectorized with Arrow columnar; partially SIMD via JVM JIT</td><td>JVM WSCG; row-at-a-time within compiled operator pipelines</td></tr>
+            <tr><td>Memory Management</td><td>C++ arena allocator, jemalloc; zero JVM heap for data path</td><td>Slice/SliceOutput off-heap; still subject to JVM GC for operator objects</td><td>Tungsten off-heap + JVM heap mix; GC pressure from complex plans</td></tr>
+            <tr><td>SIMD Exploitation</td><td><span class="badge badge-green">Explicit AVX-512</span> — hand-written intrinsics in critical kernels</td><td><span class="badge badge-blue">JIT-dependent</span> — JVM may emit AVX2, unpredictable</td><td><span class="badge badge-orange">Minimal</span> — JIT SIMD, no control</td></tr>
+            <tr><td>UDF Support</td><td>SQL functions only; Python UDF = JVM fallback + pipeline break</td><td>Java/SQL functions; Lambda UDFs; no Python runtime natively</td><td>Full Python, Scala, Java UDF support; Arrow UDF optimization</td></tr>
+            <tr><td>Spill Handling</td><td>Arrow IPC format to NVMe; merge-sort on disk</td><td>Spill to local disk with serialized pages; single-node memory constraint</td><td>ExternalSorter with Tungsten sort; shuffle spill to disk</td></tr>
+            <tr><td>Fault Tolerance</td><td>Full Spark DAG lineage — recompute lost partitions</td><td><span class="badge badge-red">No fault tolerance</span> — query fails if a worker crashes; designed for short queries</td><td>Full RDD/DAG lineage, configurable retry, speculative execution</td></tr>
+            <tr><td>Best For</td><td>Mixed batch + SQL analytics on Delta Lake; 10TB–PB scale</td><td>Federated interactive SQL across 20+ data sources; sub-minute queries</td><td>General ML + ETL workloads; streaming; maximum UDF flexibility</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2.6 Best Use Case -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-orange"></span>Optimal Use Case</div>
+      <div style="padding:20px;background:var(--orange-light);border-radius:var(--radius-md);border:1px solid var(--orange-mid);">
+        <h4 style="color:#c2410c;margin-bottom:10px;">Scenario: Ad-Tech — 100TB Daily Aggregation Pipeline</h4>
+        <p style="font-size:0.9rem;color:var(--text-secondary);">An ad-tech company runs nightly aggregation of 100TB of raw impression/click events to compute audience reach metrics across 50M+ ad campaigns. The pipeline is 98% pure SQL (GROUP BY, WINDOW, JOIN) with no Python UDFs. Migrating from a vanilla Spark cluster to a Photon-enabled <span class="ic">i3.2xlarge</span> fleet reduces wall-clock time from 4.5h to 1.8h (60% reduction) and reduces cluster cost by 40% due to faster completion. The key enabler: SIMD-optimized hash aggregation over high-cardinality string columns (campaign IDs, device fingerprints) where AVX-512 processes 16× more values per clock cycle than scalar JVM code.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PILLAR 3: UNITY CATALOG
+  ════════════════════════════════════════════════════════ -->
+  <section class="pillar-section" id="pillar3">
+    <div class="pillar-header purple" data-label="UNITY">
+      <div class="pillar-icon">🔒</div>
+      <div class="pillar-meta">
+        <div class="pillar-num">Pillar 03 — Data Governance &amp; Privacy</div>
+        <h2>Unity Catalog</h2>
+        <p class="pillar-desc">Unified, hierarchical data catalog with fine-grained access control, automated lineage, and attribute-based security — the governance backbone of the Lakehouse.</p>
+      </div>
+    </div>
+
+    <!-- 3.1 Problem Statement -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>Definition &amp; Problem Statement</div>
+      <div class="grid-2">
+        <div>
+          <h3 style="color:#6d28d9;margin-bottom:12px;">The Pre-Unity Governance Chaos</h3>
+          <p>Before Unity Catalog, Databricks workspaces were governance silos. Each workspace had its own <strong>Hive Metastore</strong> (HMS) — a MySQL/PostgreSQL-backed database storing table/partition/column metadata. This created:</p>
+          <br>
+          <div class="detail-item">
+            <h4 style="color:#6d28d9;">HMS Schema Fragmentation</h4>
+            <p style="font-size:0.88rem;">A 50-workspace enterprise had 50 independent HMS instances, each with divergent table definitions, stale schema versions, and no cross-workspace discoverability. Data catalog tools (Collibra, Alation) required custom scraping jobs to aggregate metadata — always stale by hours.</p>
+          </div>
+          <div class="detail-item">
+            <h4 style="color:#6d28d9;">ACL at Storage Level Only</h4>
+            <p style="font-size:0.88rem;">Security was enforced at S3 bucket/prefix level via IAM policies or cluster-level IAM role assumption. This is <em>coarse-grained</em> — granting read on a bucket grants read on all tables in it. Column-level or row-level filtering required custom application logic or Hive LLAP (which Databricks didn't support).</p>
+          </div>
+          <div class="detail-item">
+            <h4 style="color:#6d28d9;">No Automated Lineage</h4>
+            <p style="font-size:0.88rem;">Understanding what notebook/job produced a table required manual documentation or brittle audit log parsing. Impact analysis ("which tables/dashboards will break if I modify this source table?") was impossible without dedicated lineage tools (Marquez, OpenLineage).</p>
+          </div>
+        </div>
+        <div>
+          <div style="padding:20px;background:var(--purple-light);border-radius:var(--radius-md);border:1px solid var(--purple-mid);">
+            <h4 style="color:#6d28d9;margin-bottom:12px;">Unity Catalog Object Model</h4>
+            <div class="code-block" style="margin:0;">
+              <pre style="font-size:0.78rem;"><span class="cm-comment">// Metastore (one per region, shared across workspaces)</span>
+<span class="cm-keyword">Metastore</span>
+  └── <span class="cm-type">Catalog</span>              <span class="cm-comment">// e.g., "prod", "dev"</span>
+        └── <span class="cm-type">Schema (Database)</span>  <span class="cm-comment">// e.g., "finance"</span>
+              ├── <span class="cm-type">Table</span>          <span class="cm-comment">// Delta / External / View</span>
+              │     ├── <span class="cm-type">Columns</span>    <span class="cm-comment">// with data classification tags</span>
+              │     └── <span class="cm-type">Partitions</span>
+              ├── <span class="cm-type">Volume</span>         <span class="cm-comment">// Unstructured files (new in UC)</span>
+              ├── <span class="cm-type">Model</span>          <span class="cm-comment">// MLflow model versions</span>
+              └── <span class="cm-type">Function</span>       <span class="cm-comment">// SQL/Python UDFs as first-class</span>
+
+<span class="cm-comment">// 3-level namespace:</span>
+<span class="cm-keyword">SELECT</span> * <span class="cm-keyword">FROM</span> prod.finance.transactions
+<span class="cm-comment">--            ^catalog ^schema  ^table</span></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3.2 Architecture -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>Internal Architecture — Identity Federation, FGAC &amp; Row/Column Security</div>
+
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div>
+          <h4 style="color:#6d28d9;margin-bottom:10px;">Identity Federation Model</h4>
+          <p style="font-size:0.88rem;">Unity Catalog federates identities from enterprise IdPs (Okta, Azure AD, Google Workspace) via SCIM 2.0 provisioning. Users and service principals are assigned <strong>account-level</strong> identities, independent of workspace. Group membership is hierarchical: <span class="ic">account_group</span> → <span class="ic">workspace_group</span> → <span class="ic">user</span>. Privilege evaluation is RBAC + ABAC hybrid: privileges are granted on securable objects (CATALOG, SCHEMA, TABLE, COLUMN, ROW FILTER) and evaluated against the requesting principal's full group membership chain at query time — not cached, always-fresh evaluation.</p>
+          <br>
+          <p style="font-size:0.88rem;">The <strong>Service Principal</strong> model uses OAuth 2.0 M2M tokens — a Spark job authenticates as a service principal, Unity Catalog verifies the JWT at the <span class="ic">data plane</span> token endpoint, and the executor's S3/ADLS credential is a short-lived <strong>Credential Vending</strong> token (not a long-lived IAM key) — the principal never holds cloud credentials, only Unity Catalog's token service does.</p>
+        </div>
+        <div>
+          <h4 style="color:#6d28d9;margin-bottom:10px;">Fine-Grained Access Control (FGAC)</h4>
+          <p style="font-size:0.88rem;">Unity Catalog enforces FGAC at three granularities:</p>
+          <div class="code-block" style="margin-top:10px;">
+            <pre style="font-size:0.78rem;"><span class="cm-comment">-- 1. Column Masking: applies a SQL expression to mask PII</span>
+<span class="cm-keyword">CREATE</span> <span class="cm-keyword">OR REPLACE</span> <span class="cm-keyword">FUNCTION</span> prod.default.mask_email(email <span class="cm-type">STRING</span>)
+<span class="cm-keyword">RETURN</span> <span class="cm-keyword">CASE</span>
+  <span class="cm-keyword">WHEN</span> <span class="cm-func">IS_MEMBER</span>(<span class="cm-string">'pii_readers'</span>) <span class="cm-keyword">THEN</span> email
+  <span class="cm-keyword">ELSE</span> <span class="cm-func">CONCAT</span>(<span class="cm-func">LEFT</span>(email, <span class="cm-num">2</span>), <span class="cm-string">'***@***'</span>)
+<span class="cm-keyword">END</span>;
+
+<span class="cm-keyword">ALTER TABLE</span> prod.customers.users
+<span class="cm-keyword">ALTER COLUMN</span> email
+<span class="cm-keyword">SET MASK</span> prod.default.mask_email;
+
+<span class="cm-comment">-- 2. Row-Level Security via ROW FILTER function</span>
+<span class="cm-keyword">CREATE</span> <span class="cm-keyword">OR REPLACE</span> <span class="cm-keyword">FUNCTION</span> row_filter_by_region(region <span class="cm-type">STRING</span>)
+<span class="cm-keyword">RETURN</span> <span class="cm-func">IS_MEMBER</span>(<span class="cm-string">'global_reader'</span>) <span class="cm-keyword">OR</span> region = <span class="cm-func">CURRENT_USER_REGION</span>();
+
+<span class="cm-keyword">ALTER TABLE</span> prod.sales.orders
+<span class="cm-keyword">SET ROW FILTER</span> row_filter_by_region <span class="cm-keyword">ON</span> (region);</pre>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="color:#6d28d9;margin-bottom:12px;">How Column Masking Works Without Performance Sacrifice</h4>
+      <p style="margin-bottom:12px;">The critical architectural question: how does a runtime function call on every email cell not destroy query performance?</p>
+      <p style="font-size:0.88rem;margin-bottom:12px;">Unity Catalog's masking is implemented as a <strong>Catalyst query plan rewrite</strong>. When the Spark driver submits a query to an SQL Warehouse, the Unity Catalog query rewriter intercepts the parsed logical plan and injects the mask function as a <span class="ic">Project</span> node over the affected column <em>before Catalyst optimization</em>. The mask function is then treated as a native SQL expression — subject to constant folding, short-circuit evaluation, and Photon vectorization. For <span class="ic">IS_MEMBER</span> checks, the result is evaluated once per-query-session (the group membership lookup is cached in the session context for the duration of the query), not once per row. The actual masking expression (<span class="ic">CASE WHEN ... CONCAT</span>) runs fully vectorized in Photon.</p>
+      
+      <div class="callout success">
+        <span class="callout-icon">⚡</span>
+        <div class="callout-content"><p><strong>Performance Architecture Insight:</strong> Row filter predicates are pushed down below joins and aggregations via Catalyst's predicate pushdown rules — meaning rows are filtered at <em>scan time</em>, not after materializing the full result set. A row filter <span class="ic">WHERE region = 'APAC'</span> injected by Unity Catalog becomes a Parquet predicate pushdown, using Delta's file-level statistics to skip entire files — FGAC security does not conflict with I/O optimization.</p></div>
+      </div>
+    </div>
+
+    <!-- 3.3 Lineage -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>Automated Data Lineage — Column-Level Tracking</div>
+      <div class="grid-2">
+        <div>
+          <p style="font-size:0.88rem;margin-bottom:12px;">Unity Catalog captures lineage at three levels from Spark query plans automatically (no annotation required):</p>
+          <ol style="list-style:none;display:flex;flex-direction:column;gap:10px;">
+            <li style="display:flex;gap:10px;align-items:flex-start;font-size:0.88rem;"><span style="background:var(--purple-light);color:#6d28d9;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;font-size:0.78rem;">TABLE</span> <span>Which tables were read/written by which job/notebook, at what time, by which principal. Stored in the lineage graph service (not HMS).</span></li>
+            <li style="display:flex;gap:10px;align-items:flex-start;font-size:0.88rem;"><span style="background:var(--purple-light);color:#6d28d9;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;font-size:0.78rem;">COLUMN</span> <span>Which source column contributed to which target column — tracked via Catalyst's <span class="ic">ExprId</span> to column mapping. A <span class="ic">revenue = price * quantity</span> expression creates lineage edges: <span class="ic">price → revenue</span>, <span class="ic">quantity → revenue</span>.</span></li>
+            <li style="display:flex;gap:10px;align-items:flex-start;font-size:0.88rem;"><span style="background:var(--purple-light);color:#6d28d9;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;font-size:0.78rem;">PROCESS</span> <span>The notebook/job/DLT pipeline and the specific code cell or task that triggered each data movement — actionable for impact analysis and audit.</span></li>
+          </ol>
+        </div>
+        <div>
+          <div class="callout note">
+            <span class="callout-icon">🔍</span>
+            <div class="callout-content"><p><strong>Lineage Capture Mechanism:</strong> Lineage is extracted from the <strong>analyzed logical plan</strong> after Catalyst resolution, before physical planning. The plan's <span class="ic">LeafNode</span> → <span class="ic">Project</span> → <span class="ic">Filter</span> → <span class="ic">Aggregate</span> → <span class="ic">WriteFiles</span> tree is traversed to build source→target column edges. This requires no instrumentation of user code — it operates at the planner level. Limitation: lineage for Python code operating on Pandas DataFrames (outside Spark's query plan) is NOT automatically captured.</p></div>
+          </div>
+          <div class="callout info" style="margin-top:12px;">
+            <span class="callout-icon">📊</span>
+            <div class="callout-content"><p><strong>Lineage API:</strong> Queryable via REST API (<span class="ic">GET /api/2.0/lineage-tracking/column-lineage</span>) and surfaced in the Catalog Explorer UI. Programmatic integration allows feeding Unity lineage into external catalogs (Collibra, DataHub) via event subscription.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3.4 Pros/Cons + Comparison -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-purple"></span>Pros &amp; Cons + Comparison vs. Apache Atlas &amp; AWS Lake Formation</div>
+      <div class="pros-cons" style="margin-bottom:20px;">
+        <div class="pros-box">
+          <h4>✅ Strengths</h4>
+          <ul class="item-list">
+            <li>Single pane of glass across all workspaces, clouds (multi-cloud metastore federation in preview)</li>
+            <li>Credential vending eliminates long-lived cloud credentials — zero static IAM keys on clusters</li>
+            <li>Column masking and row filter as SQL functions — maintainable, version-controlled, testable</li>
+            <li>Automated column-level lineage without code annotation — only Unity Catalog and DataHub provide this natively</li>
+            <li>Volumes for unstructured data governance — govern ML training files, raw CSVs alongside structured tables in same ACL model</li>
+          </ul>
+        </div>
+        <div class="cons-box">
+          <h4>❌ Limitations</h4>
+          <ul class="item-list">
+            <li><strong>Databricks-only enforcement:</strong> UC's FGAC only enforces when data is accessed via Databricks. A user with direct S3 IAM access bypasses UC entirely — bucket policy must separately block direct access</li>
+            <li><strong>Metastore rigidity:</strong> One metastore per region per account; cross-region data sharing requires Delta Sharing protocol, not native metastore join</li>
+            <li><strong>External engine read-only:</strong> Trino, Spark OSS, or Athena cannot write to UC-managed tables while respecting UC ACLs — read-only via REST catalog</li>
+            <li>Migration from HMS to UC requires table re-registration — non-trivial at scale (thousands of tables)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Capability</th><th>Unity Catalog</th><th>Apache Atlas</th><th>AWS Lake Formation</th></tr></thead>
+          <tbody>
+            <tr><td>Column-Level Masking</td><td><span class="badge badge-green">Native SQL Functions</span></td><td><span class="badge badge-red">None</span> — classification only, no enforcement</td><td><span class="badge badge-blue">Native</span> but only for Glue-registered tables + Athena/Redshift</td></tr>
+            <tr><td>Row-Level Security</td><td><span class="badge badge-green">Native ROW FILTER</span></td><td><span class="badge badge-red">None</span></td><td><span class="badge badge-blue">Native</span> cell-level security via Data Filters</td></tr>
+            <tr><td>Automated Lineage</td><td><span class="badge badge-green">Column-level, automated</span></td><td><span class="badge badge-blue">Hook-based</span> — requires Spark Atlas connector + Atlas Hooks config</td><td><span class="badge badge-orange">Table-level only</span> via CloudTrail events</td></tr>
+            <tr><td>Engine Support</td><td>Databricks only for writes; REST catalog for reads (Spark, Trino)</td><td>Any engine with Atlas Hooks — Spark, Hive, Kafka, NiFi</td><td>Athena, Redshift, EMR, Glue only (AWS-native)</td></tr>
+            <tr><td>Identity Model</td><td>SCIM federation, service principals, OAuth M2M</td><td>Ranger + LDAP/Kerberos — complex setup</td><td>IAM + Lake Formation permissions — two-layer ACL complexity</td></tr>
+            <tr><td>Credential Model</td><td><span class="badge badge-green">Dynamic credential vending</span> — no static keys</td><td>Kerberos keytabs / static IAM roles</td><td>IAM role assumption — still static role credentials on cluster</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PILLAR 4: DELTA LIVE TABLES
+  ════════════════════════════════════════════════════════ -->
+  <section class="pillar-section" id="pillar4">
+    <div class="pillar-header green" data-label="DLT">
+      <div class="pillar-icon">🔁</div>
+      <div class="pillar-meta">
+        <div class="pillar-num">Pillar 04 — Declarative Pipelines</div>
+        <h2>Delta Live Tables (DLT)</h2>
+        <p class="pillar-desc">A declarative, managed framework for building reliable, maintainable ETL pipelines with built-in data quality, autoscaling, and dependency-aware execution.</p>
+      </div>
+    </div>
+
+    <!-- 4.1 Problem Statement -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>Declarative vs. Imperative Pipeline Development</div>
+      <div class="grid-2">
+        <div>
+          <h3 style="color:#15803d;margin-bottom:12px;">The Imperative Pipeline Tax</h3>
+          <p style="font-size:0.88rem;margin-bottom:12px;">Traditional Spark + Airflow pipelines require engineers to explicitly manage:</p>
+          <ul class="item-list" style="margin-bottom:12px;">
+            <li><strong>Execution order:</strong> DAG definition in Airflow with explicit upstream/downstream dependencies, retry logic, and SLA callbacks</li>
+            <li><strong>State management:</strong> Structured Streaming checkpoints, watermarks, trigger intervals — all require manual configuration and operational knowledge</li>
+            <li><strong>Error recovery:</strong> Failed tasks require manual inspection of executor logs, checkpoint repair, and re-run from partial state</li>
+            <li><strong>Cluster lifecycle:</strong> Cluster provisioning, autoscaling policies, spot instance interruption handling — all outside the pipeline code</li>
+            <li><strong>Data quality:</strong> Custom assertion logic scattered across PySpark code — not standardized, not observable, no centralized reporting</li>
+          </ul>
+          <div class="callout warning">
+            <span class="callout-icon">⚠️</span>
+            <div class="callout-content"><p><strong>The Orchestration Layer Problem:</strong> A typical enterprise Airflow installation for data pipelines has 1000+ DAGs, each with 5–50 tasks. The DAG definition code often exceeds the data transformation code in volume. Operators spend 30–50% of time on orchestration plumbing, not data logic.</p></div>
+          </div>
+        </div>
+        <div>
+          <h4 style="color:#15803d;margin-bottom:10px;">The DLT Declarative Model</h4>
+          <p style="font-size:0.88rem;margin-bottom:12px;">In DLT, you declare <em>what</em> tables should contain, not <em>how</em> to compute them. DLT infers dependencies from the Python/SQL code, builds an execution DAG, manages cluster lifecycle, handles retries, and tracks data quality — all automatically.</p>
+          <div class="code-block">
+            <div class="code-label"><span class="code-lang">Python DLT</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre style="font-size:0.78rem;"><span class="cm-keyword">import</span> dlt
+<span class="cm-keyword">from</span> pyspark.sql <span class="cm-keyword">import</span> functions <span class="cm-keyword">as</span> F
+
+<span class="cm-comment"># Bronze: raw ingest — DLT handles streaming state</span>
+<span class="cm-keyword">@dlt.table</span>(
+  name=<span class="cm-string">"raw_events"</span>,
+  comment=<span class="cm-string">"Raw Kafka ingest — append-only"</span>,
+  table_properties={<span class="cm-string">"quality"</span>: <span class="cm-string">"bronze"</span>}
+)
+<span class="cm-keyword">def</span> <span class="cm-func">raw_events</span>():
+  <span class="cm-keyword">return</span> spark.readStream.format(<span class="cm-string">"kafka"</span>) \
+    .option(<span class="cm-string">"kafka.bootstrap.servers"</span>, ...) \
+    .load()
+
+<span class="cm-comment"># Silver: transformations + EXPECTATIONS (data quality)</span>
+<span class="cm-keyword">@dlt.expect_or_drop</span>(<span class="cm-string">"valid_user"</span>,    <span class="cm-string">"user_id IS NOT NULL"</span>)
+<span class="cm-keyword">@dlt.expect_or_drop</span>(<span class="cm-string">"valid_revenue"</span>, <span class="cm-string">"revenue >= 0"</span>)
+<span class="cm-keyword">@dlt.expect</span>(       <span class="cm-string">"fresh_event"</span>,   <span class="cm-string">"event_ts > current_timestamp() - INTERVAL 7 DAYS"</span>)
+<span class="cm-keyword">@dlt.table</span>(name=<span class="cm-string">"silver_events"</span>)
+<span class="cm-keyword">def</span> <span class="cm-func">silver_events</span>():
+  <span class="cm-comment"># DLT resolves LIVE.raw_events dependency automatically</span>
+  <span class="cm-keyword">return</span> dlt.read_stream(<span class="cm-string">"raw_events"</span>) \
+    .withColumn(<span class="cm-string">"revenue"</span>, F.col(<span class="cm-string">"payload.revenue"</span>).cast(<span class="cm-string">"double"</span>))
+
+<span class="cm-comment"># Gold: aggregation — automatically batch (no stream needed)</span>
+<span class="cm-keyword">@dlt.table</span>(name=<span class="cm-string">"gold_daily_revenue"</span>)
+<span class="cm-keyword">def</span> <span class="cm-func">gold_daily_revenue</span>():
+  <span class="cm-keyword">return</span> dlt.read(<span class="cm-string">"silver_events"</span>) \
+    .groupBy(<span class="cm-string">"event_date"</span>).agg(F.sum(<span class="cm-string">"revenue"</span>))</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4.2 Architecture -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>Internal Architecture — Enhanced Autoscaling, Expectations &amp; State Management</div>
+      <div class="grid-2" style="margin-bottom:20px;">
+        <div>
+          <h4 style="color:#15803d;margin-bottom:10px;">Enhanced Autoscaling (EAS)</h4>
+          <p style="font-size:0.88rem;">Standard Spark autoscaling reacts to executor idle time — it is <em>reactive</em> and has a minimum 60-second scale-down lag. DLT's Enhanced Autoscaling is <strong>predictive and cost-aware</strong>:</p>
+          <br>
+          <p style="font-size:0.88rem;">EAS monitors the <strong>input backlog</strong> of each streaming source (Kafka consumer lag, Auto Loader file queue depth, Delta table new file count). It uses this backlog metric as a leading indicator — scaling UP before the cluster is fully saturated, preventing pipeline lag accumulation. It scales DOWN after observing sustained low backlog, accounting for the cost of adding a node vs. the value of backlog clearance speed.</p>
+          <br>
+          <p style="font-size:0.88rem;">The autoscaler also respects the <span class="ic">cluster_log_conf</span> minimum cluster size policy — it never scales below the defined minimum for SLA guarantees. In practice, EAS reduces cluster idle time by 40–60% vs. standard autoscaling in bursty, event-driven pipelines.</p>
+        </div>
+        <div>
+          <h4 style="color:#15803d;margin-bottom:10px;">Data Quality: Expectations Framework</h4>
+          <p style="font-size:0.88rem;margin-bottom:10px;">DLT Expectations are SQL predicates attached to table definitions with three enforcement modes:</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="padding:10px 14px;background:var(--green-light);border-radius:var(--radius-sm);border-left:3px solid var(--green);">
+              <span class="ic" style="font-size:0.78rem;">@dlt.expect</span><span style="font-size:0.85rem;color:var(--text-secondary);margin-left:8px;">— WARN: records metrics, does NOT drop rows. SLA monitoring without data loss.</span>
+            </div>
+            <div style="padding:10px 14px;background:var(--orange-light);border-radius:var(--radius-sm);border-left:3px solid var(--orange);">
+              <span class="ic" style="font-size:0.78rem;">@dlt.expect_or_drop</span><span style="font-size:0.85rem;color:var(--text-secondary);margin-left:8px;">— DROP: violating rows are silently dropped. Table receives clean data only.</span>
+            </div>
+            <div style="padding:10px 14px;background:var(--red-light);border-radius:var(--radius-sm);border-left:3px solid var(--red);">
+              <span class="ic" style="font-size:0.78rem;">@dlt.expect_or_fail</span><span style="font-size:0.85rem;color:var(--text-secondary);margin-left:8px;">— FAIL: any violation aborts the pipeline update. Hard stop for critical quality gates.</span>
+            </div>
+          </div>
+          <p style="font-size:0.85rem;margin-top:10px;color:var(--text-muted);">Expectation results are persisted in the pipeline's <span class="ic">system.events</span> table — queriable via SQL for SLA dashboards, alerting, and historical quality trend analysis.</p>
+        </div>
+      </div>
+
+      <h4 style="color:#15803d;margin-bottom:12px;">Internal State Management for Stateful Streaming</h4>
+      <p style="font-size:0.88rem;margin-bottom:12px;">DLT uses Spark Structured Streaming's <strong>RocksDB state store</strong> (default since DBR 9.0) for stateful operators (window aggregations, <span class="ic">dropDuplicates</span>, stream-stream joins). RocksDB is a local on-disk LSM-tree — it spills state to executor-local NVMe SSDs instead of holding all state in JVM heap. This enables stateful operations on windows containing billions of distinct keys without OOM failures. State is checkpointed to cloud storage (S3/ADLS) at each micro-batch, enabling exactly-once semantics under executor failure. DLT abstracts all of this — you never configure checkpoint paths manually.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span class="code-lang">Python DLT</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Apply Changes (CDC) — MERGE INTO abstraction</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+        <pre style="font-size:0.78rem;"><span class="cm-comment"># DLT APPLY CHANGES: handles CDC streams natively
+# Internally generates a MERGE INTO + Delta CDF — no manual MERGE logic required</span>
+dlt.<span class="cm-func">apply_changes</span>(
+  target  = <span class="cm-string">"silver_customers"</span>,     <span class="cm-comment"># Target Delta table (UC-managed)</span>
+  source  = <span class="cm-string">"raw_cdc_stream"</span>,       <span class="cm-comment"># Source streaming table (Kafka/Auto Loader)</span>
+  keys    = [<span class="cm-string">"customer_id"</span>],         <span class="cm-comment"># Primary key for UPSERT/DELETE matching</span>
+  sequence_by = <span class="cm-string">"event_ts"</span>,          <span class="cm-comment"># Out-of-order CDC event deduplication</span>
+  apply_as_deletes = F.expr(<span class="cm-string">"op = 'D'"</span>),  <span class="cm-comment"># DELETE events from CDC stream</span>
+  apply_as_truncates = F.expr(<span class="cm-string">"op = 'T'"</span>), <span class="cm-comment"># Truncate events</span>
+  except_column_list = [<span class="cm-string">"_rescued_data"</span>]   <span class="cm-comment"># Exclude DLT internal columns</span>
+)</pre>
+      </div>
+    </div>
+
+    <!-- 4.3 Pros/Cons + dbt comparison -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-green"></span>DLT vs. dbt + Airflow — When to Use Each</div>
+      <div class="pros-cons" style="margin-bottom:20px;">
+        <div class="pros-box">
+          <h4>✅ DLT Strengths</h4>
+          <ul class="item-list">
+            <li>First-class <strong>streaming</strong> support — batch and stream pipelines in the same framework, auto-managed Structured Streaming internals</li>
+            <li>APPLY CHANGES API eliminates boilerplate CDC MERGE logic — handles late-arriving CDC, ordering, and deduplication automatically</li>
+            <li>Integrated cluster lifecycle management with EAS — no Airflow KubernetesOperator tuning</li>
+            <li>Data quality Expectations with centralized reporting — SLA tracking without external monitoring setup</li>
+            <li>Idempotent full-refresh and incremental modes automatically selected by DLT based on table type</li>
+          </ul>
+        </div>
+        <div class="cons-box">
+          <h4>❌ DLT Limitations vs. dbt+Airflow</h4>
+          <ul class="item-list">
+            <li><strong>Databricks lock-in:</strong> DLT runs only on Databricks — no local dev/test, no self-hosted execution. dbt runs anywhere with a warehouse adapter</li>
+            <li><strong>Python-first, not SQL-first:</strong> dbt's SQL-native model is more accessible to analytics engineers; DLT's Python decorator pattern requires Spark knowledge</li>
+            <li><strong>Limited cross-system orchestration:</strong> DLT cannot coordinate tasks across Databricks + external systems (Fivetran sync → dbt run → Tableau extract) as naturally as Airflow</li>
+            <li><strong>Testing story is weaker:</strong> dbt has <span class="ic">dbt test</span>, <span class="ic">dbt-expectations</span>, macros, and packages. DLT Expectations are less composable and have no unit-test framework</li>
+            <li>Cost can be unpredictable: EAS is efficient but DLT's "always-on" continuous mode runs 24/7, unlike dbt's pay-per-run model</li>
+          </ul>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Dimension</th><th>DLT</th><th>dbt Core + Airflow</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr><td>Streaming Support</td><td><span class="badge badge-green">Native (Structured Streaming)</span></td><td><span class="badge badge-red">None</span> — dbt is batch-only; streaming requires Kafka/Flink outside dbt</td><td>DLT wins for streaming</td></tr>
+            <tr><td>SQL-First DX</td><td>Python decorators; SQL DLT available but limited</td><td><span class="badge badge-green">Pure SQL with Jinja templating, packages, macros</span></td><td>dbt wins for analytics engineering</td></tr>
+            <tr><td>Data Quality</td><td>Expectations — enforce/warn/fail with centralized metrics</td><td>dbt tests — singular, generic, dbt-expectations; excellent but batch-only</td><td>Tie — different contexts</td></tr>
+            <tr><td>CDC / UPSERT</td><td><span class="badge badge-green">APPLY CHANGES API — one line</span></td><td>Manual MERGE SQL in dbt models; strategy macros required</td><td>DLT wins for CDC</td></tr>
+            <tr><td>Cross-System Orchestration</td><td>Databricks Jobs only</td><td><span class="badge badge-green">Airflow: 1000+ providers</span> — S3, GCS, Snowflake, Fivetran, HTTP, etc.</td><td>Airflow wins for complex orchestration</td></tr>
+            <tr><td>Portability</td><td>Databricks-only</td><td>Adapters for Snowflake, BigQuery, Redshift, DuckDB, Trino, Databricks</td><td>dbt wins on portability</td></tr>
+            <tr><td>Cluster Management</td><td><span class="badge badge-green">Fully managed (EAS)</span></td><td>Manual Spark cluster config or warehouse selection in Airflow DAG</td><td>DLT wins on operational simplicity</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info" style="margin-top:16px;">
+        <span class="callout-icon">🏗️</span>
+        <div class="callout-content"><p><strong>Recommended Architecture for Petabyte Scale:</strong> Use DLT for bronze→silver CDC ingestion (streaming, APPLY CHANGES) and dbt + Databricks adapter for silver→gold business logic transformations (SQL-first, version-controlled, tested). Orchestrate the full pipeline with Databricks Workflows (DAG orchestrator within Databricks) or Airflow with the Databricks operator. This hybrid leverages the best of both frameworks without full lock-in to either.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PILLAR 5: ECOSYSTEM
+  ════════════════════════════════════════════════════════ -->
+  <section class="pillar-section" id="pillar5">
+    <div class="pillar-header teal" data-label="ECOSYSTEM">
+      <div class="pillar-icon">🔗</div>
+      <div class="pillar-meta">
+        <div class="pillar-num">Pillar 05 — Integration &amp; Infrastructure</div>
+        <h2>The Ecosystem</h2>
+        <p class="pillar-desc">Terraform IaC, Git/CI-CD, serverless SQL warehouses, and the Delta Sharing protocol — the connectivity fabric of the modern data platform on Databricks.</p>
+      </div>
+    </div>
+
+    <!-- 5.1 IaC -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-teal"></span>Infrastructure as Code — Terraform Provider</div>
+      <div class="grid-2">
+        <div>
+          <p style="font-size:0.88rem;margin-bottom:12px;">The <strong>Databricks Terraform Provider</strong> (<span class="ic">databricks/databricks</span>) covers the full control-plane API surface: clusters, jobs, SQL warehouses, Unity Catalog objects (catalogs, schemas, grants), secret scopes, MLflow experiments, and workspace configurations. This enables GitOps workflows for data platform infrastructure.</p>
+          <div class="code-block">
+            <div class="code-label"><span class="code-lang">HCL</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Serverless SQL Warehouse + UC Grant</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre style="font-size:0.78rem;"><span class="cm-comment"># Serverless SQL Warehouse — no cluster management needed</span>
+resource <span class="cm-string">"databricks_sql_endpoint"</span> <span class="cm-string">"analytics"</span> {
+  name             = <span class="cm-string">"prod-analytics-warehouse"</span>
+  cluster_size     = <span class="cm-string">"Medium"</span>     <span class="cm-comment"># 8 DBUs/hour</span>
+  warehouse_type   = <span class="cm-string">"PRO"</span>
+  serverless       = <span class="cm-keyword">true</span>         <span class="cm-comment"># Instant startup, ~3s cold start</span>
+  auto_stop_mins   = <span class="cm-num">10</span>
+  enable_photon    = <span class="cm-keyword">true</span>
+  
+  channel { name = <span class="cm-string">"CHANNEL_NAME_CURRENT"</span> }
+  tags { custom_tags { key = <span class="cm-string">"env"</span> value = <span class="cm-string">"prod"</span> } }
+}
+
+<span class="cm-comment"># Unity Catalog: fine-grained privilege as code</span>
+resource <span class="cm-string">"databricks_grants"</span> <span class="cm-string">"finance_schema"</span> {
+  schema = <span class="cm-string">"prod.finance"</span>
+  
+  grant { principal  = <span class="cm-string">"analysts@corp.com"</span>
+          privileges = [<span class="cm-string">"USE_SCHEMA"</span>, <span class="cm-string">"SELECT"</span>] }
+  grant { principal  = <span class="cm-string">"dbt-service-principal"</span>
+          privileges = [<span class="cm-string">"CREATE_TABLE"</span>, <span class="cm-string">"MODIFY"</span>] }
+}
+
+<span class="cm-comment"># DLT Pipeline as code</span>
+resource <span class="cm-string">"databricks_pipeline"</span> <span class="cm-string">"ingestion"</span> {
+  name        = <span class="cm-string">"prod-customer-cdc-pipeline"</span>
+  target      = <span class="cm-string">"prod.silver"</span>
+  continuous  = <span class="cm-keyword">true</span>           <span class="cm-comment"># 24/7 streaming mode</span>
+  
+  cluster { label = <span class="cm-string">"default"</span> autoscale { min_workers = <span class="cm-num">2</span> max_workers = <span class="cm-num">20</span> } }
+  library { notebook { path = <span class="cm-string">"/pipelines/customer_cdc"</span> } }
+  
+  configuration = {
+    <span class="cm-string">"delta.enableDeletionVectors"</span> = <span class="cm-string">"true"</span>
+    <span class="cm-string">"pipelines.clusterShutdown.delay"</span> = <span class="cm-string">"60s"</span>
+  }
+}</pre>
+          </div>
+        </div>
+        <div>
+          <h4 style="color:#0f766e;margin-bottom:10px;">CI/CD Integration with Git</h4>
+          <p style="font-size:0.88rem;margin-bottom:12px;">Databricks Asset Bundles (DAB) — introduced in DBR 13.0 — define the full deployment spec (jobs, pipelines, notebooks, SQL files) in a <span class="ic">databricks.yml</span> YAML file, committed alongside code. This replaces the previous Databricks CLI + JSON workflow with a structured, environment-aware deployment model.</p>
+          <div class="code-block">
+            <div class="code-label"><span class="code-lang">YAML</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">databricks.yml — Asset Bundle definition</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre style="font-size:0.78rem;"><span class="cm-comment"># databricks.yml — Asset Bundle</span>
+<span class="cm-type">bundle</span>:
+  <span class="cm-type">name</span>: customer-platform
+
+<span class="cm-type">resources</span>:
+  <span class="cm-type">jobs</span>:
+    <span class="cm-type">gold_aggregation</span>:
+      <span class="cm-type">name</span>: gold-daily-aggregation
+      <span class="cm-type">job_clusters</span>:
+        - <span class="cm-type">job_cluster_key</span>: default
+          <span class="cm-type">new_cluster</span>:
+            <span class="cm-type">spark_version</span>: <span class="cm-string">"14.3.x-scala2.12"</span>
+            <span class="cm-type">node_type_id</span>: <span class="cm-string">"i3.2xlarge"</span>
+            <span class="cm-type">autoscale</span>: { <span class="cm-type">min_workers</span>: <span class="cm-num">4</span>, <span class="cm-type">max_workers</span>: <span class="cm-num">40</span> }
+            <span class="cm-type">enable_photon</span>: <span class="cm-keyword">true</span>
+      <span class="cm-type">tasks</span>:
+        - <span class="cm-type">task_key</span>: transform
+          <span class="cm-type">dbt_task</span>:
+            <span class="cm-type">project_directory</span>: <span class="cm-string">./dbt</span>
+            <span class="cm-type">commands</span>: [<span class="cm-string">"dbt run --select gold_models"</span>]
+
+<span class="cm-type">targets</span>:
+  <span class="cm-type">dev</span>:
+    <span class="cm-type">workspace</span>: { <span class="cm-type">host</span>: <span class="cm-string">"https://dev.azuredatabricks.net"</span> }
+  <span class="cm-type">prod</span>:
+    <span class="cm-type">mode</span>: production
+    <span class="cm-type">workspace</span>: { <span class="cm-type">host</span>: <span class="cm-string">"https://prod.azuredatabricks.net"</span> }</pre>
+          </div>
+          <div class="callout success" style="margin-top:12px;">
+            <span class="callout-icon">🚀</span>
+            <div class="callout-content"><p><strong>CI/CD Pipeline:</strong> <span class="ic">databricks bundle deploy --target prod</span> in a GitHub Actions workflow deploys the full bundle (jobs, pipelines, permissions) atomically, with environment variable substitution and diff-based change preview.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5.2 Serverless SQL + BI -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-teal"></span>Serverless SQL Warehouses — JDBC/ODBC &amp; BI Tool Integration</div>
+      <div class="grid-2">
+        <div>
+          <h4 style="color:#0f766e;margin-bottom:10px;">Architecture of Serverless SQL</h4>
+          <p style="font-size:0.88rem;margin-bottom:10px;">Traditional "Classic" SQL Warehouses required pre-provisioning a cluster (2–10 minute startup). Serverless SQL Warehouses eliminate cluster management — compute is pooled in Databricks' own cloud accounts, and warehouse "instances" are micro-provisioned per-query in ~3 seconds. The key architectural components:</p>
+          <ul class="item-list">
+            <li><strong>Compute Pool:</strong> Pre-warmed Photon executors in Databricks-managed VMs. The workspace connects to this pool via a control plane API — no cluster in customer's VPC</li>
+            <li><strong>Query Router:</strong> Incoming JDBC/ODBC/REST queries are routed to an available compute slot with query-level isolation guarantees</li>
+            <li><strong>Result Cache:</strong> Query results are cached at the warehouse level in object storage — identical query reruns return cached results in &lt;100ms</li>
+            <li><strong>Predictive I/O:</strong> Databricks caches frequently-accessed Delta files in a local SSD cache tier (Delta Cache) on executor nodes — transparent to the user</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color:#0f766e;margin-bottom:10px;">BI Integration via JDBC/ODBC + Arrow</h4>
+          <p style="font-size:0.88rem;margin-bottom:10px;">Databricks exposes a JDBC/ODBC endpoint compatible with all major BI tools. The <strong>Databricks SQL Connector</strong> uses <strong>Arrow Flight SQL</strong> for result transmission — replacing JDBC's row-serialized protocol with columnar Arrow batches. For a 1M-row result set, Arrow Flight transfers ~5× faster than JDBC.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">Tableau</div>
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">Power BI</div>
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">Looker</div>
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">Superset</div>
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">Metabase</div>
+            <div style="padding:10px;background:var(--teal-light);border-radius:var(--radius-sm);border:1px solid #99f6e4;text-align:center;font-size:0.82rem;font-weight:600;color:#0f766e;">dbt Semantic Layer</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5.3 Delta Sharing -->
+    <div class="card">
+      <div class="card-title"><span class="dot dot-teal"></span>Delta Sharing Protocol — Zero-Copy Cross-Organization Data Exchange</div>
+      <p style="margin-bottom:16px;">Delta Sharing is an open REST protocol for sharing live Delta table data across organizations without data movement, copy, or proprietary format conversion. It is the first vendor-neutral data sharing standard (now an Apache project under Linux Foundation).</p>
+      <div class="grid-2">
+        <div>
+          <h4 style="color:#0f766e;margin-bottom:10px;">Protocol Architecture</h4>
+          <p style="font-size:0.88rem;margin-bottom:12px;">The sharing server (Databricks-managed or self-hosted open-source) exposes a REST API. When a recipient requests a share, the server:</p>
+          <ol style="list-style:decimal;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:0.88rem;color:var(--text-secondary);">
+            <li>Validates the recipient's <strong>bearer token</strong> (generated per-recipient, scoped to specific shares)</li>
+            <li>Evaluates Unity Catalog row/column filters against the recipient's identity</li>
+            <li>Queries the Delta Log to identify current data files for the requested snapshot version</li>
+            <li>Generates <strong>pre-signed S3/ADLS URLs</strong> (15-minute TTL) for each Parquet data file</li>
+            <li>Returns a response containing: JSON metadata (schema, partition info) + list of pre-signed URLs</li>
+          </ol>
+          <br>
+          <p style="font-size:0.88rem;">The recipient's engine (Spark, Pandas, Power BI, DuckDB) downloads the Parquet files directly from object storage using the pre-signed URLs — <strong>zero data copy through Databricks infrastructure</strong>. Bandwidth charges are borne by the object storage provider (the provider's account), not piped through Databricks control plane.</p>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-label"><span class="code-lang">Python</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Provider: publish a share</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre style="font-size:0.78rem;"><span class="cm-comment"># Provider side — publish share via SQL</span>
+<span class="cm-keyword">CREATE</span> <span class="cm-keyword">SHARE</span> vendor_partner_share;
+<span class="cm-keyword">ALTER</span> <span class="cm-keyword">SHARE</span> vendor_partner_share
+  <span class="cm-keyword">ADD TABLE</span> prod.finance.invoices
+  <span class="cm-keyword">WITH PARTITION FILTER</span> WHERE region = <span class="cm-string">'APAC'</span>;  <span class="cm-comment">-- row-level filter</span>
+
+<span class="cm-keyword">CREATE</span> <span class="cm-keyword">RECIPIENT</span> partner_acme
+  USING ID <span class="cm-string">'acme@deltasharing.io'</span>;
+
+<span class="cm-keyword">GRANT</span> <span class="cm-keyword">SELECT ON</span> <span class="cm-keyword">SHARE</span> vendor_partner_share
+  <span class="cm-keyword">TO RECIPIENT</span> partner_acme;</pre>
+          </div>
+          <div class="code-block" style="margin-top:8px;">
+            <div class="code-label"><span class="code-lang">Python</span><span style="font-size:0.75rem;color:#475569;font-family:'JetBrains Mono',monospace;">Recipient: consume via open-source connector</span><div class="code-dots"><span></span><span></span><span></span></div></div>
+            <pre style="font-size:0.78rem;"><span class="cm-comment"># Recipient — any Python environment (no Databricks needed)</span>
+<span class="cm-keyword">import</span> delta_sharing
+
+client = delta_sharing.<span class="cm-func">SharingClient</span>(
+  profile_file=<span class="cm-string">"acme-partner.share"</span>  <span class="cm-comment"># credential file</span>
+)
+
+<span class="cm-comment"># Read directly into Pandas — downloads pre-signed Parquet URLs</span>
+df = delta_sharing.<span class="cm-func">load_as_pandas</span>(
+  <span class="cm-string">"acme-partner.share#vendor_partner_share.prod_finance.invoices"</span>
+)
+
+<span class="cm-comment"># Or Spark — enables distributed processing at scale</span>
+df = spark.read.format(<span class="cm-string">"deltaSharing"</span>) \
+  .load(<span class="cm-string">"acme-partner.share#..."</span>)</pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout note" style="margin-top:16px;">
+        <span class="callout-icon">🔐</span>
+        <div class="callout-content"><p><strong>Security Architecture:</strong> Pre-signed URLs are scoped to specific Parquet file objects with a 15-minute TTL. The recipient cannot enumerate other files in the bucket, cannot access the Delta Log directly, and cannot infer table structure beyond what's shared. If a row filter is applied (e.g., <span class="ic">WHERE region = 'APAC'</span>), the server uses Delta's data skipping to return only file URLs that contain APAC rows — the recipient still downloads full Parquet files but only relevant partitions, preventing cross-partition inference attacks.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+       FINAL SUMMARY TABLE
+  ════════════════════════════════════════════════════════ -->
+  <section class="section" id="summary">
+    <div style="text-align:center;margin-bottom:48px;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text-light);margin-bottom:12px;">Final Analysis</div>
+      <h2 style="font-size:2.2rem;letter-spacing:-0.5px;">Databricks vs. Vanilla Apache Spark</h2>
+      <p style="color:var(--text-muted);max-width:640px;margin:12px auto 0;">A five-dimension comparative analysis for petabyte-scale infrastructure decisions. Scores reflect general production workload profiles — individual workloads may vary.</p>
+    </div>
+
+    <!-- Score Cards -->
+    <div class="metric-grid" style="margin-bottom:36px;">
+      <div class="metric-card">
+        <div class="metric-num" style="color:var(--blue);">2–5×</div>
+        <div class="metric-label">Typical query speedup (Photon vs. Spark SQL on TPC-DS Q7/Q17/Q94)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-num" style="color:var(--orange);">60%</div>
+        <div class="metric-label">Reduction in operational overhead vs. self-managed Hadoop/Spark cluster</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-num" style="color:var(--purple);">100%</div>
+        <div class="metric-label">Column-level governance coverage via Unity Catalog (vs. 0% in vanilla Spark)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-num" style="color:var(--green);">~3s</div>
+        <div class="metric-label">Serverless SQL cold start vs. 2–10 min for self-managed cluster provisioning</div>
+      </div>
+    </div>
+
+    <div class="table-wrapper" style="margin-bottom:36px;">
+      <table class="final-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Databricks Lakehouse</th>
+            <th>Vanilla Apache Spark (Hadoop-based)</th>
+            <th>Winner &amp; Key Differentiator</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <strong>1. Performance (I/O &amp; Compute)</strong>
+              <div style="margin-top:4px;">
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Databricks</span><div class="score-track"><div class="score-fill" style="width:90%;background:var(--blue);"></div></div><span class="score-label" style="color:var(--blue);">90</span></div>
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Vanilla Spark</span><div class="score-track"><div class="score-fill" style="width:52%;background:#94a3b8;"></div></div><span class="score-label" style="color:var(--text-muted);">52</span></div>
+              </div>
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Photon Engine:</strong> C++ vectorized execution with AVX-512 SIMD delivers 2–5× speedup on pure SQL workloads. <strong>Data Skipping + Z-Ordering</strong> on Delta eliminates 80–99% of I/O for selective queries. <strong>Delta Cache</strong> (local SSD) reduces S3 round-trip latency by 5–10×. <strong>Predictive I/O</strong> pre-fetches Parquet pages based on query pattern. <strong>Serverless SQL:</strong> 3s cold start vs. 8+ minutes for YARN cluster bootstrap.
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Tungsten WSCG</strong> provides JVM whole-stage codegen — effective for code-heavy pipelines but no SIMD control. <strong>Hive Metastore:</strong> full table partition scan on LIST — no file-level statistics, no data skipping. <strong>S3A overhead:</strong> <span class="ic">s3a://</span> FileSystem calls are synchronous; no native prefetch. Cold YARN cluster startup: 5–15 minutes including AMI spin-up. RDD cache is JVM heap-bound, GC-sensitive.
+            </td>
+            <td>
+              <span class="badge badge-blue">Databricks ↑↑</span>
+              <p style="font-size:0.82rem;margin-top:6px;color:var(--text-muted);">Photon + Data Skipping + Delta Cache form a layered performance stack unavailable in vanilla Spark. Gap widens at PB scale.</p>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <strong>2. Total Cost of Ownership (TCO)</strong>
+              <div style="margin-top:4px;">
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Databricks</span><div class="score-track"><div class="score-fill" style="width:68%;background:var(--orange);"></div></div><span class="score-label" style="color:var(--orange);">68</span></div>
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Vanilla Spark</span><div class="score-track"><div class="score-fill" style="width:55%;background:#94a3b8;"></div></div><span class="score-label" style="color:var(--text-muted);">55</span></div>
+              </div>
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Databricks Units (DBU)</strong> pricing adds a software premium (0.07–0.55 $/DBU on top of cloud VM cost). <strong>Serverless warehouses</strong> eliminate idle cluster cost — pay per query second. <strong>Predictive Optimization</strong> (auto-OPTIMIZE, auto-VACUUM) reduces engineering labor. <strong>Photon</strong> reduces wall-clock time → fewer node-hours → lower VM cost. <strong>Managed services</strong> eliminate cluster admin headcount (2–5 FTE at enterprise scale). TCO advantage depends heavily on workload patterns and team size.
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Zero licensing cost</strong> for Apache Spark, Hadoop, Hive, etc. Cloud VM cost only (plus HDFS replication overhead on EBS/persistent disk). However: requires 2–5 senior Hadoop/Spark platform engineers for cluster management, capacity planning, upgrade cycles (Spark 3.x migration). HDFS operational costs (storage replication at 3×, NameNode HA setup). Cluster idle time is 40–60% in typical enterprise environments with peak-based provisioning.
+            </td>
+            <td>
+              <span class="badge badge-orange">Context-Dependent</span>
+              <p style="font-size:0.82rem;margin-top:6px;color:var(--text-muted);">Databricks wins on <em>operational TCO</em> for teams &lt;10 engineers. Vanilla Spark wins on <em>licensing cost</em> for large teams with Spark expertise. Break-even typically at 5–8 FTE platform engineers.</p>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <strong>3. Governance &amp; Security</strong>
+              <div style="margin-top:4px;">
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Databricks</span><div class="score-track"><div class="score-fill" style="width:94%;background:var(--purple);"></div></div><span class="score-label" style="color:var(--purple);">94</span></div>
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Vanilla Spark</span><div class="score-track"><div class="score-fill" style="width:28%;background:#94a3b8;"></div></div><span class="score-label" style="color:var(--text-muted);">28</span></div>
+              </div>
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Unity Catalog FGAC:</strong> Column masking, Row Filters, TAG-based classification — enforced at query plan level. <strong>Credential Vending:</strong> No static cloud credentials on clusters. <strong>Automated column-level lineage</strong> from Catalyst plan analysis. <strong>Audit logging:</strong> all data access events to Delta tables (queryable via SQL). <strong>Attribute-Based Access Control (ABAC):</strong> tag-based policy propagation across catalog hierarchy. <strong>PII classification:</strong> automated scanning with Lakehouse Monitoring.
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Hive Metastore:</strong> Table/database-level grants only. No column or row-level security — requires Ranger (complex) or application-layer enforcement. <strong>Static IAM roles</strong> on cluster — long-lived credentials, violates least-privilege. <strong>No automated lineage</strong> — requires Apache Atlas + hooks configuration. <strong>Audit logging:</strong> S3 server access logs or CloudTrail — not queryable, not schema-aware. <strong>Schema Registry</strong> (Confluent) required separately for streaming governance.
+            </td>
+            <td>
+              <span class="badge badge-purple">Databricks ↑↑↑</span>
+              <p style="font-size:0.82rem;margin-top:6px;color:var(--text-muted);">The largest gap in the comparison. UC provides enterprise-grade governance that would require 3–5 separate tools (Ranger, Atlas, HashiCorp Vault, custom lineage) to approximate on vanilla Spark.</p>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <strong>4. Developer Experience (DX)</strong>
+              <div style="margin-top:4px;">
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Databricks</span><div class="score-track"><div class="score-fill" style="width:88%;background:var(--green);"></div></div><span class="score-label" style="color:var(--green);">88</span></div>
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Vanilla Spark</span><div class="score-track"><div class="score-fill" style="width:55%;background:#94a3b8;"></div></div><span class="score-label" style="color:var(--text-muted);">55</span></div>
+              </div>
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Collaborative Notebooks:</strong> real-time co-editing, built-in visualizations, git integration. <strong>Repos:</strong> workspace-native git clone/branch/PR workflow. <strong>Asset Bundles + DABs:</strong> full GitOps deployment in YAML. <strong>DLT:</strong> declarative pipelines with integrated data quality. <strong>MLflow integration:</strong> experiment tracking, model registry, serving — in the same workspace. <strong>SQL Editor</strong> with auto-complete, schema browser, query history. <strong>Lakehouse Monitoring:</strong> statistical drift detection on Delta tables with zero configuration.
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>IntelliJ/VSCode + remote Spark</strong> requires complex cluster setup (spark-submit, remote debug). <strong>Jupyter on EMR/Dataproc:</strong> no real-time collaboration, no built-in git workflow. <strong>No managed MLflow</strong> — self-hosted, infrastructure burden. <strong>Airflow + Spark:</strong> DAG + job config fragmentation across multiple tools. <strong>No built-in schema browser</strong> or query catalog. Local development with <span class="ic">spark-local</span> diverges from cluster behavior. Unit testing requires <span class="ic">pyspark.testing</span> fixtures — verbose.
+            </td>
+            <td>
+              <span class="badge badge-green">Databricks ↑↑</span>
+              <p style="font-size:0.82rem;margin-top:6px;color:var(--text-muted);">Especially pronounced for teams mixing data engineering, data science, and SQL analytics — UC's unified namespace and the collaborative notebook environment reduces context-switching significantly.</p>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <strong>5. Maintenance Overhead</strong>
+              <div style="margin-top:4px;">
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Databricks</span><div class="score-track"><div class="score-fill" style="width:85%;background:var(--teal);"></div></div><span class="score-label" style="color:var(--teal);">85</span></div>
+                <div class="score-bar"><span style="font-size:0.75rem;color:var(--text-muted);width:80px;">Vanilla Spark</span><div class="score-track"><div class="score-fill" style="width:35%;background:#94a3b8;"></div></div><span class="score-label" style="color:var(--text-muted);">35</span></div>
+              </div>
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Managed runtime upgrades:</strong> Databricks Runtime (DBR) LTS versions with 3-year support; no Spark version management. <strong>Predictive Optimization (UC + Serverless):</strong> auto-OPTIMIZE, auto-VACUUM scheduled by Databricks — eliminates manual Delta maintenance jobs. <strong>Auto-managed HMS</strong> via Unity Catalog — no metastore database backups. <strong>Serverless SQL:</strong> zero infrastructure to maintain for BI queries. <strong>Managed MLflow + Feature Store:</strong> no model serving infrastructure. Monitoring via built-in Ganglia + Cluster Event Logs + Lakehouse Monitoring.
+            </td>
+            <td style="font-size:0.85rem;">
+              <strong>Spark version upgrades:</strong> major versions (2.x → 3.x) require application compatibility testing and cluster rebuilds. <strong>HDFS:</strong> NameNode HA configuration, journal node management, block report tuning, disk balancing. <strong>YARN:</strong> ResourceManager failover, capacity scheduler tuning, node label management. <strong>Hive Metastore:</strong> MySQL/PostgreSQL backup, schema upgrade scripts on HMS version change. <strong>Manual Delta maintenance:</strong> OPTIMIZE and VACUUM jobs required in scheduler. Security patches require full cluster replacement (immutable infrastructure) or in-place upgrade risk.
+            </td>
+            <td>
+              <span class="badge badge-teal">Databricks ↑↑↑</span>
+              <p style="font-size:0.82rem;margin-top:6px;color:var(--text-muted);">Self-managed Hadoop clusters at petabyte scale require 3–8 FTE SREs. Databricks reduces this to ~1 FTE for platform operations at similar scale. The gap is decisive for teams without a dedicated infrastructure org.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Final Recommendation -->
+    <div class="card" style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-color:#1e293b;">
+      <div style="color:#94a3b8;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Principal Architect's Recommendation</div>
+      <h3 style="color:#ffffff;margin-bottom:16px;font-size:1.4rem;">When to Choose Databricks Lakehouse vs. Self-Managed Stack</h3>
+      <div class="grid-2">
+        <div>
+          <h4 style="color:#60a5fa;margin-bottom:10px;">✅ Choose Databricks When:</h4>
+          <ul class="item-list">
+            <li style="color:#94a3b8;">Team is &lt;15 data engineers — managed infrastructure ROI is immediate</li>
+            <li style="color:#94a3b8;">Regulatory requirements demand column-level PII governance (GDPR, HIPAA) — UC is the fastest path</li>
+            <li style="color:#94a3b8;">Mixed workloads: batch ETL + real-time streaming + ML training + SQL analytics on the same data</li>
+            <li style="color:#94a3b8;">Time-to-market is a constraint — DLT + Serverless SQL can have production pipelines in days, not weeks</li>
+            <li style="color:#94a3b8;">Multi-cloud or hybrid cloud strategy — Unity Catalog federated metastore spans AWS, Azure, GCP</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color:#fb923c;margin-bottom:10px;">⚠️ Consider Self-Managed When:</h4>
+          <ul class="item-list">
+            <li style="color:#94a3b8;">Large Hadoop/Spark expertise org (10+ platform engineers) where operational TCO of Databricks DBU premium exceeds labor cost</li>
+            <li style="color:#94a3b8;">Air-gapped / sovereign cloud requirements where Databricks control plane connectivity is not permitted</li>
+            <li style="color:#94a3b8;">Primarily streaming workloads with Flink — Apache Flink on Kubernetes often outperforms Databricks for stateful stream processing with lower cost</li>
+            <li style="color:#94a3b8;">Vendor lock-in is a hard constraint — Apache Iceberg + Trino + dbt provides a fully open-source, cloud-portable stack</li>
+            <li style="color:#94a3b8;">Extremely high Python UDF density — Databricks' Photon penalty for UDF-heavy jobs can erode the performance advantage</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand">Databricks <span>Lakehouse</span> Deep Dive</div>
+        <p class="footer-desc">A principal data platform architect's technical analysis of the Databricks Lakehouse Platform across five architectural pillars. Intended for senior data engineers operating at petabyte scale. Content synthesized from official documentation, engineering blog posts, academic papers, and production deployment experience.</p>
+      </div>
+      <div>
+        <div class="footer-col-title">Primary References</div>
+        <ul class="footer-refs">
+          <li><a href="https://databricks.com/wp-content/uploads/2020/08/p975-armbrust.pdf">Delta Lake Paper — Armbrust et al., VLDB 2020</a></li>
+          <li><a href="https://www.databricks.com/blog/2021/06/17/announcing-photon-public-preview.html">Photon Engine Blog — Databricks Engineering</a></li>
+          <li><a href="https://docs.databricks.com/en/delta/index.html">Delta Lake Documentation</a></li>
+          <li><a href="https://docs.databricks.com/en/data-governance/unity-catalog/index.html">Unity Catalog Docs</a></li>
+          <li><a href="https://delta.io/blog/delta-lake-vs-apache-iceberg/">Delta vs. Iceberg — Delta.io Blog</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Further Reading</div>
+        <ul class="footer-refs">
+          <li><a href="https://iceberg.apache.org/spec/">Apache Iceberg Table Specification v2</a></li>
+          <li><a href="https://hudi.apache.org/docs/concepts/">Apache Hudi Concepts Docs</a></li>
+          <li><a href="https://trino.io/docs/current/connector/delta-lake.html">Trino Delta Lake Connector</a></li>
+          <li><a href="https://docs.getdbt.com/docs/core/connect-data-platform/databricks-setup">dbt Databricks Adapter Docs</a></li>
+          <li><a href="https://github.com/delta-io/delta-sharing">Delta Sharing Protocol Spec (GitHub)</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>Technical analysis document — <span id="year"></span>. For educational and architectural planning purposes.</p>
+      <div class="footer-tags">
+        <span class="footer-tag">Delta Lake</span>
+        <span class="footer-tag">Photon</span>
+        <span class="footer-tag">Unity Catalog</span>
+        <span class="footer-tag">DLT</span>
+        <span class="footer-tag">ACID</span>
+        <span class="footer-tag">SIMD</span>
+        <span class="footer-tag">Vectorized Execution</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Year
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Active nav link on scroll
+  const sections = document.querySelectorAll('[id^="pillar"], #summary');
+  const navLinks = document.querySelectorAll('.nav-links a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.nav-links a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+  sections.forEach(s => observer.observe(s));
+
+  // Animate score bars on scroll into view
+  const scoreObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.querySelectorAll('.score-fill').forEach(bar => {
+          const w = bar.style.width;
+          bar.style.width = '0';
+          setTimeout(() => { bar.style.width = w; }, 100);
+        });
+      }
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('tr').forEach(r => scoreObserver.observe(r));
+
+  // Smooth anchor scroll with nav offset compensation
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+</script>
+</body>
+</html>

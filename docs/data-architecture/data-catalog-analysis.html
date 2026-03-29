@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Data Catalog Architecture Analysis — PB-Scale HDFS/Iceberg</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #f0f4f9;
+    --surface: #ffffff;
+    --surface-alt: #f7faff;
+    --border: #dde6f0;
+    --text-primary: #0f1c2e;
+    --text-secondary: #4a6080;
+    --text-muted: #7a96b4;
+
+    --blue:    #2563eb;
+    --blue-lt: #e8f0fe;
+    --blue-md: #93b4f7;
+
+    --orange:    #ea580c;
+    --orange-lt: #fff0e8;
+    --orange-md: #f9b78a;
+
+    --purple:    #7c3aed;
+    --purple-lt: #f0ebff;
+    --purple-md: #c4a9f9;
+
+    --green:    #16a34a;
+    --green-lt: #e6f7ee;
+    --green-md: #86d9a6;
+
+    --red:    #dc2626;
+    --red-lt: #fee8e8;
+
+    --shadow-sm: 0 1px 3px rgba(15,28,46,.06), 0 1px 2px rgba(15,28,46,.04);
+    --shadow:    0 4px 16px rgba(15,28,46,.08), 0 1px 4px rgba(15,28,46,.05);
+    --shadow-lg: 0 12px 40px rgba(15,28,46,.12), 0 3px 8px rgba(15,28,46,.06);
+
+    --radius-sm: 6px;
+    --radius:    12px;
+    --radius-lg: 20px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    line-height: 1.72;
+    color: var(--text-primary);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── TYPOGRAPHY ── */
+  h1,h2,h3,h4 { font-family: 'DM Serif Display', serif; line-height: 1.2; }
+  h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.01em; }
+  h2 { font-size: clamp(1.45rem, 2.4vw, 1.9rem); letter-spacing: -.01em; }
+  h3 { font-size: 1.25rem; }
+  h4 { font-size: 1.05rem; font-family: 'DM Sans', sans-serif; font-weight: 600; }
+
+  p { color: var(--text-secondary); font-size: 16px; margin-bottom: .75rem; }
+  p:last-child { margin-bottom: 0; }
+
+  code, pre, .mono {
+    font-family: 'DM Mono', monospace;
+    font-size: .82em;
+  }
+
+  strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ── LAYOUT ── */
+  .page-wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+  section { padding: 80px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(155deg, #0f1c2e 0%, #1a3154 55%, #1e4a8a 100%);
+    color: #fff;
+    padding: 80px 0 72px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content:'';
+    position:absolute; inset:0;
+    background: radial-gradient(ellipse 70% 60% at 80% 40%, rgba(37,99,235,.28) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 40% at 15% 80%, rgba(124,58,237,.18) 0%, transparent 65%);
+    pointer-events:none;
+  }
+  .hero-grid { display:grid; grid-template-columns:1fr auto; gap:40px; align-items:center; position:relative; }
+  .hero-badge {
+    display:inline-flex; align-items:center; gap:7px;
+    background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.18);
+    border-radius:99px; padding:5px 14px; font-size:12.5px; font-weight:500;
+    letter-spacing:.04em; text-transform:uppercase; color:rgba(255,255,255,.85);
+    margin-bottom:20px;
+  }
+  .hero-badge span { width:7px;height:7px;border-radius:50%;background:#4ade80;display:block;
+    animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .hero h1 { color:#fff; margin-bottom:16px; }
+  .hero-sub { color:rgba(255,255,255,.70); font-size:17px; max-width:640px; line-height:1.65; }
+  .hero-meta { display:flex; gap:24px; margin-top:32px; flex-wrap:wrap; }
+  .hero-meta-item { display:flex; flex-direction:column; gap:2px; }
+  .hero-meta-item span:first-child { color:rgba(255,255,255,.5); font-size:11px; letter-spacing:.07em; text-transform:uppercase; }
+  .hero-meta-item span:last-child { color:#fff; font-weight:600; font-size:15px; }
+  .hero-stat-card {
+    background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.13);
+    border-radius:var(--radius); padding:24px 28px; min-width:180px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .hero-stat-card .num { font-size:2.4rem; font-weight:700; color:#fff; font-family:'DM Serif Display',serif; }
+  .hero-stat-card .lbl { color:rgba(255,255,255,.55); font-size:13px; }
+
+  /* ── NAV PILLS ── */
+  .nav-sticky {
+    position:sticky; top:0; z-index:100;
+    background:rgba(240,244,249,.92);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);
+    padding:10px 0;
+  }
+  .nav-pills { display:flex; gap:6px; overflow-x:auto; padding:2px 0; }
+  .nav-pills a {
+    white-space:nowrap; text-decoration:none; font-size:13.5px; font-weight:500;
+    color:var(--text-secondary); padding:6px 16px; border-radius:99px;
+    border:1px solid transparent; transition:all .18s;
+  }
+  .nav-pills a:hover { background:var(--surface); border-color:var(--border); color:var(--blue); }
+  .nav-pills a.active { background:var(--blue); color:#fff; }
+
+  /* ── CARDS ── */
+  .card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-sm);
+    padding:28px 32px;
+    transition:box-shadow .22s, transform .22s;
+  }
+  .card:hover { box-shadow:var(--shadow); transform:translateY(-2px); }
+  .card-header { display:flex; align-items:flex-start; gap:14px; margin-bottom:20px; }
+  .card-icon {
+    width:44px;height:44px;border-radius:var(--radius-sm);
+    display:flex;align-items:center;justify-content:center;
+    font-size:20px; flex-shrink:0;
+  }
+  .card-title { font-size:1.1rem; font-weight:600; margin-bottom:3px; }
+  .card-sub { font-size:13px; color:var(--text-muted); }
+
+  /* ── COMPARISON TABLE ── */
+  .comp-table { width:100%; border-collapse:separate; border-spacing:0; }
+  .comp-table th, .comp-table td { padding:14px 18px; text-align:left; font-size:15px; }
+  .comp-table thead th {
+    background:var(--surface-alt); color:var(--text-secondary);
+    font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.05em;
+    border-bottom:2px solid var(--border);
+    position:sticky; top:60px;
+  }
+  .comp-table thead th:first-child { border-radius:var(--radius-sm) 0 0 0; }
+  .comp-table thead th:last-child  { border-radius:0 var(--radius-sm) 0 0; }
+  .comp-table tbody tr { transition:background .15s; }
+  .comp-table tbody tr:hover td { background:var(--surface-alt); }
+  .comp-table tbody td { border-bottom:1px solid var(--border); }
+  .comp-table tbody tr:last-child td { border-bottom:none; }
+  .comp-table tbody td:first-child { font-weight:600; color:var(--text-primary); min-width:170px; }
+
+  .tbl-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; box-shadow:var(--shadow-sm); }
+
+  /* ── BADGES ── */
+  .badge {
+    display:inline-block; padding:2px 10px; border-radius:99px;
+    font-size:12px; font-weight:600; letter-spacing:.02em;
+  }
+  .badge-blue   { background:var(--blue-lt);   color:var(--blue); }
+  .badge-orange { background:var(--orange-lt); color:var(--orange); }
+  .badge-purple { background:var(--purple-lt); color:var(--purple); }
+  .badge-green  { background:var(--green-lt);  color:var(--green); }
+  .badge-red    { background:var(--red-lt);    color:var(--red); }
+
+  /* ── RATING DOTS ── */
+  .rating { display:flex; gap:4px; align-items:center; }
+  .dot { width:9px;height:9px;border-radius:50%; }
+  .dot.fill   { background:var(--blue); }
+  .dot.half   { background:linear-gradient(90deg,var(--blue) 50%,var(--border) 50%); }
+  .dot.empty  { background:var(--border); }
+
+  /* ── SECTION LABELS ── */
+  .section-label {
+    display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--blue); margin-bottom:12px;
+    padding:3px 0; border-bottom:2px solid var(--blue-md);
+  }
+
+  /* ── GRID LAYOUTS ── */
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+  .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:24px; }
+  .grid-2-1 { display:grid; grid-template-columns:2fr 1fr; gap:32px; align-items:start; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-box {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:24px; text-align:center; transition:all .2s;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .arch-box:hover { box-shadow:var(--shadow); transform:translateY(-2px); }
+  .arch-box .icon { font-size:28px; }
+  .arch-box .name { font-weight:700; font-size:14.5px; }
+  .arch-box .tech { font-size:12.5px; color:var(--text-muted); font-family:'DM Mono',monospace; }
+
+  .arch-flow {
+    display:flex; align-items:center; justify-content:center; gap:0; flex-wrap:wrap;
+  }
+  .arch-flow .arrow {
+    color:var(--text-muted); font-size:20px; padding:0 6px; flex-shrink:0;
+  }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background:#0f1c2e; border-radius:var(--radius-sm);
+    padding:20px 24px; overflow-x:auto; margin:16px 0;
+    border:1px solid rgba(255,255,255,.06);
+  }
+  .code-block pre { color:#a8c5e8; font-family:'DM Mono',monospace; font-size:13.5px; line-height:1.7; }
+  .kw   { color:#7dd3fc; }  /* keyword */
+  .str  { color:#86efac; }  /* string */
+  .cmt  { color:#4a6080; }  /* comment */
+  .num  { color:#fca5a5; }  /* number */
+  .fn   { color:#c4a9f9; }  /* function */
+  .prop { color:#fcd34d; }  /* property */
+
+  /* ── FLOW STEPS ── */
+  .flow-steps { display:flex; flex-direction:column; gap:0; position:relative; }
+  .flow-steps::before {
+    content:''; position:absolute; left:22px; top:24px; bottom:24px;
+    width:2px; background:linear-gradient(to bottom,var(--blue),var(--purple));
+  }
+  .flow-step {
+    display:flex; gap:20px; align-items:flex-start;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px 24px; margin-bottom:12px; position:relative;
+    transition:all .2s;
+  }
+  .flow-step:hover { box-shadow:var(--shadow); border-color:var(--blue-md); }
+  .flow-step-num {
+    width:44px;height:44px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:16px; font-family:'DM Mono',monospace;
+    background:var(--blue); color:#fff; z-index:1;
+    box-shadow:0 0 0 3px var(--bg);
+  }
+  .flow-step-content h4 { margin-bottom:4px; color:var(--text-primary); }
+  .flow-step-content p  { margin:0; font-size:15px; }
+
+  /* ── VERDICT CARD ── */
+  .verdict {
+    background:linear-gradient(135deg, #1a3154 0%, #1e4a8a 100%);
+    border-radius:var(--radius-lg); padding:40px 44px; color:#fff;
+    box-shadow:var(--shadow-lg); position:relative; overflow:hidden;
+  }
+  .verdict::before {
+    content:''; position:absolute; right:-40px; top:-40px;
+    width:240px;height:240px; border-radius:50%;
+    background:rgba(255,255,255,.04); pointer-events:none;
+  }
+  .verdict h3 { color:#fff; font-size:1.4rem; margin-bottom:12px; }
+  .verdict p  { color:rgba(255,255,255,.75); }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight-box {
+    border-left:4px solid; border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+    padding:16px 20px; margin:20px 0;
+  }
+  .highlight-box.blue   { border-color:var(--blue);   background:var(--blue-lt); }
+  .highlight-box.orange { border-color:var(--orange); background:var(--orange-lt); }
+  .highlight-box.purple { border-color:var(--purple); background:var(--purple-lt); }
+  .highlight-box.green  { border-color:var(--green);  background:var(--green-lt); }
+  .highlight-box h4 { font-size:14px; margin-bottom:6px; }
+  .highlight-box p  { font-size:14.5px; margin:0; }
+
+  /* ── SECURITY MATRIX ── */
+  .sec-matrix { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+
+  /* ── FEATURE LIST ── */
+  .feat-list { list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .feat-list li { display:flex; gap:10px; align-items:flex-start; font-size:15.5px; }
+  .feat-list li::before {
+    content:''; width:18px;height:18px; border-radius:50%; flex-shrink:0; margin-top:2px;
+    display:flex; align-items:center; justify-content:center; font-size:10px;
+  }
+  .feat-list.check li::before { content:'✓'; background:var(--green-lt); color:var(--green); font-weight:700; }
+  .feat-list.warn  li::before { content:'!'; background:var(--orange-lt); color:var(--orange); font-weight:700; }
+  .feat-list.cross li::before { content:'✗'; background:var(--red-lt); color:var(--red); font-weight:700; }
+
+  /* ── REFERENCE CARDS ── */
+  .ref-list { display:flex; flex-direction:column; gap:10px; }
+  .ref-item {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:12px 16px; display:flex; gap:12px; align-items:flex-start;
+    transition:border-color .2s;
+  }
+  .ref-item:hover { border-color:var(--blue-md); }
+  .ref-num { font-family:'DM Mono',monospace; font-size:12px; color:var(--blue); font-weight:700; flex-shrink:0; min-width:26px; }
+  .ref-text { font-size:14px; color:var(--text-secondary); line-height:1.5; }
+  .ref-text strong { color:var(--text-primary); }
+  .ref-text a { color:var(--blue); text-decoration:none; }
+  .ref-text a:hover { text-decoration:underline; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .grid-3 { grid-template-columns:1fr; }
+    .grid-2 { grid-template-columns:1fr; }
+    .grid-2-1 { grid-template-columns:1fr; }
+    .hero-grid { grid-template-columns:1fr; }
+    .hero-stat-card { display:none; }
+    .sec-matrix { grid-template-columns:1fr; }
+    .arch-flow { gap:4px; }
+    section { padding:56px 0; }
+    .card { padding:22px 20px; }
+    .verdict { padding:28px 24px; }
+  }
+  @media (max-width:600px) {
+    body { font-size:16px; }
+    .page-wrap { padding:0 16px; }
+    .hero { padding:56px 0 52px; }
+    .comp-table th, .comp-table td { padding:10px 12px; font-size:13.5px; }
+  }
+
+  /* ── UTILITIES ── */
+  .mb-8  { margin-bottom:8px; }
+  .mb-16 { margin-bottom:16px; }
+  .mb-24 { margin-bottom:24px; }
+  .mb-32 { margin-bottom:32px; }
+  .mb-40 { margin-bottom:40px; }
+  .mt-8  { margin-top:8px; }
+  .mt-16 { margin-top:16px; }
+  .mt-24 { margin-top:24px; }
+  .mt-32 { margin-top:32px; }
+
+  .text-muted { color:var(--text-muted); }
+  .text-sm    { font-size:14px; }
+  .text-xs    { font-size:12.5px; }
+
+  .divider { height:1px; background:var(--border); margin:32px 0; }
+  .tag-row { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* ── WINNER CROWN ── */
+  .winner-crown {
+    display:inline-flex; align-items:center; gap:6px;
+    background:linear-gradient(135deg,#fbbf24,#f59e0b);
+    color:#fff; border-radius:99px; padding:4px 14px; font-size:12px; font-weight:700;
+    letter-spacing:.04em; text-transform:uppercase;
+  }
+
+  /* ── SCROLL ANIM ── */
+  .fade-in { opacity:0; transform:translateY(18px); transition:opacity .55s, transform .55s; }
+  .fade-in.visible { opacity:1; transform:none; }
+
+  /* ── FOOTER ── */
+  footer {
+    background:#0f1c2e; color:rgba(255,255,255,.5);
+    padding:40px 0; font-size:14px; text-align:center;
+  }
+  footer a { color:rgba(255,255,255,.7); text-decoration:none; }
+
+  /* ── ICEBERG METADATA FLOW SVG AREA ── */
+  .flow-diagram {
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:32px; overflow-x:auto;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ HERO ═══════════════════════════ -->
+<header class="hero">
+  <div class="page-wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-badge"><span></span>Principal Architecture Report · 2025</div>
+        <h1>Data Catalog &amp; Metadata<br/>Governance at Petabyte Scale</h1>
+        <p class="hero-sub">A comparative technical analysis of the top open-source Data Catalog frameworks for PB-scale HDFS/Apache Iceberg environments — covering ingestion architecture, scalability, security, and deep integration patterns.</p>
+        <div class="hero-meta">
+          <div class="hero-meta-item">
+            <span>Contenders Evaluated</span>
+            <span>DataHub · Atlas · Amundsen</span>
+          </div>
+          <div class="hero-meta-item">
+            <span>Focus Stack</span>
+            <span>HDFS · Iceberg · Spark · Trino</span>
+          </div>
+          <div class="hero-meta-item">
+            <span>Governance Scope</span>
+            <span>Ranger · RBAC · PII · ABAC</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-stat-card">
+        <div class="num">PB+</div>
+        <div class="lbl">Data Volume Addressed</div>
+        <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px;">
+          <div class="num" style="font-size:1.6rem;">10M+</div>
+          <div class="lbl">Table Partitions / Manifests</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ STICKY NAV ═══════════════════════════ -->
+<nav class="nav-sticky">
+  <div class="page-wrap">
+    <div class="nav-pills">
+      <a href="#executive-summary">Summary</a>
+      <a href="#comparison">Comparative Analysis</a>
+      <a href="#deep-dive">DataHub Deep Dive</a>
+      <a href="#flow">Operational Flow</a>
+      <a href="#metadata-explosion">Metadata Explosion</a>
+      <a href="#security">Security &amp; Governance</a>
+      <a href="#integration">Integration Strategy</a>
+      <a href="#references">References</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ EXECUTIVE SUMMARY ═══════════════════════════ -->
+<section id="executive-summary">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">01 · Executive Summary</div>
+      <h2 class="mb-24">The Metadata Governance Imperative</h2>
+    </div>
+
+    <div class="grid-2-1 fade-in">
+      <div>
+        <p>Managing Petabytes of data across HDFS while migrating aggressively to Apache Iceberg creates a dual challenge: <strong>operational metadata volatility</strong> (Iceberg's immutable manifest files generate thousands of new metadata artefacts per commit) and <strong>semantic metadata complexity</strong> (schemas, lineage, ownership, PII tags, and quality SLOs must be discoverable across hundreds of tables and pipelines).</p>
+        <p>A production-grade Data Catalog must satisfy five simultaneous constraints at PB scale: <strong>near-real-time ingestion</strong> of metadata events, <strong>horizontal scalability</strong> of the metadata store, <strong>native Iceberg awareness</strong> (snapshots, manifest lists, partition specs), <strong>fine-grained security</strong> integrated with Apache Ranger, and <strong>tight coupling with query engines</strong> like Spark and Trino so every query sees the authoritative, current schema.</p>
+
+        <div class="highlight-box blue mt-24">
+          <h4>🏆 Top Recommendation</h4>
+          <p><strong>DataHub (v1.x, open-source)</strong> emerges as the clear leader for PB-scale HDFS/Iceberg environments due to its stream-first architecture (Kafka-backed MCE/MAE pipeline), native Iceberg REST Catalog integration introduced in v1.0 (Feb 2025), horizontally scalable dual-store (MySQL/Postgres + Elasticsearch), and a maturing Apache Ranger authorisation plugin. For organisations with legacy Hadoop estates requiring classification-driven policy propagation, <strong>Apache Atlas</strong> is a compelling secondary option.</p>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="card" style="border-left:4px solid var(--blue);">
+          <div class="card-title mb-8">📦 DataHub</div>
+          <div class="tag-row mb-8">
+            <span class="badge badge-blue">Stream-first</span>
+            <span class="badge badge-green">Iceberg REST</span>
+            <span class="badge badge-purple">Kafka-native</span>
+          </div>
+          <p style="font-size:14px;">Event-driven, Kafka-backed ingestion with dual-store (RDBMS + ES). Native Iceberg REST Catalog in v1.0 (2025). Highest velocity OSS community.</p>
+          <div class="winner-crown mt-16">👑 Recommended</div>
+        </div>
+
+        <div class="card" style="border-left:4px solid var(--orange);">
+          <div class="card-title mb-8">🔗 Apache Atlas</div>
+          <div class="tag-row mb-8">
+            <span class="badge badge-orange">Hook-based</span>
+            <span class="badge badge-orange">JanusGraph</span>
+            <span class="badge badge-orange">Ranger native</span>
+          </div>
+          <p style="font-size:14px;">Deep Hadoop hooks, tag-based lineage propagation, Ranger ABAC integration. Best for heavily regulated Hadoop-native environments.</p>
+        </div>
+
+        <div class="card" style="border-left:4px solid var(--purple);">
+          <div class="card-title mb-8">🔍 Amundsen</div>
+          <div class="tag-row mb-8">
+            <span class="badge badge-purple">Pull-based</span>
+            <span class="badge badge-purple">Neo4j</span>
+            <span class="badge badge-red">Dormant</span>
+          </div>
+          <p style="font-size:14px;">Lightweight discovery, Google-like UX, Neo4j graph backend. Community activity significantly declined — <strong>not recommended for new deployments</strong>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ COMPARATIVE ANALYSIS ═══════════════════════════ -->
+<section id="comparison">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">02 · Comparative Analysis</div>
+      <h2 class="mb-8">Top 3 Contenders for PB-Scale Environments</h2>
+      <p class="mb-32">Evaluated across six dimensions critical for PB-scale HDFS/Iceberg deployments.</p>
+    </div>
+
+    <!-- DIMENSION CARDS -->
+    <div class="grid-3 mb-40 fade-in">
+      <div class="card">
+        <div class="card-icon" style="background:var(--blue-lt);">📥</div>
+        <h4 class="mb-8">Ingestion Architecture</h4>
+        <p style="font-size:14.5px;">Push-vs-Pull fundamentally determines latency and operational coupling. Stream-based systems (DataHub) achieve sub-minute metadata freshness; pull-based systems (Amundsen) rely on scheduled crawls.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:var(--orange-lt);">⚖️</div>
+        <h4 class="mb-8">Metadata Store Scalability</h4>
+        <p style="font-size:14.5px;">Graph databases (JanusGraph/Neo4j) excel at relationship traversal but struggle with write-heavy, high-partition workloads. Relational+Elasticsearch separates concerns and scales writes independently.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:var(--green-lt);">🧊</div>
+        <h4 class="mb-8">Iceberg Native Support</h4>
+        <p style="font-size:14.5px;">True Iceberg-native support means tracking snapshots, manifest lists, partition evolution, and statistics — not just reading schema from Hive Metastore. Only DataHub v1.x achieves this with its REST Catalog.</p>
+      </div>
+    </div>
+
+    <!-- COMPARISON TABLE -->
+    <div class="tbl-wrap fade-in">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>DataHub <span class="winner-crown" style="font-size:10px;padding:2px 8px;">Best</span></th>
+            <th>Apache Atlas</th>
+            <th>Amundsen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Ingestion Model</td>
+            <td><span class="badge badge-blue">Stream (Kafka MCE)</span> + Pull</td>
+            <td><span class="badge badge-orange">Hook-based</span> (Hive, Spark, Kafka) + REST API</td>
+            <td><span class="badge badge-purple">Pull only</span> (Airflow-scheduled)</td>
+          </tr>
+          <tr>
+            <td>Metadata Freshness</td>
+            <td>Near real-time (&lt;60s via Kafka)</td>
+            <td>Near real-time (hook-triggered)</td>
+            <td>Batch (hourly/daily crawl)</td>
+          </tr>
+          <tr>
+            <td>Primary Store</td>
+            <td>MySQL / PostgreSQL (documents) + Elasticsearch (search + graph via MAE)</td>
+            <td>JanusGraph (BerkeleyDB or HBase back-end) + Solr / Elasticsearch</td>
+            <td>Neo4j (graph) + Elasticsearch</td>
+          </tr>
+          <tr>
+            <td>Graph Backend</td>
+            <td>Relational + ES Graph (no dedicated graph DB requirement)</td>
+            <td>JanusGraph — deep graph traversal but write-bottleneck at scale</td>
+            <td>Neo4j — strong for discovery, limited at PB partition counts</td>
+          </tr>
+          <tr>
+            <td>Iceberg Native</td>
+            <td><span class="badge badge-green">Full REST Catalog (v1.0+)</span> · Snapshots · Manifest Lists · Stats</td>
+            <td>Via Hive hook (partial) — no snapshot-level awareness</td>
+            <td>Via generic extractor only — schema-level only</td>
+          </tr>
+          <tr>
+            <td>Partition Scalability</td>
+            <td>High — stateless MCE consumers, ES sharding</td>
+            <td>Medium — JanusGraph write throughput bounded by BerkeleyDB</td>
+            <td>Low — Neo4j node density degrades at 10M+ partitions</td>
+          </tr>
+          <tr>
+            <td>Column Lineage</td>
+            <td>✅ End-to-end, SQL-parsed</td>
+            <td>✅ Classification propagation via lineage graph</td>
+            <td>⚠️ Basic table-level only</td>
+          </tr>
+          <tr>
+            <td>Ranger Integration</td>
+            <td>✅ Plugin (Ranger authoriser for DataHub policies)</td>
+            <td>✅ Native — tag-driven Ranger policies (gold standard)</td>
+            <td>❌ None</td>
+          </tr>
+          <tr>
+            <td>PII / Classification</td>
+            <td>✅ AI-powered auto-classification + Actions Framework</td>
+            <td>✅ Classification system (PII, SENSITIVE, EXPIRES_ON) + lineage propagation</td>
+            <td>⚠️ Manual tagging only</td>
+          </tr>
+          <tr>
+            <td>Deployment Complexity</td>
+            <td>High — Kafka, MySQL/PG, ES, GMS pods (K8s Helm chart)</td>
+            <td>High — JanusGraph, Solr/ES, Kafka, ZooKeeper</td>
+            <td>Low — Neo4j + ES + microservices (easiest)</td>
+          </tr>
+          <tr>
+            <td>Community Health (2025)</td>
+            <td><span class="badge badge-blue">Very Active</span> — 12,500+ Slack, 10k+ stars, Acryl backing</td>
+            <td><span class="badge badge-orange">Active</span> — Apache ASF governance, enterprise adoption</td>
+            <td><span class="badge badge-red">Dormant</span> — no active roadmap (Dec 2025)</td>
+          </tr>
+          <tr>
+            <td>OSS License</td>
+            <td>Apache 2.0</td>
+            <td>Apache 2.0</td>
+            <td>Apache 2.0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SCALABILITY ANALYSIS -->
+    <div class="mt-40 fade-in">
+      <h3 class="mb-24">Scalability Deep-Dive: How Metadata Stores Handle Millions of Partitions</h3>
+      <div class="grid-3">
+        <div class="card" style="border-top:3px solid var(--blue);">
+          <h4 class="mb-12">DataHub — MySQL + ES</h4>
+          <ul class="feat-list check mb-16">
+            <li>Entities stored as JSON documents in MySQL — horizontally scalable with read replicas</li>
+            <li>Elasticsearch sharded across cluster nodes — handles 100M+ entity search</li>
+            <li>Stateless GMS (Graph Metadata Service) — Kubernetes HPA scales pods independently</li>
+            <li>MCE Kafka consumer groups allow parallel partition ingestion</li>
+          </ul>
+          <div class="highlight-box blue">
+            <p style="font-size:13.5px;">At 10M Iceberg partitions, DataHub adds one Elasticsearch shard and scales GMS pods — no schema migrations or graph re-indexing required.</p>
+          </div>
+        </div>
+        <div class="card" style="border-top:3px solid var(--orange);">
+          <h4 class="mb-12">Apache Atlas — JanusGraph</h4>
+          <ul class="feat-list warn mb-16">
+            <li>JanusGraph with BerkeleyDB back-end: single-host write bottleneck</li>
+            <li>HBase back-end mitigates write throughput but adds operational complexity</li>
+            <li>Solr/ES search index must be kept consistent with JanusGraph — dual-write risk</li>
+            <li>Graph traversal for lineage is extremely fast but write-heavy at PB scale</li>
+          </ul>
+          <div class="highlight-box orange">
+            <p style="font-size:13.5px;">At 10M+ partitions with HBase back-end, Atlas is viable but requires careful region server tuning. BerkeleyDB is a non-starter at this scale.</p>
+          </div>
+        </div>
+        <div class="card" style="border-top:3px solid var(--purple);">
+          <h4 class="mb-12">Amundsen — Neo4j</h4>
+          <ul class="feat-list cross mb-16">
+            <li>Neo4j Community Edition: single-node limit — not suitable for PB metadata</li>
+            <li>Neo4j Enterprise (causal clustering) is costly and still has write scalability ceiling</li>
+            <li>Graph node density degrades performance beyond ~5–10M nodes in practice</li>
+            <li>No stream ingestion — crawl latency means stale metadata post-Iceberg commit</li>
+          </ul>
+          <div class="highlight-box" style="border-color:var(--red);background:var(--red-lt);">
+            <p style="font-size:13.5px;"><strong>Not recommended</strong> for PB-scale HDFS/Iceberg. Amundsen is architecturally unsuited and the project is effectively dormant.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ DATAHUB DEEP DIVE ═══════════════════════════ -->
+<section id="deep-dive">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">03 · DataHub Deep Dive</div>
+      <h2 class="mb-8">Internal Architecture — Component Breakdown</h2>
+      <p class="mb-32">DataHub's architecture is purpose-built for distributed, event-driven metadata management. Its separation of concerns between ingestion, storage, search, and serving tiers enables independent scaling at PB volumes.</p>
+    </div>
+
+    <!-- ARCHITECTURE DIAGRAM -->
+    <div class="flow-diagram mb-40 fade-in">
+      <h4 class="mb-24" style="text-align:center;color:var(--text-secondary);font-size:13px;letter-spacing:.06em;text-transform:uppercase;">DataHub Component Architecture</h4>
+
+      <!-- Row 1: Sources -->
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="arch-box" style="background:var(--blue-lt);border-color:var(--blue-md);min-width:120px;">
+          <div class="icon">🧊</div>
+          <div class="name">Iceberg</div>
+          <div class="tech">REST Catalog / Spark</div>
+        </div>
+        <div class="arch-box" style="background:var(--blue-lt);border-color:var(--blue-md);min-width:120px;">
+          <div class="icon">🐝</div>
+          <div class="name">Hive/HDFS</div>
+          <div class="tech">Metastore Hook</div>
+        </div>
+        <div class="arch-box" style="background:var(--blue-lt);border-color:var(--blue-md);min-width:120px;">
+          <div class="icon">⚡</div>
+          <div class="name">Spark / Trino</div>
+          <div class="tech">OpenLineage Listener</div>
+        </div>
+        <div class="arch-box" style="background:var(--blue-lt);border-color:var(--blue-md);min-width:120px;">
+          <div class="icon">🔄</div>
+          <div class="name">dbt / Airflow</div>
+          <div class="tech">DAG / Model Lineage</div>
+        </div>
+      </div>
+
+      <!-- Arrow down -->
+      <div style="text-align:center;font-size:22px;color:var(--text-muted);margin:4px 0;">↓</div>
+
+      <!-- Row 2: Ingestion Layer -->
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="arch-box" style="background:var(--purple-lt);border-color:var(--purple-md);min-width:200px;">
+          <div class="icon">🐍</div>
+          <div class="name">datahub-ingestion</div>
+          <div class="tech">Python SDK · Recipes · Plugins</div>
+        </div>
+        <div class="arch-box" style="background:var(--purple-lt);border-color:var(--purple-md);min-width:200px;">
+          <div class="icon">📡</div>
+          <div class="name">REST Emitter / Kafka Emitter</div>
+          <div class="tech">MCP · MCE · MCLL</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:22px;color:var(--text-muted);margin:4px 0;">↓</div>
+
+      <!-- Row 3: Kafka Backbone -->
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="arch-box" style="background:#1f3560;border-color:#2d4a80;min-width:460px;flex:1;max-width:600px;">
+          <div class="icon" style="font-size:24px;">📨</div>
+          <div class="name" style="color:#fff;">Apache Kafka</div>
+          <div class="tech" style="color:rgba(255,255,255,.6);">MetadataChangeProposal · MetadataAuditEvent · FailedMCE</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:22px;color:var(--text-muted);margin:4px 0;">↓</div>
+
+      <!-- Row 4: GMS -->
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="arch-box" style="background:var(--green-lt);border-color:var(--green-md);min-width:280px;flex:1;max-width:500px;">
+          <div class="icon">🧠</div>
+          <div class="name">GMS — Graph Metadata Service</div>
+          <div class="tech">Spring Boot · GraphQL API · REST API</div>
+        </div>
+        <div class="arch-box" style="background:var(--green-lt);border-color:var(--green-md);min-width:180px;">
+          <div class="icon">⚙️</div>
+          <div class="name">MCE Consumer</div>
+          <div class="tech">Async Kafka Consumer Group</div>
+        </div>
+        <div class="arch-box" style="background:var(--green-lt);border-color:var(--green-md);min-width:180px;">
+          <div class="icon">📣</div>
+          <div class="name">MAE Consumer</div>
+          <div class="tech">Search Index + Graph Updates</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:22px;color:var(--text-muted);margin:4px 0;">↓</div>
+
+      <!-- Row 5: Storage -->
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;flex-wrap:wrap;">
+        <div class="arch-box" style="background:var(--orange-lt);border-color:var(--orange-md);min-width:180px;">
+          <div class="icon">🗄️</div>
+          <div class="name">MySQL / PostgreSQL</div>
+          <div class="tech">Entity Documents · Aspects · Relationships</div>
+        </div>
+        <div class="arch-box" style="background:var(--orange-lt);border-color:var(--orange-md);min-width:180px;">
+          <div class="icon">🔍</div>
+          <div class="name">Elasticsearch</div>
+          <div class="tech">Full-text Search · Graph Index · Facets</div>
+        </div>
+        <div class="arch-box" style="background:var(--orange-lt);border-color:var(--orange-md);min-width:180px;">
+          <div class="icon">🗃️</div>
+          <div class="name">Iceberg REST Catalog</div>
+          <div class="tech">Snapshot Store · Manifest Registry</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:22px;color:var(--text-muted);margin:4px 0;">↓</div>
+
+      <!-- Row 6: Frontend -->
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <div class="arch-box" style="background:var(--surface-alt);min-width:200px;">
+          <div class="icon">🖥️</div>
+          <div class="name">DataHub Frontend</div>
+          <div class="tech">React · GraphQL · Search UI</div>
+        </div>
+        <div class="arch-box" style="background:var(--surface-alt);min-width:200px;">
+          <div class="icon">📊</div>
+          <div class="name">Lineage Graph UI</div>
+          <div class="tech">Column-level · Cross-domain</div>
+        </div>
+        <div class="arch-box" style="background:var(--surface-alt);min-width:200px;">
+          <div class="icon">🤖</div>
+          <div class="name">Actions Framework</div>
+          <div class="tech">Webhook · PII Workflow · Slack</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPONENT BREAKDOWN TEXT -->
+    <div class="grid-2 fade-in">
+      <div>
+        <h3 class="mb-16">Core Components Explained</h3>
+
+        <h4 class="mb-8" style="color:var(--blue);">📨 Kafka Message Bus — The Backbone</h4>
+        <p>Three key topics form the backbone of DataHub's event pipeline. The <strong>MetadataChangeProposal (MCP)</strong> topic carries proposals to mutate metadata entities (datasets, schemas, ownership, tags). The <strong>MetadataAuditEvent (MAE)</strong> topic is published <em>after</em> GMS successfully commits a change — downstream consumers (search indexer, graph builder) react to MAE, not MCP. The <strong>FailedMCP</strong> topic acts as a dead-letter queue for proposals rejected by GMS validation.</p>
+
+        <h4 class="mb-8 mt-16" style="color:var(--green);">🧠 GMS — Graph Metadata Service</h4>
+        <p>GMS is the authoritative write-and-read service. Built in Spring Boot, it exposes both a <strong>GraphQL API</strong> (consumed by the React frontend) and a <strong>REST API</strong> (consumed by programmatic clients and integrations). GMS validates incoming MCPs, writes entity aspects to the relational store, and emits MAEs downstream. It is <strong>stateless</strong> — any number of GMS pods can run behind a load balancer.</p>
+
+        <h4 class="mb-8 mt-16" style="color:var(--orange);">🗄️ Dual-Store: Relational + Elasticsearch</h4>
+        <p>MySQL/PostgreSQL stores <em>entity aspects</em> — structured JSON documents keyed by entity URN and aspect name. This gives DataHub a strongly consistent, transactional primary store that handles schema evolution trivially. Elasticsearch receives a projected, denormalised copy via the MAE Consumer and provides sub-second full-text search, faceted filtering, and graph-edge queries across hundreds of millions of entities.</p>
+      </div>
+
+      <div>
+        <h4 class="mb-8" style="color:var(--purple);">🐍 Ingestion Framework</h4>
+        <p>The Python-based ingestion system supports both <strong>push-based</strong> (Kafka emitter from Spark listeners) and <strong>pull-based</strong> (scheduled recipes via Airflow). Recipes are YAML-configured pipelines with a Source, Transformer, and Sink pattern. The Iceberg Source plugin reads table metadata via the Iceberg REST Catalog API or directly from the Hive Metastore, extracting schema fields, partition specs, snapshot history, and table statistics.</p>
+
+        <div class="code-block mt-16">
+          <pre><span class="cmt"># DataHub Iceberg ingestion recipe (YAML)</span>
+<span class="prop">source</span>:
+  <span class="prop">type</span>: <span class="str">iceberg</span>
+  <span class="prop">config</span>:
+    <span class="prop">catalog</span>:
+      <span class="prop">name</span>: <span class="str">production</span>
+      <span class="prop">type</span>: <span class="str">rest</span>
+      <span class="prop">uri</span>:  <span class="str">http://datahub-iceberg-catalog:8181</span>
+    <span class="prop">user_ownership_property</span>: <span class="str">owner</span>
+    <span class="prop">table_parallelism</span>: <span class="num">16</span>
+    <span class="prop">include_table_stats</span>: <span class="kw">true</span>
+    <span class="prop">include_snapshots</span>:   <span class="kw">true</span>
+<span class="prop">sink</span>:
+  <span class="prop">type</span>: <span class="str">datahub-kafka</span>
+  <span class="prop">config</span>:
+    <span class="prop">connection</span>:
+      <span class="prop">bootstrap</span>: <span class="str">kafka-broker:9092</span></pre>
+        </div>
+
+        <h4 class="mb-8 mt-16" style="color:var(--blue);">🖥️ Frontend + Actions Framework</h4>
+        <p>The React frontend communicates exclusively via GraphQL against GMS. The <strong>Actions Framework</strong> allows DataHub to react to metadata changes programmatically: trigger PII review workflows when a column is classified, send Slack alerts when a deprecated dataset is queried, or propagate glossary terms downstream via lineage — all without custom code.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ OPERATIONAL FLOW ═══════════════════════════ -->
+<section id="flow">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">04 · Operational Flow</div>
+      <h2 class="mb-8">From Iceberg Commit to Catalog — Near Real-Time</h2>
+      <p class="mb-32">Trace the exact path a metadata change takes from the moment a Spark job commits an Iceberg snapshot to the moment it appears in the DataHub UI and is enforced by Ranger policies.</p>
+    </div>
+
+    <div class="flow-steps fade-in">
+      <div class="flow-step">
+        <div class="flow-step-num">1</div>
+        <div class="flow-step-content">
+          <h4>Spark Job Commits Iceberg Snapshot</h4>
+          <p>A Spark job writing to <code>warehouse.transactions</code> via <code>spark.sql("INSERT INTO ...")</code> calls the Iceberg <strong>CommitTableTransaction</strong>. This atomically replaces the <code>metadata.json</code> pointer with a new snapshot entry, appending a new manifest list file and one or more manifest files to HDFS. This is a purely Iceberg-internal operation — no catalog notification has been sent yet.</p>
+          <div class="code-block mt-12">
+            <pre><span class="cmt">// Spark Iceberg write with DataHub listener</span>
+<span class="kw">spark</span>.<span class="fn">conf</span>.<span class="fn">set</span>(<span class="str">"spark.extraListeners"</span>,
+  <span class="str">"io.openlineage.spark.agent.OpenLineageSparkListener"</span>)
+<span class="kw">spark</span>.<span class="fn">conf</span>.<span class="fn">set</span>(<span class="str">"spark.openlineage.transport.type"</span>, <span class="str">"datahub"</span>)
+<span class="kw">spark</span>.<span class="fn">conf</span>.<span class="fn">set</span>(<span class="str">"spark.openlineage.transport.url"</span>,
+  <span class="str">"http://datahub-gms:8080"</span>)</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">2</div>
+        <div class="flow-step-content">
+          <h4>OpenLineage Listener Emits Run Events</h4>
+          <p>The <strong>OpenLineage Spark Listener</strong> (attached to SparkContext) intercepts the <code>SparkListenerJobEnd</code> event. It extracts input/output datasets, schema (from Iceberg's current snapshot schema), and job metadata, then emits an <strong>OpenLineage RunEvent</strong> (JSON) to the DataHub Kafka transport. This is a non-blocking async call — the Spark job does not wait for DataHub acknowledgement.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">3</div>
+        <div class="flow-step-content">
+          <h4>MCP Published to Kafka Topic</h4>
+          <p>The DataHub Kafka transport converts the OpenLineage RunEvent into one or more <strong>MetadataChangeProposals (MCPs)</strong>. Separate MCPs are generated for: the Dataset entity (schema, partition spec), the DataJob entity (lineage), and the DataJobInputOutput aspect (upstream/downstream linkage). These are published to the <code>MetadataChangeProposal_v1</code> Kafka topic with <code>key = entity_urn</code>, enabling ordered processing per entity.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">4</div>
+        <div class="flow-step-content">
+          <h4>GMS Validates &amp; Persists Aspects</h4>
+          <p>The <strong>MCE Consumer</strong> (Kafka consumer group) reads MCPs and submits them to GMS via the internal REST API. GMS validates the proposal against the registered entity registry, checks authorization (does the emitter have <code>EDIT_ENTITY_SCHEMA</code> privileges?), writes the aspect as a new row to MySQL/PostgreSQL, and publishes a <strong>MetadataAuditEvent (MAE)</strong> to the <code>MetadataAuditEvent_v4</code> Kafka topic confirming the commit. End-to-end latency from Spark job completion to MAE publication: typically <strong>15–45 seconds</strong> in production at scale.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">5</div>
+        <div class="flow-step-content">
+          <h4>MAE Consumer Updates Elasticsearch Index</h4>
+          <p>The <strong>MAE Consumer</strong> reads the MetadataAuditEvent and performs two actions: (a) updates the denormalised Elasticsearch document for the dataset entity — reflecting new schema fields, updated statistics, and lineage graph edges; (b) updates the graph index (stored as Elasticsearch edges) for column-level lineage. After this step, the DataHub UI returns the new schema in search results and the lineage panel shows the latest Spark job as an upstream producer.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">6</div>
+        <div class="flow-step-content">
+          <h4>Actions Framework Triggers Governance Workflows</h4>
+          <p>Concurrently, the <strong>Actions Framework</strong> subscribes to the MAE stream. If the new schema contains a column matching a PII pattern (e.g., <code>email</code>, <code>ssn</code>, <code>credit_card</code>), the configured action automatically: (a) applies the <code>PII</code> glossary term to the column, (b) emits a Ranger sync event to propagate the masking policy to the Iceberg table, (c) sends a Slack notification to the data steward for review confirmation. This entire governance loop completes within <strong>60–90 seconds</strong> of the original Iceberg commit.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict mt-40 fade-in">
+      <h3>End-to-End Latency Budget</h3>
+      <p>At PB scale with 100+ concurrent Spark jobs, the critical path is: Iceberg commit → OpenLineage event (async, ~1s) → Kafka publish (async, ~500ms) → GMS persist (sync within consumer, ~2–5s) → MAE publish → ES index update (~5–15s). <strong>Total: ~10–60 seconds to metadata visibility</strong> depending on Kafka consumer lag and ES indexing throughput. This is orders of magnitude faster than pull-based crawlers (which operate on hourly/daily schedules).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ METADATA EXPLOSION ═══════════════════════════ -->
+<section id="metadata-explosion">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">05 · Metadata Explosion</div>
+      <h2 class="mb-8">Taming High-Churn Iceberg Metadata at PB Scale</h2>
+      <p class="mb-32">Iceberg's append-only metadata design creates a "metadata explosion" problem: every commit generates new manifest files, and tables with frequent small writes accumulate thousands of snapshot entries. Without mitigation, the DataHub catalog ingests millions of redundant metadata events per day.</p>
+    </div>
+
+    <div class="grid-2 fade-in">
+      <div>
+        <h3 class="mb-20">The Problem: Iceberg Metadata Lifecycle</h3>
+        <div class="highlight-box orange mb-16">
+          <h4>What Happens During an Iceberg Commit</h4>
+          <p>Each Spark INSERT/MERGE creates: 1 new Snapshot entry, 1 new Manifest List (<code>snap-*.avro</code>), N new Manifest files (<code>*.avro</code>) — one per output partition. A 1,000-partition table with hourly writes produces <strong>~24,000 manifest files/day</strong>. Without snapshot expiry, the <code>metadata.json</code> file grows unboundedly.</p>
+        </div>
+        <div class="highlight-box blue mb-16">
+          <h4>DataHub's Ingestion-Level Mitigation</h4>
+          <p>The Iceberg Source plugin does <strong>not</strong> ingest individual manifest files — it reads the <em>current snapshot's schema, statistics, and partition spec</em> as a single DataHub Dataset aspect update. This compresses the explosion: DataHub sees one metadata change per table per commit, not one per manifest file.</p>
+        </div>
+        <div class="highlight-box green">
+          <h4>Snapshot Deduplication via Kafka Key Compaction</h4>
+          <p>By keying MCP Kafka messages on <code>entity_urn</code> (the table URN), Kafka log compaction retains only the <em>latest</em> MCP per table. Back-pressure from rapid successive commits is absorbed by the compacted log — GMS processes the final state, not every intermediate snapshot.</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="mb-20">Operational Strategies</h3>
+        <ul class="feat-list check" style="gap:14px;">
+          <li><strong>Iceberg Snapshot Expiry:</strong> Configure <code>history.expire.min-snapshots-to-keep</code> and <code>history.expire.max-snapshot-age-ms</code> at the Iceberg level. Expire old snapshots before they're ingested — DataHub only sees the active snapshot tree. Run <code>ExpireSnapshots</code> as a daily Spark job.</li>
+          <li><strong>Manifest Rewriting (Small-File Compaction):</strong> Use Iceberg's <code>RewriteManifests</code> action to consolidate thousands of small manifests into fewer large ones. This reduces Iceberg metadata overhead <em>and</em> accelerates DataHub's snapshot read during ingestion.</li>
+          <li><strong>Selective Aspect Ingestion:</strong> Configure the DataHub Iceberg recipe to emit only changed aspects (schema, statistics) rather than re-emitting all aspects on every crawl. Use <code>stateful_ingestion.enabled: true</code> with a state store (S3 or local) to checkpoint which tables have changed since the last run.</li>
+          <li><strong>Partition Statistics Sampling:</strong> For tables with millions of partitions, enable <strong>partition spec</strong> ingestion (the partition column definitions) rather than per-partition value ingestion. Use DataHub's <code>partition_patterns</code> filter to exclude dynamically-generated temp partitions.</li>
+          <li><strong>Kafka Consumer Lag Monitoring:</strong> Alert on <code>MetadataChangeProposal_v1</code> consumer group lag. A growing lag indicates GMS or ES is falling behind — scale GMS pods or ES indexing threads before the lag cascades into stale metadata.</li>
+          <li><strong>Tiered Retention in Elasticsearch:</strong> Use ILM (Index Lifecycle Management) in Elasticsearch to roll over old entity history snapshots to cheaper storage tiers (warm/cold), keeping only the current entity state in the hot tier. This prevents ES disk from growing unboundedly with historical aspect versions.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Config Example -->
+    <div class="fade-in mt-32">
+      <h4 class="mb-12">Stateful Ingestion Configuration (DataHub Recipe)</h4>
+      <div class="code-block">
+        <pre><span class="cmt"># datahub-iceberg-recipe.yml — PB-scale production settings</span>
+<span class="prop">source</span>:
+  <span class="prop">type</span>: <span class="str">iceberg</span>
+  <span class="prop">config</span>:
+    <span class="prop">catalog</span>:
+      <span class="prop">name</span>: <span class="str">prod_warehouse</span>
+      <span class="prop">type</span>: <span class="str">rest</span>
+      <span class="prop">uri</span>:  <span class="str">http://iceberg-rest-catalog:8181</span>
+    <span class="cmt">## Stateful ingestion — only emit changed tables</span>
+    <span class="prop">stateful_ingestion</span>:
+      <span class="prop">enabled</span>: <span class="kw">true</span>
+      <span class="prop">state_provider</span>:
+        <span class="prop">type</span>: <span class="str">datahub</span>
+      <span class="prop">remove_stale_metadata</span>: <span class="kw">true</span>
+    <span class="cmt">## Partition handling for 10M+ partition tables</span>
+    <span class="prop">include_table_stats</span>: <span class="kw">true</span>
+    <span class="prop">include_partition_stats</span>: <span class="kw">false</span>      <span class="cmt"># Disable per-partition values</span>
+    <span class="prop">max_partitions_for_statistics</span>: <span class="num">1000</span>  <span class="cmt"># Sample top-N only</span>
+    <span class="prop">include_snapshots</span>: <span class="kw">true</span>
+    <span class="prop">max_snapshot_history</span>: <span class="num">10</span>            <span class="cmt"># Last N snapshots only</span>
+    <span class="cmt">## Parallelism for large warehouses</span>
+    <span class="prop">table_parallelism</span>: <span class="num">32</span>
+    <span class="prop">schema_parallelism</span>: <span class="num">16</span>
+<span class="prop">sink</span>:
+  <span class="prop">type</span>: <span class="str">datahub-kafka</span>
+  <span class="prop">config</span>:
+    <span class="prop">connection</span>:
+      <span class="prop">bootstrap</span>: <span class="str">kafka-prod-1:9092,kafka-prod-2:9092,kafka-prod-3:9092</span>
+      <span class="prop">producer_config</span>:
+        <span class="prop">compression.type</span>: <span class="str">snappy</span>
+        <span class="prop">batch.size</span>: <span class="num">65536</span>
+        <span class="prop">linger.ms</span>: <span class="num">50</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SECURITY & GOVERNANCE ═══════════════════════════ -->
+<section id="security">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">06 · Security &amp; Governance</div>
+      <h2 class="mb-8">RBAC, ABAC, Ranger Integration &amp; PII Discovery</h2>
+      <p class="mb-32">At PB scale, security governance cannot be manual. The catalog must enforce policies automatically as new data arrives, and those policies must propagate to the query engines enforcing access at runtime.</p>
+    </div>
+
+    <!-- Security Matrix -->
+    <div class="sec-matrix mb-40 fade-in">
+      <div class="card" style="border-top:3px solid var(--blue);">
+        <h4 class="mb-12">DataHub Native RBAC / ABAC</h4>
+        <p style="font-size:15px;">DataHub implements a two-tier authorization model. <strong>Roles</strong> (Admin, Editor, Viewer) define coarse-grained capability sets. <strong>Policies</strong> provide fine-grained attribute-based control: rules like <em>"only members of the <code>pii-stewards</code> group can view datasets tagged <code>PII:HIGH</code>"</em> or <em>"domain owners can edit glossary terms on their domain's datasets"</em>. Policies are evaluated in real-time by GMS on every API request — no caching means policy changes take effect immediately.</p>
+        <ul class="feat-list check mt-12">
+          <li>Role-based templates + attribute-based policy overlay</li>
+          <li>Group membership sourced from LDAP/OIDC (SSO)</li>
+          <li>Resource-level policies: Dataset, Dashboard, DataFlow</li>
+          <li>Privilege-level: VIEW, EDIT, MANAGE, ADMIN per resource type</li>
+        </ul>
+      </div>
+
+      <div class="card" style="border-top:3px solid var(--orange);">
+        <h4 class="mb-12">Apache Ranger Integration</h4>
+        <p style="font-size:15px;">DataHub ships a <strong>Ranger Authoriser Plugin</strong> that externalises DataHub's authorization decisions to Apache Ranger. When configured, GMS calls the Ranger Policy Engine (via REST) for every metadata access check. This allows a single Ranger policy admin to control access to both <em>data</em> (HDFS, Hive, Iceberg tables via Ranger's Iceberg plugin) and <em>metadata</em> (DataHub catalog entries) from one place.</p>
+        <ul class="feat-list check mt-12">
+          <li>Ranger policy engine evaluates DataHub metadata access</li>
+          <li>Tag-based policies: classify in DataHub → Ranger enforces on data plane</li>
+          <li>Full audit trail in Ranger's Solr/Kafka audit sink</li>
+          <li>Enables unified ABAC across HDFS + Iceberg + DataHub</li>
+        </ul>
+      </div>
+
+      <div class="card" style="border-top:3px solid var(--purple);">
+        <h4 class="mb-12">PII Discovery &amp; Auto-Classification</h4>
+        <p style="font-size:15px;">DataHub's AI-powered classification engine scans column names and (optionally) data samples against a configurable dictionary of PII patterns. When a PII column is detected, the <strong>Actions Framework</strong> automatically: (1) applies the <code>Classified: PII</code> glossary term; (2) triggers a governance workflow requiring steward approval; (3) emits a Ranger sync event to apply data masking. Apache Atlas's classification approach — <code>PII</code>, <code>SENSITIVE</code>, <code>EXPIRES_ON</code> tags with lineage propagation — is arguably more mature for Hadoop-native environments.</p>
+        <ul class="feat-list check mt-12">
+          <li>Column-name pattern matching (regex configurable)</li>
+          <li>Optional data sampling for value-level classification</li>
+          <li>Automatic lineage propagation of PII tags to downstream tables</li>
+          <li>Ranger masking policy triggered on PII tag assignment</li>
+        </ul>
+      </div>
+
+      <div class="card" style="border-top:3px solid var(--green);">
+        <h4 class="mb-12">Apache Atlas — Classification-Driven Governance</h4>
+        <p style="font-size:15px;">Atlas's native classification system is deeply integrated with Ranger's Tag-Based Policy (TBP) engine. When Atlas classifies a Hive/Iceberg column as <code>PII</code>, Ranger's tag-sync daemon (TagSync) propagates that classification to Ranger's policy engine — which then enforces masking on all query engines (Hive, Spark, Trino) without any manual policy update. This <em>classify once, enforce everywhere</em> pattern is Atlas's strongest differentiator for regulatory compliance in Hadoop environments.</p>
+        <ul class="feat-list check mt-12">
+          <li>Pluggable authoriser: Simple / Ranger / None</li>
+          <li>Tag-Based Policy (TBP) propagation via TagSync</li>
+          <li>Classification inheritance through lineage graph</li>
+          <li>Data masking policies enforced at query engine level via Ranger</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Ranger Architecture -->
+    <div class="fade-in">
+      <h3 class="mb-20">How Ranger + DataHub Enforces Access on Iceberg Tables</h3>
+      <div class="flow-diagram">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;">
+          <div class="arch-box" style="background:var(--blue-lt);border-color:var(--blue-md);">
+            <div class="icon">🧊</div>
+            <div class="name">Iceberg Table</div>
+            <div class="tech">HDFS · warehouse/db/table</div>
+          </div>
+          <div style="font-size:20px;color:var(--text-muted);">→</div>
+          <div class="arch-box" style="background:var(--purple-lt);border-color:var(--purple-md);">
+            <div class="icon">🔖</div>
+            <div class="name">DataHub Catalog</div>
+            <div class="tech">PII Tag Applied</div>
+          </div>
+          <div style="font-size:20px;color:var(--text-muted);">→</div>
+          <div class="arch-box" style="background:var(--orange-lt);border-color:var(--orange-md);">
+            <div class="icon">🔄</div>
+            <div class="name">Ranger TagSync</div>
+            <div class="tech">Propagates PII Tag</div>
+          </div>
+          <div style="font-size:20px;color:var(--text-muted);">→</div>
+          <div class="arch-box" style="background:var(--orange-lt);border-color:var(--orange-md);">
+            <div class="icon">🛡️</div>
+            <div class="name">Ranger Policy Engine</div>
+            <div class="tech">Masking · Row Filter · Deny</div>
+          </div>
+          <div style="font-size:20px;color:var(--text-muted);">→</div>
+          <div class="arch-box" style="background:var(--green-lt);border-color:var(--green-md);">
+            <div class="icon">⚡</div>
+            <div class="name">Spark / Trino</div>
+            <div class="tech">Enforces Masking at Query</div>
+          </div>
+        </div>
+        <div class="highlight-box green mt-24">
+          <h4>End-to-End Policy Flow</h4>
+          <p>When a data steward classifies <code>transactions.credit_card_number</code> as <code>PII:HIGH</code> in DataHub, Ranger's TagSync daemon detects the tag change (via DataHub's Ranger plugin webhook), updates the Ranger policy store, and within seconds all Spark and Trino queries against that column return <code>XXXX-XXXX-XXXX-[last4]</code> without any per-engine policy change.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ INTEGRATION STRATEGY ═══════════════════════════ -->
+<section id="integration">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">07 · Integration Strategy</div>
+      <h2 class="mb-8">Ensuring Query Engines Always See the Latest Truth</h2>
+      <p class="mb-32">The catalog is only valuable if query engines — Spark, Trino, Apache Doris — use it as the authoritative source of schema, partition information, and access policies. This requires tight, bidirectional integration.</p>
+    </div>
+
+    <div class="grid-3 mb-40 fade-in">
+      <!-- Spark -->
+      <div class="card" style="border-top:3px solid var(--orange);">
+        <div class="card-header">
+          <div class="card-icon" style="background:var(--orange-lt);font-size:22px;">⚡</div>
+          <div>
+            <div class="card-title">Apache Spark</div>
+            <div class="card-sub">Primary Iceberg Write Engine</div>
+          </div>
+        </div>
+        <h4 class="mb-8">Catalog Integration</h4>
+        <p style="font-size:14.5px;">Configure Spark with the <strong>DataHub Iceberg REST Catalog</strong> as the Iceberg catalog implementation. Spark reads the current table metadata (schema, partition spec, snapshot) directly from DataHub's catalog service — ensuring every Spark session sees the authoritative current state, not a cached or stale Hive Metastore entry.</p>
+        <div class="code-block mt-12">
+          <pre><span class="cmt">-- spark-defaults.conf</span>
+<span class="prop">spark.sql.catalog.dh</span>=<span class="str">org.apache.iceberg.spark.SparkCatalog</span>
+<span class="prop">spark.sql.catalog.dh.type</span>=<span class="str">rest</span>
+<span class="prop">spark.sql.catalog.dh.uri</span>=<span class="str">http://datahub:8181/iceberg</span>
+<span class="prop">spark.sql.catalog.dh.warehouse</span>=<span class="str">hdfs:///warehouse</span></pre>
+        </div>
+        <ul class="feat-list check mt-16">
+          <li>OpenLineage Spark Listener → DataHub (near real-time lineage)</li>
+          <li>Iceberg REST Catalog ensures atomic schema reads</li>
+          <li>Ranger plugin enforces column masking at scan level</li>
+        </ul>
+      </div>
+
+      <!-- Trino -->
+      <div class="card" style="border-top:3px solid var(--blue);">
+        <div class="card-header">
+          <div class="card-icon" style="background:var(--blue-lt);font-size:22px;">🔵</div>
+          <div>
+            <div class="card-title">Trino</div>
+            <div class="card-sub">Interactive Query Engine</div>
+          </div>
+        </div>
+        <h4 class="mb-8">Catalog Integration</h4>
+        <p style="font-size:14.5px;">Trino's Iceberg connector supports the REST Catalog protocol natively. Pointing Trino at DataHub's Iceberg REST endpoint means every <code>SHOW SCHEMAS</code>, <code>DESCRIBE TABLE</code>, and query planning call reads the <em>current</em> Iceberg metadata from DataHub — not from a potentially-stale Hive Metastore. OpenLineage's Trino event listener pushes lineage after each query.</p>
+        <div class="code-block mt-12">
+          <pre><span class="cmt"># trino/etc/catalog/iceberg.properties</span>
+<span class="prop">connector.name</span>=<span class="str">iceberg</span>
+<span class="prop">iceberg.catalog.type</span>=<span class="str">rest</span>
+<span class="prop">iceberg.rest-catalog.uri</span>=<span class="str">http://datahub:8181/iceberg</span>
+<span class="prop">iceberg.rest-catalog.warehouse</span>=<span class="str">hdfs:///warehouse</span>
+<span class="prop">iceberg.rest-catalog.security</span>=<span class="str">OAUTH2</span></pre>
+        </div>
+        <ul class="feat-list check mt-16">
+          <li>REST Catalog protocol — no separate Hive Metastore dependency</li>
+          <li>Snapshot isolation: each query sees a consistent table snapshot</li>
+          <li>Column-level access control via Ranger + Trino system access control</li>
+        </ul>
+      </div>
+
+      <!-- Doris -->
+      <div class="card" style="border-top:3px solid var(--green);">
+        <div class="card-header">
+          <div class="card-icon" style="background:var(--green-lt);font-size:22px;">🟢</div>
+          <div>
+            <div class="card-title">Apache Doris</div>
+            <div class="card-sub">Real-Time Analytical Engine</div>
+          </div>
+        </div>
+        <h4 class="mb-8">Catalog Integration</h4>
+        <p style="font-size:14.5px;">Apache Doris (v2.x+) supports Iceberg external catalogs via its <strong>Multi-Catalog</strong> feature. Configured with the Iceberg REST Catalog URI, Doris reads partition metadata and snapshot info from DataHub's catalog service at query planning time. DataHub ingests Doris query logs via the <code>datahub-rest</code> lineage API to track read lineage from Doris analytical queries.</p>
+        <div class="code-block mt-12">
+          <pre><span class="cmt">-- Doris: Create Iceberg Catalog</span>
+<span class="kw">CREATE</span> CATALOG iceberg_dh
+<span class="kw">PROPERTIES</span> (
+  <span class="str">"type"</span> = <span class="str">"iceberg"</span>,
+  <span class="str">"iceberg.catalog.type"</span> = <span class="str">"rest"</span>,
+  <span class="str">"uri"</span> = <span class="str">"http://datahub:8181/iceberg"</span>,
+  <span class="str">"warehouse"</span> = <span class="str">"hdfs:///warehouse"</span>
+);</pre>
+        </div>
+        <ul class="feat-list check mt-16">
+          <li>Multi-Catalog reads Iceberg REST for fresh partition info</li>
+          <li>DataHub ingests Doris audit log for read lineage</li>
+          <li>Ranger integration via Doris's built-in Ranger plugin (v2.1+)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Truth Guarantee -->
+    <div class="fade-in">
+      <h3 class="mb-20">Guaranteeing Metadata Consistency — The "Single Source of Truth" Pattern</h3>
+      <div class="grid-2">
+        <div>
+          <p>The canonical pattern for guaranteeing that all query engines see the same current Iceberg table state is to route <em>all</em> catalog reads through DataHub's Iceberg REST Catalog service, rather than allowing each engine to maintain its own Hive Metastore connection.</p>
+
+          <div class="highlight-box blue mb-16">
+            <h4>Why REST Catalog Is the Key</h4>
+            <p>The <strong>Iceberg REST Catalog specification</strong> (introduced in Iceberg 0.14) defines a standard HTTP API for catalog operations. DataHub's implementation of this spec means any Iceberg-compatible engine can use DataHub as its catalog without engine-specific integration. This is the critical architectural shift — DataHub moves from a passive observer to an <strong>active participant</strong> in the Iceberg table lifecycle.</p>
+          </div>
+
+          <div class="highlight-box green">
+            <h4>Consistency at Commit Time</h4>
+            <p>When Spark commits an Iceberg snapshot through DataHub's REST Catalog, DataHub atomically updates its metadata store <em>and</em> makes the new snapshot visible to all catalog clients. There is no window where Trino could see an old schema while Spark has already committed a new one — the catalog is the single serialisation point.</p>
+          </div>
+        </div>
+        <div>
+          <h4 class="mb-12">Integration Checklist</h4>
+          <ul class="feat-list check" style="gap:12px;">
+            <li><strong>Remove direct HMS connections:</strong> All engines must read Iceberg metadata via DataHub REST Catalog, not direct Hive Metastore JDBC/Thrift — this eliminates the HMS/Iceberg metadata split-brain problem.</li>
+            <li><strong>Configure Iceberg catalog credential vending:</strong> DataHub's REST Catalog supports HDFS credential delegation tokens — Spark/Trino receive short-lived credentials for HDFS data access scoped to the specific tables they are querying.</li>
+            <li><strong>Enable OpenLineage on all engines:</strong> Spark, Trino, and Doris should all emit OpenLineage events to DataHub. This builds a complete cross-engine lineage graph — critical for PII propagation and impact analysis.</li>
+            <li><strong>Ranger access control synchronisation:</strong> Configure Ranger's Iceberg plugin to read policies from Ranger's policy store (which DataHub's Ranger plugin keeps updated). This ensures access decisions are enforced at the engine level, not just the catalog level.</li>
+            <li><strong>Schema evolution alerts:</strong> Use DataHub Actions to alert downstream consumers when an Iceberg schema evolution (column addition/rename/drop) is committed — before their next query fails due to an unexpected schema change.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ REFERENCES ═══════════════════════════ -->
+<section id="references">
+  <div class="page-wrap">
+    <div class="fade-in">
+      <div class="section-label">08 · References</div>
+      <h2 class="mb-32">Sources &amp; Further Reading</h2>
+    </div>
+
+    <div class="ref-list fade-in">
+      <div class="ref-item">
+        <div class="ref-num">[1]</div>
+        <div class="ref-text"><strong>DataHub 1.0 Released: Next-Gen Metadata &amp; AI Management</strong> — Acryl Data / DataHub Blog, February 2025. Covers the Iceberg REST Catalog beta, v1.6 full support, and roadmap. <a href="https://datahub.com/blog/datahub-1-0-is-here/" target="_blank">datahub.com/blog/datahub-1-0-is-here</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[2]</div>
+        <div class="ref-text"><strong>DataHub Ingestion Framework Architecture</strong> — Official DataHub documentation. Describes MCP/MAE pipeline, Kafka topics, GMS internals. <a href="https://docs.datahub.com/docs/architecture/metadata-ingestion" target="_blank">docs.datahub.com/docs/architecture/metadata-ingestion</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[3]</div>
+        <div class="ref-text"><strong>DataHub Iceberg Source Documentation</strong> — Official DataHub docs for the <code>iceberg</code> ingestion plugin, including catalog types, stateful ingestion, and partition handling. <a href="https://docs.datahub.com/docs/generated/ingestion/sources/iceberg" target="_blank">docs.datahub.com/docs/generated/ingestion/sources/iceberg</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[4]</div>
+        <div class="ref-text"><strong>DataHub Iceberg REST Catalog (Beta)</strong> — Documentation for DataHub acting as an Iceberg REST Catalog server. <a href="https://docs.datahub.com/docs/iceberg-catalog" target="_blank">docs.datahub.com/docs/iceberg-catalog</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[5]</div>
+        <div class="ref-text"><strong>Configuring Apache Ranger Authorization with DataHub</strong> — DataHub docs on the Ranger Authoriser plugin for externalising DataHub's access control to Ranger. <a href="https://docs.datahub.com/docs/how/configuring-authorization-with-apache-ranger" target="_blank">docs.datahub.com/docs/how/configuring-authorization-with-apache-ranger</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[6]</div>
+        <div class="ref-text"><strong>What Is Apache Atlas? Architecture, Features &amp; Alternatives (2026)</strong> — Atlan comprehensive guide covering Atlas's RBAC/ABAC, Ranger integration, JanusGraph scalability, and classification-driven governance. <a href="https://atlan.com/what-is-apache-atlas/" target="_blank">atlan.com/what-is-apache-atlas</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[7]</div>
+        <div class="ref-text"><strong>Apache Atlas Official Documentation</strong> — Classification system (PII, SENSITIVE, EXPIRES_ON), Ranger integration, tag propagation via lineage graph. <a href="https://atlas.apache.org/1.2.0/index.html" target="_blank">atlas.apache.org</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[8]</div>
+        <div class="ref-text"><strong>Amundsen vs DataHub: How to Choose (2026 Guide)</strong> — Atlan analysis documenting Amundsen's dormant state as of December 2025 and recommending DataHub for new deployments. <a href="https://atlan.com/amundsen-vs-datahub/" target="_blank">atlan.com/amundsen-vs-datahub</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[9]</div>
+        <div class="ref-text"><strong>Comprehensive Data Catalog Comparison (2025)</strong> — Onehouse analysis comparing Glue, DataHub, Unity, Polaris, and Gravitino across open table format support, connector breadth, and access control. <a href="https://www.onehouse.ai/blog/comprehensive-data-catalog-comparison" target="_blank">onehouse.ai/blog/comprehensive-data-catalog-comparison</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[10]</div>
+        <div class="ref-text"><strong>Open-Source Data Governance Frameworks: Strategic Analysis</strong> — TheDataGuy, August 2025. Compares OpenMetadata, DataHub, Apache Atlas, and Amundsen across governance, PII, and community dimensions. <a href="https://thedataguy.pro/blog/2025/08/open-source-data-governance-frameworks/" target="_blank">thedataguy.pro/blog</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[11]</div>
+        <div class="ref-text"><strong>Apache Ranger — RBAC vs ABAC</strong> — Privacera blog explaining Ranger's tag-based (TBAC), role-based (RBAC), and attribute-based (ABAC) policy models, and how Atlas classifications drive Ranger policies. <a href="https://privacera.com/blog/rbac-vs-abac-is-that-the-right-debate/" target="_blank">privacera.com/blog</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[12]</div>
+        <div class="ref-text"><strong>DataHub Data Governance Platform</strong> — DataHub Cloud product page documenting RBAC/ABAC policies, Actions Framework, PII workflow automation, and Ranger integration. <a href="https://datahub.com/products/data-governance/" target="_blank">datahub.com/products/data-governance</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[13]</div>
+        <div class="ref-text"><strong>Apache Iceberg Official Documentation</strong> — Iceberg REST Catalog specification, snapshot management, manifest lifecycle, and ExpireSnapshots API. <a href="https://iceberg.apache.org/docs/latest/" target="_blank">iceberg.apache.org/docs/latest</a></div>
+      </div>
+      <div class="ref-item">
+        <div class="ref-num">[14]</div>
+        <div class="ref-text"><strong>OpenLineage Specification</strong> — Standard metadata format for data lineage across Spark, Trino, Airflow. The interop layer between compute engines and DataHub. <a href="https://openlineage.io/" target="_blank">openlineage.io</a></div>
+      </div>
+    </div>
+
+    <div class="highlight-box blue mt-40 fade-in">
+      <h4>📌 Architecture Decision Record</h4>
+      <p><strong>Recommendation:</strong> Deploy DataHub v1.x (open-source) as the primary Data Catalog and Iceberg REST Catalog server. Integrate Apache Ranger as the enforcement plane via DataHub's Ranger Authoriser plugin and TagSync. Use OpenLineage listeners on all Spark and Trino clusters for near-real-time lineage. Implement stateful ingestion recipes with partition sampling and snapshot expiry for the metadata explosion problem. Evaluate Apache Polaris (incubating) in 12–18 months as a lightweight Iceberg-native metastore complement to DataHub's governance layer.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ FOOTER ═══════════════════════════ -->
+<footer>
+  <div class="page-wrap">
+    <p>Data Catalog Architecture Analysis · PB-Scale HDFS/Iceberg · Principal Data Architect Report · 2025</p>
+    <p style="margin-top:8px;">DataHub · Apache Atlas · Amundsen · Apache Iceberg · Apache Ranger · Spark · Trino · Apache Doris</p>
+  </div>
+</footer>
+
+<script>
+  // Scroll-based fade-in
+  const fades = document.querySelectorAll('.fade-in');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.07 });
+  fades.forEach(el => io.observe(el));
+
+  // Active nav highlighting
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-pills a');
+  const navObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`.nav-pills a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+  sections.forEach(s => navObs.observe(s));
+</script>
+</body>
+</html>

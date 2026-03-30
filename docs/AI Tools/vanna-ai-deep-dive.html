@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vanna AI — Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #1e2330;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --accent3: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --subtle: #374151;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 60px 60px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(0,212,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-label {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.2s forwards;
+  }
+
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(52px, 8vw, 100px);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    max-width: 900px;
+    opacity: 0;
+    animation: fadeUp 0.7s 0.35s forwards;
+  }
+
+  .hero h1 span {
+    color: var(--accent);
+    font-style: italic;
+    font-family: 'Instrument Serif', serif;
+  }
+
+  .hero-desc {
+    margin-top: 28px;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.8;
+    opacity: 0;
+    animation: fadeUp 0.7s 0.5s forwards;
+  }
+
+  .hero-tags {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 40px;
+    opacity: 0;
+    animation: fadeUp 0.7s 0.65s forwards;
+  }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  .tag.blue  { border-color: rgba(0,212,255,0.3); color: var(--accent); background: rgba(0,212,255,0.05); }
+  .tag.purple{ border-color: rgba(124,58,237,0.3); color: #a78bfa; background: rgba(124,58,237,0.05); }
+  .tag.green { border-color: rgba(34,197,94,0.3);  color: var(--accent3); background: rgba(34,197,94,0.05); }
+
+  .hero-scroll {
+    position: absolute;
+    bottom: 36px; left: 60px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--subtle);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 12px;
+    opacity: 0;
+    animation: fadeUp 0.7s 0.9s forwards;
+  }
+  .hero-scroll::before {
+    content: '';
+    width: 40px; height: 1px;
+    background: var(--subtle);
+  }
+
+  /* ── LAYOUT ── */
+  .wrapper {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── SECTION ── */
+  section {
+    padding: 100px 0;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 1;
+  }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-label::before {
+    content: '';
+    width: 20px; height: 1px;
+    background: var(--accent);
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 4vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    margin-bottom: 48px;
+    max-width: 700px;
+  }
+
+  /* ── HOW IT WORKS ── */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 60px;
+  }
+
+  .pipeline-step {
+    background: var(--surface);
+    padding: 36px 28px;
+    position: relative;
+    transition: background 0.3s;
+  }
+  .pipeline-step:hover { background: var(--surface2); }
+
+  .step-num {
+    font-size: 48px;
+    font-weight: 800;
+    font-family: 'Syne', sans-serif;
+    color: var(--border);
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+
+  .step-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .step-desc { color: var(--muted); font-size: 13px; }
+
+  .arrow-connector {
+    position: absolute;
+    right: -14px; top: 50%;
+    transform: translateY(-50%);
+    width: 28px; height: 28px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    font-size: 12px;
+    z-index: 2;
+  }
+
+  /* ── RAG VISUAL ── */
+  .rag-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 48px;
+    font-size: 13px;
+  }
+
+  .rag-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 36px;
+    text-align: center;
+  }
+
+  .rag-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .rag-node {
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    text-align: center;
+    min-width: 120px;
+    transition: all 0.3s;
+  }
+  .rag-node:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(0,212,255,0.1);
+  }
+
+  .rag-node .icon { font-size: 24px; margin-bottom: 8px; }
+  .rag-node .label {
+    font-size: 11px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .rag-node .sublabel { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  .rag-arrow {
+    color: var(--accent);
+    font-size: 18px;
+    padding: 0 8px;
+    opacity: 0.6;
+  }
+
+  /* ── USE CASES GRID ── */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+
+  .usecase-card {
+    background: var(--surface);
+    padding: 40px 32px;
+    transition: background 0.3s;
+    cursor: default;
+  }
+  .usecase-card:hover { background: var(--surface2); }
+
+  .usecase-icon {
+    font-size: 32px;
+    margin-bottom: 20px;
+    display: block;
+  }
+
+  .usecase-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  .usecase-desc { color: var(--muted); font-size: 13px; }
+
+  .usecase-examples {
+    margin-top: 16px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+
+  .example-query {
+    padding: 8px 12px;
+    background: rgba(0,212,255,0.04);
+    border-left: 2px solid rgba(0,212,255,0.3);
+    font-size: 12px;
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  /* ── PROS / CONS ── */
+  .proscons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+  }
+
+  .pros, .cons {
+    background: var(--surface);
+    padding: 48px 40px;
+  }
+
+  .proscons-header {
+    display: flex; align-items: center; gap: 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 32px;
+  }
+
+  .pros .proscons-header { color: var(--accent3); }
+  .cons .proscons-header { color: var(--danger); }
+
+  .pro-item, .con-item {
+    display: flex; gap: 14px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .pro-item:last-child, .con-item:last-child { border-bottom: none; }
+
+  .pro-dot {
+    width: 6px; height: 6px;
+    background: var(--accent3);
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  .con-dot {
+    width: 6px; height: 6px;
+    background: var(--danger);
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  .item-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .item-desc { color: var(--muted); font-size: 12px; }
+
+  /* ── OBSERVATIONS ── */
+  .obs-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .obs-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 36px 32px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .obs-card:hover { border-color: rgba(0,212,255,0.3); }
+
+  .obs-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 2px;
+  }
+  .obs-card.note::before    { background: var(--accent); }
+  .obs-card.warn::before    { background: var(--warn); }
+  .obs-card.insight::before { background: var(--accent2); }
+  .obs-card.tip::before     { background: var(--accent3); }
+
+  .obs-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+  }
+  .obs-card.note    .obs-badge { color: var(--accent);   background: rgba(0,212,255,0.08); }
+  .obs-card.warn    .obs-badge { color: var(--warn);     background: rgba(245,158,11,0.08); }
+  .obs-card.insight .obs-badge { color: #a78bfa;         background: rgba(124,58,237,0.08); }
+  .obs-card.tip     .obs-badge { color: var(--accent3);  background: rgba(34,197,94,0.08); }
+
+  .obs-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .obs-text { color: var(--muted); font-size: 13px; line-height: 1.7; }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 28px 32px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.8;
+    margin: 24px 0;
+    color: #c9d1d9;
+  }
+
+  .code-block .keyword { color: #ff7b72; }
+  .code-block .string  { color: #a5d6ff; }
+  .code-block .comment { color: #6e7681; font-style: italic; }
+  .code-block .func    { color: #d2a8ff; }
+  .code-block .var     { color: #ffa657; }
+
+  /* ── PRICING TABLE ── */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .price-card {
+    background: var(--surface);
+    padding: 40px 28px;
+    transition: background 0.3s;
+  }
+  .price-card:hover { background: var(--surface2); }
+  .price-card.featured { background: rgba(0,212,255,0.04); border-color: rgba(0,212,255,0.2); }
+
+  .plan-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .plan-name.highlight { color: var(--accent); }
+
+  .plan-price {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .plan-sub { font-size: 11px; color: var(--muted); margin-bottom: 24px; }
+
+  .plan-features { list-style: none; }
+  .plan-features li {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .plan-features li:last-child { border-bottom: none; }
+  .plan-features li::before {
+    content: '—';
+    color: var(--subtle);
+    flex-shrink: 0;
+  }
+
+  /* ── STACK TABLE ── */
+  .stack-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+  }
+
+  .stack-table th {
+    text-align: left;
+    padding: 14px 20px;
+    background: var(--surface2);
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stack-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  .stack-table tr:last-child td { border-bottom: none; }
+  .stack-table tr:hover td { background: var(--surface2); }
+
+  .chip {
+    display: inline-block;
+    padding: 3px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 11px;
+    color: var(--muted);
+    margin: 2px;
+  }
+
+  /* ── VERDICT ── */
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    padding: 60px;
+    margin-top: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .verdict::before {
+    content: '"';
+    position: absolute;
+    font-family: 'Instrument Serif', serif;
+    font-size: 300px;
+    line-height: 1;
+    color: rgba(0,212,255,0.04);
+    top: -40px; right: 40px;
+    pointer-events: none;
+  }
+
+  .verdict-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(20px, 3vw, 30px);
+    line-height: 1.5;
+    color: var(--text);
+    max-width: 800px;
+    margin-bottom: 32px;
+  }
+
+  .verdict-meta {
+    display: flex; gap: 40px; flex-wrap: wrap;
+  }
+
+  .verdict-stat {
+    display: flex; flex-direction: column;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 48px 60px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--subtle);
+    position: relative;
+    z-index: 1;
+  }
+
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 60px;
+    background: rgba(10,12,16,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-brand {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+
+  .nav-brand span { color: var(--accent); }
+
+  .nav-links {
+    display: flex; gap: 32px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s, transform 0.6s;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .wrapper, nav, footer { padding-left: 24px; padding-right: 24px; }
+    .hero { padding: 80px 24px 60px; }
+    .hero-scroll { left: 24px; }
+    .pipeline, .usecase-grid { grid-template-columns: 1fr 1fr; }
+    .proscons { grid-template-columns: 1fr; }
+    .obs-grid { grid-template-columns: 1fr; }
+    .pricing-grid { grid-template-columns: 1fr 1fr; }
+    .rag-flow { gap: 8px; }
+    .verdict { padding: 40px; }
+    nav { padding: 14px 24px; }
+    .nav-links { display: none; }
+  }
+
+  @media (max-width: 600px) {
+    .pipeline, .usecase-grid, .pricing-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">Vanna<span>.AI</span> — Deep Dive</div>
+  <ul class="nav-links">
+    <li><a href="#how">How it Works</a></li>
+    <li><a href="#usecases">Use Cases</a></li>
+    <li><a href="#proscons">Pros & Cons</a></li>
+    <li><a href="#observations">Observations</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">Research Prompt · Deep Dive Report · 2025</div>
+  <h1>Chat with your<br><span>Database.</span></h1>
+  <p class="hero-desc">
+    Vanna AI is an open-source, Python-based Text-to-SQL framework that uses Retrieval-Augmented Generation (RAG) + LLMs to let anyone query a database in plain English — no SQL expertise required.
+  </p>
+  <div class="hero-tags">
+    <span class="tag blue">Text-to-SQL</span>
+    <span class="tag blue">RAG Architecture</span>
+    <span class="tag purple">Open Source</span>
+    <span class="tag purple">Python SDK</span>
+    <span class="tag green">Self-Improving</span>
+    <span class="tag green">Production-Ready</span>
+    <span class="tag">PostgreSQL</span>
+    <span class="tag">Snowflake</span>
+    <span class="tag">BigQuery</span>
+    <span class="tag">MySQL</span>
+  </div>
+  <div class="hero-scroll">Scroll to explore</div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="wrapper">
+    <div class="section-label reveal">Architecture</div>
+    <h2 class="section-title reveal">How Vanna AI Works</h2>
+
+    <div class="pipeline reveal">
+      <div class="pipeline-step">
+        <div class="step-num">01</div>
+        <div class="step-title">Train on Schema</div>
+        <div class="step-desc">Feed Vanna your DDL statements, documentation, business terminology, and example SQL queries. This builds a vector store of "known patterns."</div>
+        <div class="arrow-connector">→</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">02</div>
+        <div class="step-title">Ask in English</div>
+        <div class="step-desc">User submits a natural-language question. Vanna embeds the question and searches the vector store for the 10 most semantically similar training examples.</div>
+        <div class="arrow-connector">→</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">03</div>
+        <div class="step-title">Generate SQL</div>
+        <div class="step-desc">Retrieved context + question are passed to an LLM (GPT-4, Claude, Gemini, Ollama, etc.). The LLM synthesizes correct SQL tailored to your schema.</div>
+        <div class="arrow-connector">→</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">04</div>
+        <div class="step-title">Execute & Learn</div>
+        <div class="step-desc">SQL runs against your DB. Results are shown as tables or charts. Successful pairs are saved back to Tool Memory — the model keeps improving.</div>
+      </div>
+    </div>
+
+    <!-- RAG Diagram -->
+    <div class="rag-diagram reveal">
+      <div class="rag-title">RAG Pipeline — Retrieval-Augmented Generation Flow</div>
+      <div class="rag-flow">
+        <div class="rag-node">
+          <div class="icon">💬</div>
+          <div class="label">User Question</div>
+          <div class="sublabel">Natural language</div>
+        </div>
+        <div class="rag-arrow">→</div>
+        <div class="rag-node">
+          <div class="icon">🔢</div>
+          <div class="label">Embedding</div>
+          <div class="sublabel">Vectorize query</div>
+        </div>
+        <div class="rag-arrow">→</div>
+        <div class="rag-node">
+          <div class="icon">🗄️</div>
+          <div class="label">Vector Store</div>
+          <div class="sublabel">ChromaDB / Qdrant</div>
+        </div>
+        <div class="rag-arrow">→</div>
+        <div class="rag-node">
+          <div class="icon">📋</div>
+          <div class="label">Retrieved Context</div>
+          <div class="sublabel">Top-10 similar SQL</div>
+        </div>
+        <div class="rag-arrow">→</div>
+        <div class="rag-node">
+          <div class="icon">🤖</div>
+          <div class="label">LLM</div>
+          <div class="sublabel">GPT-4 / Claude / Ollama</div>
+        </div>
+        <div class="rag-arrow">→</div>
+        <div class="rag-node">
+          <div class="icon">✅</div>
+          <div class="label">SQL Query</div>
+          <div class="sublabel">Executed on DB</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Training Code Example -->
+    <div class="section-label reveal" style="margin-top:60px;">Training Example</div>
+    <pre class="code-block reveal"><span class="keyword">import</span> vanna
+<span class="keyword">from</span> vanna.openai <span class="keyword">import</span> OpenAI_Chat
+<span class="keyword">from</span> vanna.chromadb <span class="keyword">import</span> ChromaDB_VectorStore
+
+<span class="comment"># 1. Initialize with your LLM + vector store</span>
+<span class="keyword">class</span> <span class="func">MyVanna</span>(ChromaDB_VectorStore, OpenAI_Chat):
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, config=<span class="var">None</span>):
+        ChromaDB_VectorStore.__init__(self, config=config)
+        OpenAI_Chat.__init__(self, config=config)
+
+vn = <span class="func">MyVanna</span>(config={<span class="string">'api_key'</span>: <span class="string">'sk-...'</span>, <span class="string">'model'</span>: <span class="string">'gpt-4'</span>})
+
+<span class="comment"># 2. Connect to your database</span>
+vn.<span class="func">connect_to_postgres</span>(host=<span class="string">'localhost'</span>, dbname=<span class="string">'mydb'</span>, ...)
+
+<span class="comment"># 3. Train on your schema (run once)</span>
+vn.<span class="func">train</span>(ddl=<span class="string">"CREATE TABLE orders (id INT, amount DECIMAL, user_id INT, ...)"</span>)
+vn.<span class="func">train</span>(documentation=<span class="string">"OTIF = % of orders delivered on time and in full"</span>)
+vn.<span class="func">train</span>(sql=<span class="string">"SELECT user_id, SUM(amount) FROM orders GROUP BY user_id"</span>)
+
+<span class="comment"># 4. Ask questions in plain English</span>
+sql = vn.<span class="func">generate_sql</span>(<span class="string">"What were our top 10 products by revenue last month?"</span>)
+df  = vn.<span class="func">run_sql</span>(sql)
+fig = vn.<span class="func">get_plotly_figure</span>(df=df, question=...)</pre>
+
+    <!-- Tech Stack Table -->
+    <div class="section-label reveal" style="margin-top:60px;">Integration Compatibility</div>
+    <table class="stack-table reveal">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Supported Options</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>LLMs</strong></td>
+          <td>
+            <span class="chip">GPT-4o</span><span class="chip">Claude</span><span class="chip">Gemini</span>
+            <span class="chip">Ollama</span><span class="chip">LLaMA</span><span class="chip">Mistral</span>
+          </td>
+          <td style="color:var(--muted)">Any OpenAI-compatible API or local model</td>
+        </tr>
+        <tr>
+          <td><strong>Vector Stores</strong></td>
+          <td>
+            <span class="chip">ChromaDB</span><span class="chip">Qdrant</span><span class="chip">Pinecone</span>
+            <span class="chip">Weaviate</span><span class="chip">PgVector</span>
+          </td>
+          <td style="color:var(--muted)">Bring your own or use hosted Vanna metadata</td>
+        </tr>
+        <tr>
+          <td><strong>Databases</strong></td>
+          <td>
+            <span class="chip">PostgreSQL</span><span class="chip">MySQL</span><span class="chip">Snowflake</span>
+            <span class="chip">BigQuery</span><span class="chip">SQLite</span><span class="chip">DuckDB</span>
+            <span class="chip">Redshift</span><span class="chip">MSSQL</span>
+          </td>
+          <td style="color:var(--muted)">Any SQL-speaking DB via connectors</td>
+        </tr>
+        <tr>
+          <td><strong>Frontends</strong></td>
+          <td>
+            <span class="chip">Jupyter</span><span class="chip">Streamlit</span><span class="chip">Flask</span>
+            <span class="chip">FastAPI</span><span class="chip">Slack Bot</span><span class="chip">React</span>
+          </td>
+          <td style="color:var(--muted)">&lt;vanna-chat&gt; web component available</td>
+        </tr>
+        <tr>
+          <td><strong>Auth / Security</strong></td>
+          <td>
+            <span class="chip">JWT</span><span class="chip">OAuth</span><span class="chip">Row-Level Security</span>
+            <span class="chip">SOC 2</span>
+          </td>
+          <td style="color:var(--muted)">Vanna 2.0: user-scoped execution built-in</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section id="usecases">
+  <div class="wrapper">
+    <div class="section-label reveal">Applications</div>
+    <h2 class="section-title reveal">Real-World Use Cases</h2>
+
+    <div class="usecase-grid reveal">
+      <div class="usecase-card">
+        <span class="usecase-icon">📊</span>
+        <div class="usecase-title">Business Intelligence</div>
+        <div class="usecase-desc">Replace waiting for analyst tickets. Non-technical stakeholders query data directly from BI dashboards using chat.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"What's our MoM revenue growth this quarter?"</div>
+          <div class="example-query">"Compare conversion rates by traffic source"</div>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🛒</span>
+        <div class="usecase-title">E-Commerce Analytics</div>
+        <div class="usecase-desc">Ops and marketing teams self-serve product, inventory, and campaign performance data without writing SQL.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"Top 10 products by sales last month?"</div>
+          <div class="example-query">"Which SKUs have low stock and high demand?"</div>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🏥</span>
+        <div class="usecase-title">Healthcare & Compliance</div>
+        <div class="usecase-desc">Query patient or operational data with full audit trails. Row-level security ensures users only see authorized data.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"Admissions by department this week?"</div>
+          <div class="example-query">"Show overdue follow-ups in region X"</div>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🚀</span>
+        <div class="usecase-title">Startup / Founder Use</div>
+        <div class="usecase-desc">Solo founders and small teams get fast, self-serve access to core business metrics without hiring a data team.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"Active users last 30 days?"</div>
+          <div class="example-query">"Churn rate this month vs last month"</div>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">⚙️</span>
+        <div class="usecase-title">Developer Productivity</div>
+        <div class="usecase-desc">Accelerate SQL development cycles. Quickly prototype complex queries, then refine — ideal for data engineers and backend devs.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"Generate a query for cohort retention analysis"</div>
+          <div class="example-query">"Find all orders with NULL shipping address"</div>
+        </div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-icon">🏢</span>
+        <div class="usecase-title">Enterprise Internal Tools</div>
+        <div class="usecase-desc">Embed Vanna as an internal data assistant — deployed on your own infrastructure, with your own auth and security policies.</div>
+        <div class="usecase-examples">
+          <div class="example-query">"OTIF score by supplier last quarter?"</div>
+          <div class="example-query">"Headcount breakdown by cost center"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROS / CONS -->
+<section id="proscons">
+  <div class="wrapper">
+    <div class="section-label reveal">Evaluation</div>
+    <h2 class="section-title reveal">Pros & Cons</h2>
+
+    <div class="proscons reveal">
+      <div class="pros">
+        <div class="proscons-header">✓ Strengths</div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Open-Source & Self-Hostable</div>
+            <div class="item-desc">Full code is on GitHub. Run it entirely on your own infra — no vendor lock-in, full data sovereignty. Ideal for regulated industries.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">LLM-Agnostic</div>
+            <div class="item-desc">Plug in GPT-4, Claude, Gemini, or a locally-hosted Ollama model. You're not tied to any one AI provider or cost structure.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Self-Improving via Tool Memory</div>
+            <div class="item-desc">Every successful query pair gets saved. The model learns your schema idioms over time — accuracy compounds with usage.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Data Privacy by Design</div>
+            <div class="item-desc">Actual DB contents are never sent to the LLM. Only schema, docs, and query patterns leave your environment — a critical enterprise differentiator.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Rich Production UI</div>
+            <div class="item-desc">Vanna 2.0 ships a &lt;vanna-chat&gt; web component with streaming tables, charts, CSV export, dark/light themes, and mobile support out of the box.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Enterprise Security Built-In</div>
+            <div class="item-desc">User-scoped execution, row-level security, audit logs, rate limiting, and quota management are first-class features in v2 — not afterthoughts.</div>
+          </div>
+        </div>
+        <div class="pro-item">
+          <div class="pro-dot"></div>
+          <div>
+            <div class="item-title">Wide Database Compatibility</div>
+            <div class="item-desc">Native connectors for PostgreSQL, MySQL, Snowflake, BigQuery, SQLite, DuckDB, Redshift, and more. Custom connectors possible for anything else.</div>
+          </div>
+        </div>
+      </div>
+      <div class="cons">
+        <div class="proscons-header">✗ Weaknesses</div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">Quality Depends on Training Data</div>
+            <div class="item-desc">Accuracy is only as good as the DDL, docs, and SQL pairs you've provided. Sparse training = poor or hallucinated queries on edge cases.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">Steep Initial Setup for Self-Hosting</div>
+            <div class="item-desc">Configuring vector stores, choosing LLMs, writing training data, and securing the stack requires meaningful engineering time — not plug-and-play.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">Struggles with Very Complex SQL</div>
+            <div class="item-desc">Multi-step CTEs, recursive queries, or deeply nested joins may not generate accurately — especially without closely-matched training examples.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">Free Tier Rate Limits</div>
+            <div class="item-desc">The hosted free plan is capped. Teams with meaningful query volumes will need to self-host or pay — the $0.53/query hosted pricing can add up.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">No GUI for Training Data Management</div>
+            <div class="item-desc">Adding, reviewing, or removing training data is code-first. Non-technical admins can't easily curate the knowledge base without developer help.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">SQL Transparency Required</div>
+            <div class="item-desc">Generated SQL is shown to users — which is good for trust, but means non-technical users may be confused or intimidated by query output.</div>
+          </div>
+        </div>
+        <div class="con-item">
+          <div class="con-dot"></div>
+          <div>
+            <div class="item-title">Hallucination Risk on Unfamiliar Schemas</div>
+            <div class="item-desc">Without sufficient schema context, the LLM may invent table or column names. Always validate SQL before exposing results to production users.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OBSERVATIONS -->
+<section id="observations">
+  <div class="wrapper">
+    <div class="section-label reveal">Field Notes</div>
+    <h2 class="section-title reveal">What You'll Notice in Practice</h2>
+
+    <div class="obs-grid">
+      <div class="obs-card note reveal">
+        <div class="obs-badge">⚡ Behavior</div>
+        <div class="obs-title">The "Cold Start" Problem is Real</div>
+        <div class="obs-text">
+          Out of the box, Vanna with just a DDL schema produces mediocre results. The first 50–100 question/SQL training pairs make the biggest accuracy jump. Think of it like onboarding a new analyst: it's an investment, not instant magic.
+        </div>
+      </div>
+
+      <div class="obs-card warn reveal">
+        <div class="obs-badge">⚠️ Watch Out</div>
+        <div class="obs-title">Ambiguous Business Terms = Wrong SQL</div>
+        <div class="obs-text">
+          "Revenue" means different things across teams. If you don't define it in <code style="color:var(--accent)">vn.train(documentation=...)</code>, the model will guess — and guess differently each time. Invest in a business glossary as training data.
+        </div>
+      </div>
+
+      <div class="obs-card insight reveal">
+        <div class="obs-badge">💡 Insight</div>
+        <div class="obs-title">RAG Beats Fine-Tuning for SQL</div>
+        <div class="obs-text">
+          The retrieval-first approach means Vanna can adapt to schema changes without retraining — just add new DDL. This is a key advantage over fine-tuned models where schema drift requires expensive re-runs.
+        </div>
+      </div>
+
+      <div class="obs-card tip reveal">
+        <div class="obs-badge">✅ Best Practice</div>
+        <div class="obs-title">Train with "Negative" Examples Too</div>
+        <div class="obs-text">
+          Beyond correct SQL, document common misinterpretations. Adding documentation like "do NOT include test users (role='test') in user counts" dramatically reduces the most frustrating recurring mistakes.
+        </div>
+      </div>
+
+      <div class="obs-card warn reveal">
+        <div class="obs-badge">⚠️ Watch Out</div>
+        <div class="obs-title">LLM Choice Has a Major Impact</div>
+        <div class="obs-text">
+          GPT-4o and Claude consistently outperform GPT-3.5 for complex schema understanding. For local deployment, Mistral 7B handles simple queries well, but struggles with JOINs across 5+ tables. Budget accordingly.
+        </div>
+      </div>
+
+      <div class="obs-card note reveal">
+        <div class="obs-badge">⚡ Behavior</div>
+        <div class="obs-title">Every Query Exports a CSV</div>
+        <div class="obs-text">
+          One underrated UX feature: every query result automatically generates a downloadable CSV. Business users who don't understand the SQL still get tangible, exportable output they can use in Excel — reducing friction significantly.
+        </div>
+      </div>
+
+      <div class="obs-card insight reveal">
+        <div class="obs-badge">💡 Insight</div>
+        <div class="obs-title">Vanna 2.0 Is a Framework Shift</div>
+        <div class="obs-text">
+          The jump from v1 to Vanna 2.0 wasn't just features — it's an architectural rewrite. V2 is now an agent framework with Tool Memory, lifecycle hooks, and multi-user security. It's production-grade in ways v1 never was.
+        </div>
+      </div>
+
+      <div class="obs-card tip reveal">
+        <div class="obs-badge">✅ Best Practice</div>
+        <div class="obs-title">Start in Jupyter, Ship with FastAPI</div>
+        <div class="obs-text">
+          The recommended workflow: prototype in a Jupyter notebook (tight feedback loop for training and testing), then graduate to a FastAPI/Streamlit app with the <code style="color:var(--accent)">&lt;vanna-chat&gt;</code> web component for business users.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VERDICT -->
+<section style="border-bottom:none;">
+  <div class="wrapper">
+    <div class="section-label reveal">Final Verdict</div>
+
+    <div class="verdict reveal">
+      <p class="verdict-text">
+        Vanna AI is one of the most compelling Text-to-SQL solutions in production today — not because it's magic, but because it's honest about being a <em>learnable system</em>. The RAG architecture means it improves with investment, security is taken seriously from day one, and the open-source model means you're never locked in. The real tradeoff: it rewards teams willing to invest in training data, and punishes those who don't.
+      </p>
+      <div class="verdict-meta">
+        <div class="verdict-stat">
+          <div class="stat-value">★ 4.5</div>
+          <div class="stat-label">Overall Rating</div>
+        </div>
+        <div class="verdict-stat">
+          <div class="stat-value">12k+</div>
+          <div class="stat-label">GitHub Stars</div>
+        </div>
+        <div class="verdict-stat">
+          <div class="stat-value">Any LLM</div>
+          <div class="stat-label">Model Support</div>
+        </div>
+        <div class="verdict-stat">
+          <div class="stat-value">v2.0</div>
+          <div class="stat-label">Current Version</div>
+        </div>
+        <div class="verdict-stat">
+          <div class="stat-value">Free Tier</div>
+          <div class="stat-label">Entry Point</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>Deep Dive Report — Vanna AI · Generated March 2025</div>
+  <div>
+    <a href="https://vanna.ai" target="_blank">vanna.ai</a> ·
+    <a href="https://github.com/vanna-ai/vanna" target="_blank">GitHub</a> ·
+    <a href="https://vanna.ai/docs" target="_blank">Docs</a>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        // stagger children if needed
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+  reveals.forEach((el, i) => {
+    el.style.transitionDelay = `${(i % 4) * 0.06}s`;
+    io.observe(el);
+  });
+</script>
+</body>
+</html>

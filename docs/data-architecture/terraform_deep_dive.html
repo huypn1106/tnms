@@ -1,0 +1,1903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Terraform Deep Dive — Principal DevOps Architect's Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ── CSS Variables ── */
+  :root {
+    --bg:          #f4f7fb;
+    --bg-alt:      #eef2f8;
+    --surface:     #ffffff;
+    --border:      #dde4f0;
+    --text-primary:#1a2236;
+    --text-body:   #374151;
+    --text-muted:  #6b7a99;
+
+    --blue:        #3b82f6;
+    --blue-light:  #eff6ff;
+    --blue-mid:    #bfdbfe;
+    --orange:      #f97316;
+    --orange-light:#fff7ed;
+    --orange-mid:  #fed7aa;
+    --purple:      #8b5cf6;
+    --purple-light:#f5f3ff;
+    --purple-mid:  #ddd6fe;
+    --green:       #10b981;
+    --green-light: #ecfdf5;
+    --green-mid:   #a7f3d0;
+    --red:         #ef4444;
+    --red-light:   #fef2f2;
+
+    --shadow-sm:   0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:   0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+    --shadow-lg:   0 12px 40px rgba(0,0,0,.10), 0 4px 12px rgba(0,0,0,.06);
+    --radius:      14px;
+    --radius-sm:   8px;
+    --radius-lg:   20px;
+  }
+
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 17px;
+    line-height: 1.75;
+    color: var(--text-body);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Header / Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1a2236 0%, #1e3a5f 50%, #1a2236 100%);
+    color: #fff;
+    padding: 80px 24px 72px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(59,130,246,.25); border: 1px solid rgba(59,130,246,.4);
+    border-radius: 999px; padding: 6px 18px; font-size: 13px; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase; color: #93c5fd;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 800; line-height: 1.15;
+    color: #fff; margin-bottom: 20px;
+    letter-spacing: -.02em;
+  }
+  .hero h1 span { color: #60a5fa; }
+  .hero p {
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    color: #94a3b8; max-width: 680px; margin: 0 auto 36px;
+  }
+  .hero-meta {
+    display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;
+    font-size: 14px; color: #64748b;
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .hero-meta strong { color: #94a3b8; }
+
+  /* ── Sticky Nav ── */
+  .sticky-nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+  .sticky-nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; gap: 4px; overflow-x: auto;
+    scrollbar-width: none; padding: 0;
+  }
+  .sticky-nav-inner::-webkit-scrollbar { display: none; }
+  .nav-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 14px 16px; font-size: 13.5px; font-weight: 600;
+    color: var(--text-muted); white-space: nowrap; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .2s, border-color .2s;
+  }
+  .nav-item:hover { color: var(--blue); border-color: var(--blue-mid); }
+  .nav-item.active { color: var(--blue); border-color: var(--blue); }
+  .nav-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor; opacity: .7;
+  }
+
+  /* ── Sections ── */
+  .section { padding: 72px 0; }
+  .section + .section { border-top: 1px solid var(--border); }
+  .section-header { margin-bottom: 48px; }
+  .part-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 5px 14px; border-radius: 999px;
+    margin-bottom: 14px;
+  }
+  .part-badge.blue   { background: var(--blue-light);   color: var(--blue);   border: 1px solid var(--blue-mid); }
+  .part-badge.orange { background: var(--orange-light); color: var(--orange); border: 1px solid var(--orange-mid); }
+  .part-badge.purple { background: var(--purple-light); color: var(--purple); border: 1px solid var(--purple-mid); }
+  .part-badge.green  { background: var(--green-light);  color: var(--green);  border: 1px solid var(--green-mid); }
+  .part-badge.red    { background: var(--red-light);    color: var(--red);    border: 1px solid #fecaca; }
+
+  .section-header h2 {
+    font-family: 'Sora', sans-serif;
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    font-weight: 800; color: var(--text-primary); letter-spacing: -.02em;
+    line-height: 1.2; margin-bottom: 12px;
+  }
+  .section-header p {
+    font-size: 16px; color: var(--text-muted);
+    max-width: 680px; line-height: 1.7;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .25s, transform .25s;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+  .card h3 {
+    font-family: 'Sora', sans-serif;
+    font-size: 1.15rem; font-weight: 700;
+    color: var(--text-primary); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card h4 {
+    font-size: 15px; font-weight: 700; color: var(--text-primary);
+    margin: 20px 0 8px;
+  }
+  .card p, .card li { font-size: 15.5px; line-height: 1.75; color: var(--text-body); }
+  .card ul, .card ol { padding-left: 20px; }
+  .card li { margin-bottom: 6px; }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+
+  /* ── Icon Badge ── */
+  .icon-badge {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .icon-badge.blue   { background: var(--blue-light);   }
+  .icon-badge.orange { background: var(--orange-light); }
+  .icon-badge.purple { background: var(--purple-light); }
+  .icon-badge.green  { background: var(--green-light);  }
+  .icon-badge.red    { background: var(--red-light);    }
+
+  /* ── Code Blocks ── */
+  .code-wrap {
+    background: #0f172a;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    margin: 20px 0;
+  }
+  .code-header {
+    background: #1e293b;
+    padding: 10px 18px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #334155;
+  }
+  .code-filename {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: #94a3b8; font-weight: 500;
+  }
+  .code-lang {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; padding: 3px 10px; border-radius: 999px;
+  }
+  .code-lang.hcl    { background: #1d4ed820; color: #60a5fa; border: 1px solid #1d4ed840; }
+  .code-lang.bash   { background: #d97706 20; color: #fcd34d; border: 1px solid #d9770640; }
+  .code-lang.yaml   { background: #7c3aed20; color: #c4b5fd; border: 1px solid #7c3aed40; }
+  .code-lang.text   { background: #0f766e20; color: #5eead4; border: 1px solid #0f766e40; }
+  pre {
+    margin: 0; padding: 24px 20px; overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px; line-height: 1.7; color: #e2e8f0;
+  }
+  /* syntax colors */
+  .k  { color: #c084fc; }   /* keyword / resource type */
+  .s  { color: #86efac; }   /* string */
+  .n  { color: #60a5fa; }   /* name / identifier */
+  .c  { color: #475569; font-style: italic; } /* comment */
+  .v  { color: #fb923c; }   /* value / number */
+  .f  { color: #fde68a; }   /* function */
+  .t  { color: #f472b6; }   /* type */
+  .o  { color: #94a3b8; }   /* operator / punctuation */
+
+  /* ── Timeline ── */
+  .timeline { position: relative; padding-left: 32px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 10px; top: 6px; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline-item { position: relative; margin-bottom: 28px; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -26px; top: 8px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--blue); border: 3px solid var(--surface);
+    box-shadow: 0 0 0 2px var(--blue-mid);
+  }
+  .timeline-item h4 { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+  .timeline-item p  { font-size: 15px; color: var(--text-body); }
+
+  /* ── Callout ── */
+  .callout {
+    border-radius: var(--radius-sm); padding: 16px 20px;
+    margin: 16px 0; display: flex; gap: 14px; align-items: flex-start;
+    font-size: 15px;
+  }
+  .callout.info   { background: var(--blue-light);   border-left: 4px solid var(--blue);   }
+  .callout.warn   { background: var(--orange-light); border-left: 4px solid var(--orange); }
+  .callout.tip    { background: var(--green-light);  border-left: 4px solid var(--green);  }
+  .callout.danger { background: var(--red-light);    border-left: 4px solid var(--red);    }
+  .callout-icon   { font-size: 20px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+  .callout strong { display: block; margin-bottom: 4px; color: var(--text-primary); }
+
+  /* ── Comparison Table ── */
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .compare-table th {
+    background: var(--bg-alt); padding: 12px 16px; text-align: left;
+    font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--border);
+    font-size: 13.5px;
+  }
+  .compare-table td {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.6;
+  }
+  .compare-table tr:hover td { background: var(--bg); }
+  .compare-table .yes { color: var(--green); font-weight: 700; }
+  .compare-table .no  { color: var(--red);   font-weight: 700; }
+  .compare-table .partial { color: var(--orange); font-weight: 700; }
+
+  /* ── Step Indicator ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 20px; padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: #fff;
+  }
+  .step-num.blue   { background: var(--blue); }
+  .step-num.orange { background: var(--orange); }
+  .step-num.purple { background: var(--purple); }
+  .step-num.green  { background: var(--green); }
+  .step h4 { font-size: 15.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+  .step p  { font-size: 15px; color: var(--text-body); line-height: 1.65; }
+
+  /* ── Pill Tags ── */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .pill {
+    padding: 4px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  }
+  .pill.blue   { background: var(--blue-light);   color: var(--blue);   border: 1px solid var(--blue-mid); }
+  .pill.orange { background: var(--orange-light); color: var(--orange); border: 1px solid var(--orange-mid); }
+  .pill.purple { background: var(--purple-light); color: var(--purple); border: 1px solid var(--purple-mid); }
+  .pill.green  { background: var(--green-light);  color: var(--green);  border: 1px solid var(--green-mid); }
+  .pill.red    { background: var(--red-light);    color: var(--red);    border: 1px solid #fecaca; }
+
+  /* ── Diagram ── */
+  .diagram {
+    background: #0f172a; border-radius: var(--radius);
+    padding: 32px 24px; margin: 24px 0;
+    box-shadow: var(--shadow-md); overflow-x: auto;
+  }
+  .diagram svg { display: block; margin: 0 auto; }
+
+  /* ── Reference Card ── */
+  .ref-list { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .ref-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 14px; transition: box-shadow .2s;
+  }
+  .ref-item:hover { box-shadow: var(--shadow-sm); }
+  .ref-num {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--blue-light);
+    color: var(--blue); font-weight: 800; font-size: 12px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .ref-item a { color: var(--blue); font-weight: 500; }
+  .ref-item span { color: var(--text-muted); font-size: 13px; }
+
+  /* ── Footer ── */
+  footer {
+    background: #1a2236; color: #64748b;
+    padding: 40px 24px; text-align: center; font-size: 14px;
+  }
+  footer strong { color: #94a3b8; }
+
+  /* ── Scroll Progress ── */
+  #progress-bar {
+    position: fixed; top: 0; left: 0; height: 3px; z-index: 200;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    width: 0%; transition: width .1s;
+  }
+
+  /* ── Back-to-top ── */
+  #back-top {
+    position: fixed; bottom: 28px; right: 28px; z-index: 150;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--blue); color: #fff; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-md); opacity: 0; transition: opacity .3s, transform .3s;
+    font-size: 18px;
+  }
+  #back-top.visible { opacity: 1; transform: translateY(0); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .hero { padding: 60px 20px 52px; }
+    .section { padding: 52px 0; }
+    .card { padding: 20px; }
+    pre { font-size: 12.5px; padding: 18px 14px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .hero-meta { gap: 16px; }
+    .step { gap: 14px; }
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeIn { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: none; } }
+  .fade-in { animation: fadeIn .5s ease both; }
+  .delay-1 { animation-delay: .1s; }
+  .delay-2 { animation-delay: .2s; }
+  .delay-3 { animation-delay: .3s; }
+
+  /* ── Inline code ── */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px; background: var(--bg-alt);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 7px; color: var(--purple);
+  }
+
+  /* ── highlight text ── */
+  .hl-blue   { color: var(--blue);   font-weight: 600; }
+  .hl-orange { color: var(--orange); font-weight: 600; }
+  .hl-purple { color: var(--purple); font-weight: 600; }
+  .hl-green  { color: var(--green);  font-weight: 600; }
+
+  .separator { height: 1px; background: var(--border); margin: 36px 0; }
+  .mt-24 { margin-top: 24px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+</style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div id="progress-bar"></div>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-badge">🔬 Principal DevOps Architect & Infrastructure Historian</div>
+  <h1>The Complete <span>Terraform</span><br/>Deep Dive</h1>
+  <p>From the pre-2014 infrastructure chaos to advanced GitOps pipelines — a comprehensive technical reference for engineers who want to truly understand Terraform.</p>
+  <div class="hero-meta">
+    <span><strong>5 Parts</strong> · Full Coverage</span>
+    <span><strong>Core Architecture</strong> · Internals</span>
+    <span><strong>Real-World</strong> · Patterns & Code</span>
+    <span><strong>References</strong> · Cited Sources</span>
+  </div>
+</header>
+
+<!-- Sticky Nav -->
+<nav class="sticky-nav">
+  <div class="sticky-nav-inner">
+    <a class="nav-item active" href="#part1"><span class="nav-dot" style="color:var(--blue)"></span> Origins</a>
+    <a class="nav-item" href="#part2"><span class="nav-dot" style="color:var(--orange)"></span> Architecture</a>
+    <a class="nav-item" href="#part3"><span class="nav-dot" style="color:var(--purple)"></span> Advanced</a>
+    <a class="nav-item" href="#part4"><span class="nav-dot" style="color:var(--green)"></span> Real-World</a>
+    <a class="nav-item" href="#part5"><span class="nav-dot" style="color:var(--red)"></span> Troubleshooting</a>
+    <a class="nav-item" href="#refs"><span class="nav-dot" style="color:var(--text-muted)"></span> References</a>
+  </div>
+</nav>
+
+<!-- ──────────────────────────────────────────
+     PART 1 · ORIGINS & THE "WHY"
+────────────────────────────────────────── -->
+<section class="section" id="part1">
+<div class="container">
+  <div class="section-header fade-in">
+    <span class="part-badge blue">Part 1 · Origins &amp; The "Why"</span>
+    <h2>Before Terraform: The Pre-2014 Infrastructure Crisis</h2>
+    <p>To understand why Terraform was built, we must first understand the pain it was designed to eliminate — a chaotic era of manual clicking, brittle scripts, and zero reproducibility.</p>
+  </div>
+
+  <!-- The Problem -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin-bottom:20px;">🔥 The Problem: Manual Provisioning & Imperative Scripting</h3>
+  <div class="grid-2 mb-24">
+    <div class="card">
+      <h3><span class="icon-badge blue">🖱️</span> Manual Provisioning (ClickOps)</h3>
+      <p>Engineers would log into the AWS Console, Azure Portal, or physical data-center tools and click through wizards to create servers, networks, and databases. This approach had catastrophic failures at scale:</p>
+      <ul>
+        <li><strong>No reproducibility:</strong> "Works on my region" — no one could recreate the same environment twice. Staging drifted from prod within weeks.</li>
+        <li><strong>Zero audit trail:</strong> Who opened port 22 to 0.0.0.0/0 in production? The console didn't tell you.</li>
+        <li><strong>Human error at scale:</strong> One misclick in a production firewall could trigger a three-hour outage. In 2013, a misconfigured security group at a major US exchange caused a 45-minute trading halt.</li>
+        <li><strong>No version control:</strong> Infrastructure had no Git history, no rollback, no peer review. You couldn't <code>git revert</code> a broken datacenter.</li>
+        <li><strong>Knowledge silos:</strong> Only "the guy who built it" knew how it worked. When he left, the company lost institutional memory entirely.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="icon-badge orange">📜</span> Imperative Scripting (Bash / Python / PowerShell)</h3>
+      <p>The natural evolution was automation scripts. Teams wrote Bash wrappers around AWS CLI commands or Python using boto2. These solved reproducibility but introduced a new class of failures:</p>
+      <ul>
+        <li><strong>Idempotency failures:</strong> <code>aws ec2 create-vpc</code> would succeed the first time and crash the second with "VPC already exists." Scripts had to manually check current state before every action — a logic nightmare.</li>
+        <li><strong>State blindness:</strong> Scripts had no memory. They didn't know what existed in the cloud. Every run was a guess.</li>
+        <li><strong>Order dependency:</strong> Creating a subnet before the VPC exists causes an error. Engineers had to manually encode the correct order of 50+ API calls.</li>
+        <li><strong>Error handling hell:</strong> A half-run script that crashed after creating 3 of 10 resources left the environment in an unknown partial state — the worst possible scenario.</li>
+        <li><strong>No parallelism:</strong> Scripts ran sequentially. Deploying 20 independent S3 buckets took 20× as long as deploying 1.</li>
+        <li><strong>Provider lock-in:</strong> An AWS Bash script was 100% AWS-specific. A multi-cloud strategy meant maintaining separate toolchains.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="callout-icon">💡</span>
+    <div><strong>The Historical Turning Point (2011–2014)</strong>
+    Netflix's "Chaos Monkey" era revealed that the industry needed infrastructure as code with real state awareness. CloudFormation (2011) was AWS's first attempt, but it was JSON-only, AWS-specific, and had no concept of cross-provider orchestration. Google Deployment Manager and Azure ARM Templates followed — all cloud-siloed. The market needed a <em>provider-agnostic</em>, open-source solution. HashiCorp delivered Terraform in July 2014.</div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- Philosophy -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🧠 The Philosophy: Declarative vs. Imperative</h3>
+  <div class="grid-2 mb-24">
+    <div class="card" style="border-top: 3px solid var(--orange);">
+      <h3><span class="icon-badge orange">⚙️</span> Imperative Model ("How")</h3>
+      <p>You describe the <strong>steps</strong> to achieve a goal. The execution engine follows your instructions literally.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">imperative.sh</span><span class="code-lang bash">bash</span></div>
+        <pre><span class="c"># You must check IF it exists first</span>
+<span class="k">if</span> ! aws ec2 describe-vpcs \
+    --filters <span class="s">"Name=tag:Name,Values=my-vpc"</span> \
+    | grep -q VpcId; <span class="k">then</span>
+  aws ec2 create-vpc \
+    --cidr-block <span class="s">10.0.0.0/16</span>
+<span class="k">fi</span>
+<span class="c"># Then create the subnet — manually ordered</span>
+aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block <span class="s">10.0.1.0/24</span></pre>
+      </div>
+      <p style="margin-top:12px;font-size:15px;color:var(--text-muted);">Problems: manual state checks, order management, error handling, no parallelism.</p>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--blue);">
+      <h3><span class="icon-badge blue">📋</span> Declarative Model ("What")</h3>
+      <p>You describe the <strong>desired end state</strong>. The engine computes <em>how</em> to get there — and what to change if reality differs.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">declarative.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre><span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"main"</span> <span class="o">{</span>
+  cidr_block <span class="o">=</span> <span class="s">"10.0.0.0/16"</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"public"</span> <span class="o">{</span>
+  vpc_id     <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">id</span>
+  cidr_block <span class="o">=</span> <span class="s">"10.0.1.0/24"</span>
+<span class="o">}</span></pre>
+      </div>
+      <p style="margin-top:12px;font-size:15px;color:var(--text-muted);">Terraform infers order, parallelizes independent resources, and checks current state automatically.</p>
+    </div>
+  </div>
+
+  <!-- State -->
+  <div class="card" style="border-left: 4px solid var(--blue); margin-bottom: 24px;">
+    <h3><span class="icon-badge blue">🗄️</span> Why "State" is Terraform's Most Critical Concept</h3>
+    <p>The <code>terraform.tfstate</code> file is Terraform's <strong>source of truth about the real world</strong>. Without it, Terraform would be forced to re-read all cloud APIs on every run (slow, rate-limited, and sometimes impossible) to know what it previously created. State enables:</p>
+    <div class="grid-3 mt-24">
+      <div>
+        <h4>🔗 Resource Mapping</h4>
+        <p style="font-size:15px;">State maps your HCL resource blocks to real cloud resource IDs. <code>aws_vpc.main</code> → <code>vpc-0abc123def456</code>. Without this mapping, Terraform cannot update or delete the resource.</p>
+      </div>
+      <div>
+        <h4>📐 Diff Computation</h4>
+        <p style="font-size:15px;">During <code>terraform plan</code>, Terraform compares desired config → state → real world. This three-way diff determines exactly what changes are necessary and generates a precise execution plan.</p>
+      </div>
+      <div>
+        <h4>⚡ Performance</h4>
+        <p style="font-size:15px;">State is a local cache of remote API responses. Terraform reads attributes from state instead of querying cloud APIs for every attribute of every resource, dramatically speeding up plan operations.</p>
+      </div>
+    </div>
+    <div class="callout warn mt-24">
+      <span class="callout-icon">⚠️</span>
+      <div><strong>State is not a backup.</strong> It's a live operational record. If state drifts from reality (someone manually deleted a resource in the console), Terraform will not know until <code>terraform plan</code> compares against the real API. This is called <em>State Drift</em> — one of the most dangerous Terraform failure modes.</div>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- Ecosystem Comparison -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🌐 Ecosystem: Terraform vs. Configuration Management</h3>
+  <div class="card mb-24">
+    <p style="margin-bottom:20px;">A critical misconception is that Terraform <em>replaces</em> Ansible or Chef. They solve <strong>different layers of the stack</strong> and are complementary, not competing.</p>
+    <div style="overflow-x:auto;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Terraform</th>
+            <th>Ansible</th>
+            <th>Chef / Puppet</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Primary Domain</strong></td>
+            <td>Cloud infrastructure orchestration</td>
+            <td>OS configuration, application deployment</td>
+            <td>OS configuration, compliance enforcement</td>
+          </tr>
+          <tr>
+            <td><strong>Model</strong></td>
+            <td class="yes">Declarative</td>
+            <td class="partial">Imperative (can be idempotent)</td>
+            <td class="yes">Declarative (DSL)</td>
+          </tr>
+          <tr>
+            <td><strong>State Management</strong></td>
+            <td class="yes">Full state file + locking</td>
+            <td class="no">Stateless (re-reads reality)</td>
+            <td class="yes">Chef Server / Puppet DB</td>
+          </tr>
+          <tr>
+            <td><strong>Cloud Resources</strong></td>
+            <td class="yes">Excellent (1000+ providers)</td>
+            <td class="partial">Modules exist but limited</td>
+            <td class="no">Not primary use case</td>
+          </tr>
+          <tr>
+            <td><strong>Installs packages on VMs</strong></td>
+            <td class="no">No (not its job)</td>
+            <td class="yes">Yes (primary use case)</td>
+            <td class="yes">Yes (primary use case)</td>
+          </tr>
+          <tr>
+            <td><strong>Multi-cloud</strong></td>
+            <td class="yes">Yes (AWS + GCP + Azure in one config)</td>
+            <td class="partial">Partial</td>
+            <td class="partial">Partial</td>
+          </tr>
+          <tr>
+            <td><strong>Agentless</strong></td>
+            <td class="yes">Yes</td>
+            <td class="yes">Yes (SSH)</td>
+            <td class="no">No (Chef Client / Puppet Agent)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="border-top: 3px solid var(--green);">
+    <h3><span class="icon-badge green">🔗</span> Why Big Data Stacks Need Both</h3>
+    <p>In a production Big Data platform (e.g., an EMR/Spark cluster with Kafka and Cassandra), the workflow is layered:</p>
+    <div class="steps mt-24">
+      <div class="step">
+        <div class="step-num blue">1</div>
+        <div>
+          <h4>Terraform: Provision the Cloud Layer</h4>
+          <p>Create the VPC, subnets, security groups, IAM roles, EMR cluster nodes, MSK Kafka brokers, and S3 buckets. Terraform knows nothing about what OS packages should be installed — it just creates the machines.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num orange">2</div>
+        <div>
+          <h4>Ansible: Configure the Application Layer</h4>
+          <p>After EC2 instances boot, Ansible connects via SSH to install JVM, configure Kafka topic settings, set up Cassandra ring topology, install monitoring agents (Prometheus Node Exporter), and tune kernel parameters (<code>vm.swappiness</code>, <code>net.core.somaxconn</code>).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">3</div>
+        <div>
+          <h4>Terraform Output → Ansible Inventory</h4>
+          <p>Terraform outputs the private IP addresses of brokers and workers into a dynamic Ansible inventory file. This closes the loop: Terraform builds the infrastructure, Ansible configures it. Together, they achieve a fully automated, reproducible Big Data environment.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────────────────────────
+     PART 2 · CORE ARCHITECTURE & INTERNALS
+────────────────────────────────────────── -->
+<section class="section" id="part2">
+<div class="container">
+  <div class="section-header">
+    <span class="part-badge orange">Part 2 · Core Architecture &amp; Internals</span>
+    <h2>The Engine: How Terraform Actually Works</h2>
+    <p>Terraform is not just a CLI wrapper around cloud APIs. It's a sophisticated graph-theoretic execution engine with a plugin-based provider system and a carefully designed lifecycle.</p>
+  </div>
+
+  <!-- Core vs Providers -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin-bottom:20px;">⚙️ Terraform Core vs. Providers</h3>
+  <div class="card mb-24">
+    <p>Terraform's architecture is cleanly split into two planes that communicate over a Go-based RPC channel using the <strong>gRPC protocol</strong> and the <strong>Terraform Plugin Framework</strong>:</p>
+
+    <!-- Architecture Diagram -->
+    <div class="diagram mt-24">
+      <svg viewBox="0 0 900 380" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+        <!-- Terraform Core -->
+        <rect x="20" y="20" width="380" height="340" rx="14" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="210" y="50" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="700" letter-spacing="2">TERRAFORM CORE</text>
+
+        <rect x="44" y="64" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="210" y="88" text-anchor="middle" fill="#e2e8f0" font-size="12">HCL Parser / Config Loader</text>
+        <text x="210" y="107" text-anchor="middle" fill="#64748b" font-size="11">Reads .tf files → Resource Graph</text>
+
+        <rect x="44" y="134" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="210" y="158" text-anchor="middle" fill="#e2e8f0" font-size="12">DAG Engine (Graph Builder)</text>
+        <text x="210" y="177" text-anchor="middle" fill="#64748b" font-size="11">Topological Sort · Parallel Walk</text>
+
+        <rect x="44" y="204" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="210" y="228" text-anchor="middle" fill="#e2e8f0" font-size="12">State Manager</text>
+        <text x="210" y="247" text-anchor="middle" fill="#64748b" font-size="11">Read / Write / Lock State File</text>
+
+        <rect x="44" y="274" width="332" height="66" rx="8" fill="#0f172a"/>
+        <text x="210" y="298" text-anchor="middle" fill="#e2e8f0" font-size="12">Plan &amp; Apply Engine</text>
+        <text x="210" y="315" text-anchor="middle" fill="#64748b" font-size="11">Diff Computation · CRUD Dispatch</text>
+        <text x="210" y="331" text-anchor="middle" fill="#64748b" font-size="11">via Plugin RPC</text>
+
+        <!-- Arrow -->
+        <line x1="420" y1="190" x2="480" y2="190" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)"/>
+        <text x="450" y="183" text-anchor="middle" fill="#60a5fa" font-size="10">gRPC/RPC</text>
+
+        <!-- Providers -->
+        <rect x="500" y="20" width="380" height="340" rx="14" fill="#1e293b" stroke="#f97316" stroke-width="1.5"/>
+        <text x="690" y="50" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="700" letter-spacing="2">PROVIDERS (PLUGINS)</text>
+
+        <rect x="524" y="64" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="690" y="88" text-anchor="middle" fill="#e2e8f0" font-size="12">AWS Provider (Go binary)</text>
+        <text x="690" y="107" text-anchor="middle" fill="#64748b" font-size="11">Implements: CRUD for all AWS resources</text>
+
+        <rect x="524" y="134" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="690" y="158" text-anchor="middle" fill="#e2e8f0" font-size="12">Azure Provider (Go binary)</text>
+        <text x="690" y="177" text-anchor="middle" fill="#64748b" font-size="11">Calls ARM / Azure Resource Manager APIs</text>
+
+        <rect x="524" y="204" width="332" height="56" rx="8" fill="#0f172a"/>
+        <text x="690" y="228" text-anchor="middle" fill="#e2e8f0" font-size="12">GCP Provider (Go binary)</text>
+        <text x="690" y="247" text-anchor="middle" fill="#64748b" font-size="11">Calls Google Cloud REST APIs</text>
+
+        <rect x="524" y="274" width="332" height="66" rx="8" fill="#0f172a"/>
+        <text x="690" y="298" text-anchor="middle" fill="#e2e8f0" font-size="12">Custom / Community Providers</text>
+        <text x="690" y="315" text-anchor="middle" fill="#64748b" font-size="11">Kubernetes, Vault, Datadog, GitHub,</text>
+        <text x="690" y="331" text-anchor="middle" fill="#64748b" font-size="11">MongoDB Atlas, 3000+ on registry</text>
+
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="grid-2 mt-24">
+      <div>
+        <h4>Terraform Core Responsibilities</h4>
+        <ul style="font-size:15px;">
+          <li>Parsing HCL configuration files into an abstract resource graph</li>
+          <li>Building and walking the Directed Acyclic Graph (DAG)</li>
+          <li>Reading, writing, and locking the state file</li>
+          <li>Computing the diff between desired state and current state</li>
+          <li>Calling provider plugins via gRPC for CRUD operations</li>
+          <li>Handling output, variables, locals, and data sources</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Provider Plugin Responsibilities</h4>
+        <ul style="font-size:15px;">
+          <li>Implementing the <code>ResourceServer</code> gRPC interface for each resource</li>
+          <li>Translating Terraform's resource schema into cloud API calls</li>
+          <li>Handling authentication and retries with the cloud provider</li>
+          <li>Mapping cloud API response fields back to Terraform attributes</li>
+          <li>Downloaded and cached in <code>.terraform/providers/</code> during <code>init</code></li>
+          <li>Versioned independently from Terraform Core (semver)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- DAG -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">📊 Graph Theory: The DAG Engine</h3>
+  <div class="card mb-24">
+    <p>Terraform uses a <strong>Directed Acyclic Graph (DAG)</strong> to model all resource relationships. Each node is a resource; each directed edge represents a dependency (A must exist before B can be created). The DAG is the core data structure that enables both correctness and parallelism.</p>
+
+    <div class="grid-2 mt-24">
+      <div>
+        <h4>How the DAG is Built</h4>
+        <div class="timeline mt-24">
+          <div class="timeline-item">
+            <h4>1. Parse all <code>.tf</code> files</h4>
+            <p>Every resource, data source, variable, and output becomes a node.</p>
+          </div>
+          <div class="timeline-item">
+            <h4>2. Infer explicit references</h4>
+            <p>When resource B references <code>aws_vpc.main.id</code>, Terraform creates a directed edge: VPC → Subnet.</p>
+          </div>
+          <div class="timeline-item">
+            <h4>3. Add implicit edges</h4>
+            <p><code>depends_on</code> meta-argument adds explicit edges. Modules create sub-graphs.</p>
+          </div>
+          <div class="timeline-item">
+            <h4>4. Topological sort</h4>
+            <p>Terraform performs a DFS-based topological sort to find a valid execution order.</p>
+          </div>
+          <div class="timeline-item">
+            <h4>5. Parallel walk</h4>
+            <p>Nodes with no unsatisfied dependencies are dispatched to a goroutine pool for concurrent execution.</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h4>Parallel vs Sequential Execution</h4>
+        <div class="callout info" style="margin-top:12px;">
+          <span class="callout-icon">⚡</span>
+          <div><strong>Parallel:</strong> Resources with no dependency relationship between them (e.g., 5 independent S3 buckets) are created simultaneously using Go goroutines. Terraform uses a configurable parallelism setting (default: 10 concurrent operations via <code>-parallelism=N</code>).</div>
+        </div>
+        <div class="callout warn" style="margin-top:8px;">
+          <span class="callout-icon">🔗</span>
+          <div><strong>Sequential:</strong> Resources that reference each other must be built in order. A Subnet referencing a VPC ID must wait until the VPC is created and its ID is available in state.</div>
+        </div>
+        <div class="code-wrap" style="margin-top:16px;">
+          <div class="code-header"><span class="code-filename">dependency_example.tf</span><span class="code-lang hcl">HCL</span></div>
+          <pre><span class="c"># VPC must exist first (node 1)</span>
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"main"</span> <span class="o">{}</span>
+
+<span class="c"># These 3 are INDEPENDENT of each other</span>
+<span class="c"># → Terraform creates them IN PARALLEL</span>
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"az1"</span> <span class="o">{</span>
+  vpc_id <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span>
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"az2"</span> <span class="o">{</span>
+  vpc_id <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span>
+<span class="k">resource</span> <span class="s">"aws_internet_gateway"</span> <span class="s">"igw"</span> <span class="o">{</span>
+  vpc_id <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">main</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- Lifecycle -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🔄 The Terraform Lifecycle: Deep Mechanics</h3>
+  <div class="grid-2">
+    <div class="card" style="border-top: 3px solid var(--blue);">
+      <h3><span class="icon-badge blue">🚀</span> <code>terraform init</code></h3>
+      <p><strong>What happens:</strong></p>
+      <ul style="font-size:15px;">
+        <li>Reads the <code>required_providers</code> block and queries the <strong>Terraform Registry</strong> (registry.terraform.io) or a private registry for provider binaries</li>
+        <li>Downloads provider binaries to <code>.terraform/providers/</code> (platform-specific: darwin_arm64, linux_amd64, etc.)</li>
+        <li>Writes <code>.terraform.lock.hcl</code> with SHA-256 checksums to pin provider versions</li>
+        <li>Initializes the backend (configures S3, Consul, etc. for remote state)</li>
+        <li>Downloads and initializes modules listed in <code>module</code> blocks</li>
+      </ul>
+      <div class="callout tip" style="margin-top:12px;">
+        <span class="callout-icon">✅</span>
+        <div><strong>State impact:</strong> Does not modify the state file. Only configures the local Terraform workspace.</div>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--orange);">
+      <h3><span class="icon-badge orange">📋</span> <code>terraform plan</code></h3>
+      <p><strong>What happens:</strong></p>
+      <ul style="font-size:15px;">
+        <li>Performs a <strong>refresh</strong>: reads the current state file and queries cloud APIs to detect drift</li>
+        <li>Builds the full DAG from HCL configuration</li>
+        <li>Computes a <strong>three-way diff</strong>: (desired config) vs (state) vs (real cloud resources)</li>
+        <li>Produces a human-readable execution plan: which resources to CREATE, UPDATE, REPLACE, or DESTROY</li>
+        <li>Can output a binary plan file: <code>terraform plan -out=plan.tfplan</code> for reproducible applies</li>
+      </ul>
+      <div class="callout tip">
+        <span class="callout-icon">✅</span>
+        <div><strong>State impact:</strong> May update state with refreshed values (drift detection), but makes no changes to real infrastructure. Read-only against the cloud.</div>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--green);">
+      <h3><span class="icon-badge green">✅</span> <code>terraform apply</code></h3>
+      <p><strong>What happens:</strong></p>
+      <ul style="font-size:15px;">
+        <li>If no plan file provided, re-runs <code>plan</code> and prompts for confirmation</li>
+        <li>Walks the DAG and dispatches CRUD operations to providers via gRPC</li>
+        <li>After <em>each successful resource operation</em>, immediately writes the result to state — partial applies are safe because state is updated incrementally</li>
+        <li>On failure mid-apply, state reflects all successfully completed resources, allowing for re-runs</li>
+        <li>Outputs are computed and written to state at the end</li>
+      </ul>
+      <div class="callout warn">
+        <span class="callout-icon">⚠️</span>
+        <div><strong>State impact:</strong> Heavily modifies state. State is locked at the start (with remote backends) and unlocked after completion. Never interrupt an apply.</div>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--red);">
+      <h3><span class="icon-badge red">💥</span> <code>terraform destroy</code></h3>
+      <p><strong>What happens:</strong></p>
+      <ul style="font-size:15px;">
+        <li>Reverses the dependency graph: resources that were created last are destroyed first</li>
+        <li>Creates a "destroy plan" — equivalent to setting all resources to empty</li>
+        <li>Calls <code>Delete</code> on each resource via the provider gRPC interface</li>
+        <li>Removes destroyed resources from the state file incrementally</li>
+        <li>Honors <code>prevent_destroy = true</code> lifecycle rules — will refuse to destroy protected resources</li>
+      </ul>
+      <div class="callout danger">
+        <span class="callout-icon">🔴</span>
+        <div><strong>State impact:</strong> Resources are removed from state as they are destroyed. A successful destroy results in an empty state. <em>This is irreversible for stateful resources like databases.</em></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────────────────────────
+     PART 3 · ADVANCED ENGINEERING
+────────────────────────────────────────── -->
+<section class="section" id="part3">
+<div class="container">
+  <div class="section-header">
+    <span class="part-badge purple">Part 3 · Advanced Engineering &amp; Patterns</span>
+    <h2>Advanced Patterns: State, Structure & DRY Code</h2>
+    <p>Production Terraform engineering requires far more than writing resource blocks. This section covers the patterns that separate a working prototype from a maintainable, team-safe infrastructure platform.</p>
+  </div>
+
+  <!-- Remote State -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin-bottom:20px;">🔒 Remote Backends & State Locking</h3>
+  <div class="card mb-24">
+    <p>Local state (<code>terraform.tfstate</code> on disk) is dangerous in team environments. Remote backends solve the fundamental problem of <strong>shared state with concurrent access control</strong>.</p>
+
+    <div class="grid-2 mt-24">
+      <div>
+        <h4>The Race Condition Problem</h4>
+        <div class="callout danger">
+          <span class="callout-icon">💥</span>
+          <div>
+            <strong>Scenario:</strong> Alice runs <code>terraform apply</code> on her laptop. Bob runs <code>terraform apply</code> on his laptop simultaneously. Both read the same state, both compute independent plans, both write back a <em>different</em> state file. One overwrites the other. Resources exist in the cloud that are orphaned from state. Chaos ensues.
+          </div>
+        </div>
+        <h4 style="margin-top:20px;">The Solution: Locking</h4>
+        <p style="font-size:15px;">Remote backends implement a distributed lock using the underlying storage's atomic operations. In S3 + DynamoDB, a lock record is written to DynamoDB before any state mutation and deleted after. Any concurrent Terraform run reads the lock and waits (or fails fast).</p>
+      </div>
+      <div>
+        <h4>S3 Remote Backend (Industry Standard)</h4>
+        <div class="code-wrap" style="margin-top:12px;">
+          <div class="code-header"><span class="code-filename">backend.tf</span><span class="code-lang hcl">HCL</span></div>
+          <pre><span class="k">terraform</span> <span class="o">{</span>
+  <span class="k">backend</span> <span class="s">"s3"</span> <span class="o">{</span>
+    bucket         <span class="o">=</span> <span class="s">"my-org-tfstate"</span>
+    key            <span class="o">=</span> <span class="s">"prod/vpc/terraform.tfstate"</span>
+    region         <span class="o">=</span> <span class="s">"us-east-1"</span>
+    encrypt        <span class="o">=</span> <span class="v">true</span>
+    <span class="c"># DynamoDB for distributed locking</span>
+    dynamodb_table <span class="o">=</span> <span class="s">"terraform-state-locks"</span>
+    <span class="c"># Use KMS for encryption at rest</span>
+    kms_key_id     <span class="o">=</span> <span class="s">"alias/terraform-state"</span>
+  <span class="o">}</span>
+<span class="o">}</span></pre>
+        </div>
+        <div class="pills" style="margin-top:12px;">
+          <span class="pill blue">S3 + DynamoDB</span>
+          <span class="pill orange">Terraform Cloud</span>
+          <span class="pill purple">GCS</span>
+          <span class="pill green">Azure Blob</span>
+          <span class="pill blue">Consul</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- Workspaces vs Terragrunt -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🌍 Multi-Environment: Workspaces vs. Terragrunt</h3>
+  <div class="grid-2 mb-24">
+    <div class="card" style="border-top: 3px solid var(--blue);">
+      <h3><span class="icon-badge blue">📁</span> Terraform Workspaces</h3>
+      <p>Workspaces allow multiple state files within the same backend configuration. Each workspace maps to a separate <code>terraform.tfstate</code> object (e.g., <code>env:/dev/terraform.tfstate</code>).</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">workspaces</span><span class="code-lang bash">bash</span></div>
+        <pre>terraform workspace new dev
+terraform workspace new staging
+terraform workspace select prod
+
+<span class="c"># Reference in config:</span></pre>
+      </div>
+      <div class="code-wrap" style="margin-top:4px;">
+        <div class="code-header"><span class="code-filename">main.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre><span class="k">locals</span> <span class="o">{</span>
+  env_config <span class="o">=</span> <span class="o">{</span>
+    dev     <span class="o">=</span> <span class="o">{</span> instance_type <span class="o">=</span> <span class="s">"t3.small"</span>  <span class="o">}</span>
+    prod    <span class="o">=</span> <span class="o">{</span> instance_type <span class="o">=</span> <span class="s">"m5.4xlarge"</span> <span class="o">}</span>
+  <span class="o">}</span>
+  cfg <span class="o">=</span> <span class="n">local</span><span class="o">.</span><span class="n">env_config</span><span class="o">[</span><span class="f">terraform</span><span class="o">.</span><span class="n">workspace</span><span class="o">]</span>
+<span class="o">}</span></pre>
+      </div>
+      <h4 style="margin-top:16px;">Limitations</h4>
+      <ul style="font-size:15px;">
+        <li>All environments share the same code — no isolation of backend config</li>
+        <li>Cannot have different providers per workspace easily</li>
+        <li>Easy to accidentally apply to wrong workspace (<strong>dangerous</strong>)</li>
+        <li>Best for simple, ephemeral environments (feature branches, testing)</li>
+      </ul>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--purple);">
+      <h3><span class="icon-badge purple">🌲</span> Terragrunt (Recommended for Teams)</h3>
+      <p>Terragrunt is a thin wrapper around Terraform that adds DRY configuration, remote state management, and cross-module dependencies. Created by Gruntwork.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">Directory Structure</span><span class="code-lang text">tree</span></div>
+        <pre>infrastructure/
+├── _base/
+│   └── vpc/          <span class="c"># Reusable Terraform module</span>
+├── dev/
+│   └── vpc/
+│       └── terragrunt.hcl
+├── staging/
+│   └── vpc/
+│       └── terragrunt.hcl
+└── prod/
+    └── vpc/
+        └── terragrunt.hcl</pre>
+      </div>
+      <div class="code-wrap" style="margin-top:8px;">
+        <div class="code-header"><span class="code-filename">prod/vpc/terragrunt.hcl</span><span class="code-lang hcl">HCL</span></div>
+        <pre><span class="k">terraform</span> <span class="o">{</span>
+  source <span class="o">=</span> <span class="s">"../../_base/vpc"</span>
+<span class="o">}</span>
+
+<span class="k">remote_state</span> <span class="o">{</span>
+  backend <span class="o">=</span> <span class="s">"s3"</span>
+  config  <span class="o">=</span> <span class="o">{</span>
+    bucket <span class="o">=</span> <span class="s">"my-prod-tfstate"</span>
+    key    <span class="o">=</span> <span class="s">"vpc/terraform.tfstate"</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">inputs</span> <span class="o">=</span> <span class="o">{</span>
+  env          <span class="o">=</span> <span class="s">"prod"</span>
+  cidr_block   <span class="o">=</span> <span class="s">"10.0.0.0/16"</span>
+  az_count     <span class="o">=</span> <span class="v">3</span>
+<span class="o">}</span></pre>
+      </div>
+      <p style="font-size:15px;margin-top:12px;"><strong>Terragrunt advantages:</strong> separate backend per environment, <code>run-all apply</code> across stacks, <code>dependency</code> blocks between modules, DRY backend configuration via <code>root.hcl</code>.</p>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- DRY Infrastructure -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🔁 DRY Infrastructure: for_each, Dynamic Blocks & Modules</h3>
+  <div class="card mb-24">
+    <p>Repeating resource blocks for each environment or configuration variant violates the DRY principle. Terraform provides three powerful constructs to eliminate repetition:</p>
+
+    <div class="grid-3 mt-24">
+      <div class="card" style="box-shadow:none;border:1px solid var(--border);">
+        <h3 style="font-size:1rem;"><span class="icon-badge orange">🔄</span> <code>for_each</code></h3>
+        <p style="font-size:14.5px;">Creates multiple resource instances from a map or set. Each instance has a unique key.</p>
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-filename">for_each.tf</span><span class="code-lang hcl">HCL</span></div>
+          <pre style="font-size:12px;"><span class="k">variable</span> <span class="s">"buckets"</span> <span class="o">{</span>
+  default <span class="o">=</span> <span class="o">{</span>
+    logs   <span class="o">=</span> <span class="s">"us-east-1"</span>
+    assets <span class="o">=</span> <span class="s">"eu-west-1"</span>
+    backup <span class="o">=</span> <span class="s">"ap-south-1"</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_s3_bucket"</span> <span class="s">"b"</span> <span class="o">{</span>
+  <span class="k">for_each</span> <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">buckets</span>
+  bucket   <span class="o">=</span> <span class="s">"myorg-${each.key}"</span>
+  
+  <span class="k">provider</span> <span class="o">=</span> <span class="n">aws</span><span class="o">.</span><span class="n">${each.value}</span>
+<span class="o">}</span></pre>
+        </div>
+      </div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--border);">
+        <h3 style="font-size:1rem;"><span class="icon-badge purple">🧩</span> Dynamic Blocks</h3>
+        <p style="font-size:14.5px;">Generates nested configuration blocks programmatically from a list or map.</p>
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-filename">dynamic.tf</span><span class="code-lang hcl">HCL</span></div>
+          <pre style="font-size:12px;"><span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"sg"</span> <span class="o">{</span>
+  <span class="k">dynamic</span> <span class="s">"ingress"</span> <span class="o">{</span>
+    <span class="k">for_each</span> <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">ingress_rules</span>
+    content <span class="o">{</span>
+      from_port <span class="o">=</span> <span class="n">ingress</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">port</span>
+      to_port   <span class="o">=</span> <span class="n">ingress</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">port</span>
+      protocol  <span class="o">=</span> <span class="s">"tcp"</span>
+      cidr_blocks <span class="o">=</span>
+        <span class="n">ingress</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">cidrs</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">}</span></pre>
+        </div>
+      </div>
+      <div class="card" style="box-shadow:none;border:1px solid var(--border);">
+        <h3 style="font-size:1rem;"><span class="icon-badge green">📦</span> Modules</h3>
+        <p style="font-size:14.5px;">Reusable, versioned packages of Terraform resources. The primary unit of abstraction.</p>
+        <div class="code-wrap">
+          <div class="code-header"><span class="code-filename">main.tf</span><span class="code-lang hcl">HCL</span></div>
+          <pre style="font-size:12px;"><span class="k">module</span> <span class="s">"vpc"</span> <span class="o">{</span>
+  source  <span class="o">=</span>
+    <span class="s">"terraform-aws-modules/vpc/aws"</span>
+  version <span class="o">=</span> <span class="s">"~> 5.0"</span>
+
+  name <span class="o">=</span> <span class="s">"production"</span>
+  cidr <span class="o">=</span> <span class="s">"10.0.0.0/16"</span>
+  azs  <span class="o">=</span> <span class="o">[</span><span class="s">"us-east-1a"</span><span class="o">,</span>
+          <span class="s">"us-east-1b"</span><span class="o">]</span>
+
+  enable_nat_gateway <span class="o">=</span> <span class="v">true</span>
+<span class="o">}</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────────────────────────
+     PART 4 · REAL-WORLD
+────────────────────────────────────────── -->
+<section class="section" id="part4">
+<div class="container">
+  <div class="section-header">
+    <span class="part-badge green">Part 4 · Real-World Implementation &amp; Safety</span>
+    <h2>Production Implementation: Security, CI/CD & Code</h2>
+    <p>Knowing the internals is necessary but not sufficient. Production Terraform requires hardened secrets management, automated pipelines, and thoughtfully structured code.</p>
+  </div>
+
+  <!-- Security -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin-bottom:20px;">🔐 Secrets Management</h3>
+  <div class="grid-3 mb-24">
+    <div class="card" style="border-top: 3px solid var(--orange);">
+      <h3><span class="icon-badge orange">🔑</span> HashiCorp Vault</h3>
+      <p style="font-size:15px;"><strong>Best for:</strong> Dynamic secrets, database credentials, PKI, SSH signing. Vault generates short-lived credentials on demand — no static secrets in config.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">vault_provider.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre style="font-size:12px;"><span class="k">data</span> <span class="s">"vault_generic_secret"</span> <span class="s">"db"</span> <span class="o">{</span>
+  path <span class="o">=</span> <span class="s">"secret/prod/db"</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_db_instance"</span> <span class="s">"db"</span> <span class="o">{</span>
+  password <span class="o">=</span> <span class="n">data</span><span class="o">.</span>
+    <span class="n">vault_generic_secret</span><span class="o">.</span>
+    <span class="n">db</span><span class="o">.</span><span class="n">data</span><span class="o">[</span><span class="s">"password"</span><span class="o">]</span>
+<span class="o">}</span></pre>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--purple);">
+      <h3><span class="icon-badge purple">🏭</span> AWS KMS + SSM / Secrets Manager</h3>
+      <p style="font-size:15px;"><strong>Best for:</strong> AWS-native secrets. Store encrypted values in Secrets Manager, reference via Terraform data source. KMS encrypts state at rest.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">ssm_secret.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre style="font-size:12px;"><span class="k">data</span> <span class="s">"aws_secretsmanager_secret_version"</span>
+    <span class="s">"db_pass"</span> <span class="o">{</span>
+  secret_id <span class="o">=</span> <span class="s">"prod/db/password"</span>
+<span class="o">}</span>
+
+<span class="k">locals</span> <span class="o">{</span>
+  db_pass <span class="o">=</span> <span class="f">jsondecode</span><span class="o">(</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">aws_secretsmanager</span>
+    <span class="n">_secret_version.db_pass</span>
+    <span class="o">.</span><span class="n">secret_string</span><span class="o">)[</span><span class="s">"password"</span><span class="o">]</span>
+<span class="o">}</span></pre>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--blue);">
+      <h3><span class="icon-badge blue">💻</span> Environment Variables</h3>
+      <p style="font-size:15px;"><strong>Best for:</strong> CI/CD pipeline credentials injected at runtime. Never store secrets in <code>.tf</code> files or commit them to git. Use <code>TF_VAR_</code> prefix.</p>
+      <div class="code-wrap" style="margin-top:14px;">
+        <div class="code-header"><span class="code-filename">env_vars.sh</span><span class="code-lang bash">bash</span></div>
+        <pre style="font-size:12px;"><span class="c"># CI/CD pipeline injects these</span>
+<span class="k">export</span> <span class="n">TF_VAR_db_password</span><span class="o">=</span><span class="s">"$SECRET"</span>
+<span class="k">export</span> <span class="n">AWS_ACCESS_KEY_ID</span><span class="o">=</span><span class="s">"$KEY"</span>
+<span class="k">export</span> <span class="n">AWS_SECRET_ACCESS_KEY</span><span class="o">=</span><span class="s">"$SID"</span>
+
+<span class="c"># NEVER do this in .tf files:</span>
+<span class="c"># password = "hardcoded123" ← DANGER</span>
+
+<span class="c"># Always mark sensitive variables</span></pre>
+      </div>
+      <div class="callout danger" style="margin-top:10px;">
+        <span class="callout-icon">🔴</span>
+        <div style="font-size:13px;">Mark variables <code>sensitive = true</code> to prevent Terraform from printing values in plan output.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- CI/CD -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">🔄 CI/CD: GitOps Pipeline with GitHub Actions</h3>
+  <div class="card mb-24">
+    <p>A standard GitOps Terraform pipeline enforces that <strong>all infrastructure changes go through code review</strong> before being applied, and that applies only happen from a controlled, auditable environment — not engineer laptops.</p>
+
+    <div class="steps mt-24">
+      <div class="step">
+        <div class="step-num blue">1</div>
+        <div>
+          <h4>Pull Request Opened → <code>terraform plan</code></h4>
+          <p>GitHub Actions triggers on PR open/push. Runs <code>terraform fmt -check</code>, <code>terraform validate</code>, and <code>terraform plan</code>. The plan output is posted as a PR comment for human review. Tools like <strong>Atlantis</strong> or <strong>Terraform Cloud</strong> handle this natively.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num orange">2</div>
+        <div>
+          <h4>Code Review & Security Scan</h4>
+          <p>Reviewers inspect the plan diff. Automated tools like <strong>Checkov</strong>, <strong>tfsec</strong>, or <strong>Semgrep</strong> scan for security misconfigurations (open security groups, unencrypted buckets). Policy-as-code tools like <strong>Sentinel</strong> or <strong>OPA/Conftest</strong> enforce organizational policies.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">3</div>
+        <div>
+          <h4>PR Merge → <code>terraform apply</code></h4>
+          <p>On merge to <code>main</code>, the pipeline applies the saved plan file (not a fresh plan — this guarantees what was reviewed is what gets applied). Uses OIDC-based short-lived credentials instead of long-lived AWS access keys.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">4</div>
+        <div>
+          <h4>Drift Detection (Scheduled)</h4>
+          <p>A nightly scheduled job runs <code>terraform plan</code> with the <code>-detailed-exitcode</code> flag. If exit code 2 (changes detected), it alerts the team via Slack/PagerDuty. This catches manual console changes before they cause incidents.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-wrap mt-24">
+      <div class="code-header"><span class="code-filename">.github/workflows/terraform.yml</span><span class="code-lang yaml">YAML</span></div>
+      <pre><span class="k">name:</span> <span class="s">Terraform CI/CD</span>
+<span class="k">on:</span>
+  <span class="k">pull_request:</span>  <span class="c"># Plan on PR</span>
+  <span class="k">push:</span>
+    <span class="k">branches:</span> <span class="o">[</span><span class="s">main</span><span class="o">]</span>  <span class="c"># Apply on merge</span>
+
+<span class="k">permissions:</span>
+  <span class="k">id-token:</span> <span class="s">write</span>   <span class="c"># OIDC for AWS</span>
+  <span class="k">contents:</span> <span class="s">read</span>
+  <span class="k">pull-requests:</span> <span class="s">write</span>  <span class="c"># Post plan comment</span>
+
+<span class="k">jobs:</span>
+  <span class="k">terraform:</span>
+    <span class="k">runs-on:</span> <span class="s">ubuntu-latest</span>
+    <span class="k">steps:</span>
+      <span class="o">-</span> <span class="k">uses:</span> <span class="s">actions/checkout@v4</span>
+
+      <span class="o">-</span> <span class="k">name:</span> <span class="s">Configure AWS via OIDC</span>
+        <span class="k">uses:</span> <span class="s">aws-actions/configure-aws-credentials@v4</span>
+        <span class="k">with:</span>
+          <span class="k">role-to-assume:</span> <span class="s">arn:aws:iam::123:role/GitHubActions</span>
+          <span class="k">aws-region:</span> <span class="s">us-east-1</span>
+
+      <span class="o">-</span> <span class="k">name:</span> <span class="s">Setup Terraform</span>
+        <span class="k">uses:</span> <span class="s">hashicorp/setup-terraform@v3</span>
+        <span class="k">with:</span>
+          <span class="k">terraform_version:</span> <span class="s">"1.9.0"</span>
+
+      <span class="o">-</span> <span class="k">run:</span> <span class="s">terraform init</span>
+      <span class="o">-</span> <span class="k">run:</span> <span class="s">terraform fmt -check -recursive</span>
+      <span class="o">-</span> <span class="k">run:</span> <span class="s">terraform validate</span>
+
+      <span class="o">-</span> <span class="k">name:</span> <span class="s">Terraform Plan</span>
+        <span class="k">run:</span> <span class="s">terraform plan -out=plan.tfplan -no-color</span>
+        <span class="k">if:</span> <span class="s">github.event_name == 'pull_request'</span>
+
+      <span class="o">-</span> <span class="k">name:</span> <span class="s">Terraform Apply</span>
+        <span class="k">run:</span> <span class="s">terraform apply -auto-approve plan.tfplan</span>
+        <span class="k">if:</span> <span class="s">github.ref == 'refs/heads/main'</span></pre>
+    </div>
+  </div>
+
+  <div class="separator"></div>
+
+  <!-- Code Example -->
+  <h3 style="font-family:'Sora',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:36px 0 20px;">💻 Production Code: HA VPC + Managed Database (AWS)</h3>
+  <div class="callout info mb-24">
+    <span class="callout-icon">📁</span>
+    <div><strong>Module Structure:</strong> This example deploys a High-Availability 3-AZ VPC with public/private subnets, NAT Gateways, and an RDS Aurora PostgreSQL cluster across 3 availability zones using a modular structure following the Single Responsibility Principle.</div>
+  </div>
+
+  <!-- modules/vpc/main.tf -->
+  <div class="code-wrap">
+    <div class="code-header"><span class="code-filename">modules/vpc/main.tf</span><span class="code-lang hcl">HCL</span></div>
+    <pre><span class="c"># ─── HIGH-AVAILABILITY VPC MODULE ────────────────────────────────────</span>
+
+<span class="k">data</span> <span class="s">"aws_availability_zones"</span> <span class="s">"available"</span> <span class="o">{</span>
+  state <span class="o">=</span> <span class="s">"available"</span>
+<span class="o">}</span>
+
+<span class="k">locals</span> <span class="o">{</span>
+  azs             <span class="o">=</span> <span class="f">slice</span><span class="o">(</span><span class="n">data</span><span class="o">.</span><span class="n">aws_availability_zones</span><span class="o">.</span><span class="n">available</span><span class="o">.</span><span class="n">names</span><span class="o">,</span> <span class="v">0</span><span class="o">,</span> <span class="k">var</span><span class="o">.</span><span class="n">az_count</span><span class="o">)</span>
+  public_cidrs    <span class="o">=</span> <span class="o">[</span><span class="k">for</span> i<span class="o">,</span> az <span class="k">in</span> <span class="n">local</span><span class="o">.</span><span class="n">azs</span> <span class="o">:</span> <span class="f">cidrsubnet</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">cidr_block</span><span class="o">,</span> <span class="v">8</span><span class="o">,</span> i<span class="o">)]</span>
+  private_cidrs   <span class="o">=</span> <span class="o">[</span><span class="k">for</span> i<span class="o">,</span> az <span class="k">in</span> <span class="n">local</span><span class="o">.</span><span class="n">azs</span> <span class="o">:</span> <span class="f">cidrsubnet</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">cidr_block</span><span class="o">,</span> <span class="v">8</span><span class="o">,</span> i <span class="o">+</span> <span class="v">10</span><span class="o">)]</span>
+<span class="o">}</span>
+
+<span class="c"># ─── VPC ─────────────────────────────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_vpc"</span> <span class="s">"this"</span> <span class="o">{</span>
+  cidr_block           <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">cidr_block</span>
+  enable_dns_hostnames <span class="o">=</span> <span class="v">true</span>
+  enable_dns_support   <span class="o">=</span> <span class="v">true</span>
+
+  tags <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-vpc"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── PUBLIC SUBNETS (one per AZ) ─────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"public"</span> <span class="o">{</span>
+  <span class="k">for_each</span>                <span class="o">=</span> <span class="f">toset</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">)</span>
+  vpc_id                  <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  cidr_block              <span class="o">=</span> <span class="n">local</span><span class="o">.</span><span class="n">public_cidrs</span><span class="o">[</span><span class="f">index</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">,</span> <span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">)]</span>
+  availability_zone       <span class="o">=</span> <span class="k">each</span><span class="o">.</span><span class="n">key</span>
+  map_public_ip_on_launch <span class="o">=</span> <span class="v">true</span>
+
+  tags <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span>
+    Name <span class="o">=</span> <span class="s">"${var.name}-public-${each.key}"</span>
+    Tier <span class="o">=</span> <span class="s">"public"</span>
+  <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── PRIVATE SUBNETS (one per AZ) ────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_subnet"</span> <span class="s">"private"</span> <span class="o">{</span>
+  <span class="k">for_each</span>          <span class="o">=</span> <span class="f">toset</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">)</span>
+  vpc_id            <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  cidr_block        <span class="o">=</span> <span class="n">local</span><span class="o">.</span><span class="n">private_cidrs</span><span class="o">[</span><span class="f">index</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">,</span> <span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">)]</span>
+  availability_zone <span class="o">=</span> <span class="k">each</span><span class="o">.</span><span class="n">key</span>
+
+  tags <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span>
+    Name <span class="o">=</span> <span class="s">"${var.name}-private-${each.key}"</span>
+    Tier <span class="o">=</span> <span class="s">"private"</span>
+  <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── INTERNET GATEWAY ────────────────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_internet_gateway"</span> <span class="s">"this"</span> <span class="o">{</span>
+  vpc_id <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  tags   <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-igw"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── ELASTIC IPs + NAT GATEWAYS (one per public subnet for HA) ───────</span>
+<span class="k">resource</span> <span class="s">"aws_eip"</span> <span class="s">"nat"</span> <span class="o">{</span>
+  <span class="k">for_each</span> <span class="o">=</span> <span class="f">toset</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">)</span>
+  domain   <span class="o">=</span> <span class="s">"vpc"</span>
+  tags     <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-eip-${each.key}"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_nat_gateway"</span> <span class="s">"this"</span> <span class="o">{</span>
+  <span class="k">for_each</span>      <span class="o">=</span> <span class="f">toset</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">)</span>
+  allocation_id <span class="o">=</span> <span class="n">aws_eip</span><span class="o">.</span><span class="n">nat</span><span class="o">[</span><span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">].</span><span class="n">id</span>
+  subnet_id     <span class="o">=</span> <span class="n">aws_subnet</span><span class="o">.</span><span class="n">public</span><span class="o">[</span><span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">].</span><span class="n">id</span>
+  depends_on    <span class="o">=</span> <span class="o">[</span><span class="n">aws_internet_gateway</span><span class="o">.</span><span class="n">this</span><span class="o">]</span>
+  tags          <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-nat-${each.key}"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── ROUTE TABLES ────────────────────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_route_table"</span> <span class="s">"public"</span> <span class="o">{</span>
+  vpc_id <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  <span class="k">route</span> <span class="o">{</span>
+    cidr_block <span class="o">=</span> <span class="s">"0.0.0.0/0"</span>
+    gateway_id <span class="o">=</span> <span class="n">aws_internet_gateway</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  <span class="o">}</span>
+  tags <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-rt-public"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_route_table"</span> <span class="s">"private"</span> <span class="o">{</span>
+  <span class="k">for_each</span> <span class="o">=</span> <span class="f">toset</span><span class="o">(</span><span class="n">local</span><span class="o">.</span><span class="n">azs</span><span class="o">)</span>
+  vpc_id   <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  <span class="k">route</span> <span class="o">{</span>
+    cidr_block     <span class="o">=</span> <span class="s">"0.0.0.0/0"</span>
+    nat_gateway_id <span class="o">=</span> <span class="n">aws_nat_gateway</span><span class="o">.</span><span class="n">this</span><span class="o">[</span><span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">].</span><span class="n">id</span>
+  <span class="o">}</span>
+  tags <span class="o">=</span> <span class="f">merge</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">tags</span><span class="o">,</span> <span class="o">{</span> Name <span class="o">=</span> <span class="s">"${var.name}-rt-private-${each.key}"</span> <span class="o">})</span>
+<span class="o">}</span>
+
+<span class="c"># ─── ROUTE TABLE ASSOCIATIONS ────────────────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_route_table_association"</span> <span class="s">"public"</span> <span class="o">{</span>
+  <span class="k">for_each</span>       <span class="o">=</span> <span class="n">aws_subnet</span><span class="o">.</span><span class="n">public</span>
+  subnet_id      <span class="o">=</span> <span class="k">each</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">id</span>
+  route_table_id <span class="o">=</span> <span class="n">aws_route_table</span><span class="o">.</span><span class="n">public</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_route_table_association"</span> <span class="s">"private"</span> <span class="o">{</span>
+  <span class="k">for_each</span>       <span class="o">=</span> <span class="n">aws_subnet</span><span class="o">.</span><span class="n">private</span>
+  subnet_id      <span class="o">=</span> <span class="k">each</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">id</span>
+  route_table_id <span class="o">=</span> <span class="n">aws_route_table</span><span class="o">.</span><span class="n">private</span><span class="o">[</span><span class="k">each</span><span class="o">.</span><span class="n">key</span><span class="o">].</span><span class="n">id</span>
+<span class="o">}</span></pre>
+  </div>
+
+  <!-- modules/vpc/variables.tf -->
+  <div class="code-wrap mt-24" style="margin-top:16px;">
+    <div class="code-header"><span class="code-filename">modules/vpc/variables.tf</span><span class="code-lang hcl">HCL</span></div>
+    <pre><span class="k">variable</span> <span class="s">"name"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"Prefix for all resource names"</span>
+  type        <span class="o">=</span> <span class="t">string</span>
+<span class="o">}</span>
+
+<span class="k">variable</span> <span class="s">"cidr_block"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"VPC CIDR block"</span>
+  type        <span class="o">=</span> <span class="t">string</span>
+  default     <span class="o">=</span> <span class="s">"10.0.0.0/16"</span>
+  validation <span class="o">{</span>
+    condition     <span class="o">=</span> <span class="f">can</span><span class="o">(</span><span class="f">cidrhost</span><span class="o">(</span><span class="k">var</span><span class="o">.</span><span class="n">cidr_block</span><span class="o">,</span> <span class="v">0</span><span class="o">))</span>
+    error_message <span class="o">=</span> <span class="s">"Must be a valid CIDR block."</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">variable</span> <span class="s">"az_count"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"Number of availability zones (2 or 3)"</span>
+  type        <span class="o">=</span> <span class="t">number</span>
+  default     <span class="o">=</span> <span class="v">3</span>
+  validation <span class="o">{</span>
+    condition     <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">az_count</span> <span class="o">>=</span> <span class="v">2</span> <span class="o">&amp;&amp;</span> <span class="k">var</span><span class="o">.</span><span class="n">az_count</span> <span class="o">&lt;=</span> <span class="v">3</span>
+    error_message <span class="o">=</span> <span class="s">"az_count must be 2 or 3."</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">variable</span> <span class="s">"tags"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"Common tags applied to all resources"</span>
+  type        <span class="o">=</span> <span class="f">map</span><span class="o">(</span><span class="t">string</span><span class="o">)</span>
+  default     <span class="o">=</span> <span class="o">{}</span>
+<span class="o">}</span></pre>
+  </div>
+
+  <!-- modules/vpc/outputs.tf -->
+  <div class="code-wrap mt-24" style="margin-top:16px;">
+    <div class="code-header"><span class="code-filename">modules/vpc/outputs.tf</span><span class="code-lang hcl">HCL</span></div>
+    <pre><span class="k">output</span> <span class="s">"vpc_id"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"VPC ID"</span>
+  value       <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span>
+
+<span class="k">output</span> <span class="s">"private_subnet_ids"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"IDs of all private subnets"</span>
+  value       <span class="o">=</span> <span class="o">[</span><span class="k">for</span> s <span class="k">in</span> <span class="n">aws_subnet</span><span class="o">.</span><span class="n">private</span> <span class="o">:</span> s<span class="o">.</span><span class="n">id</span><span class="o">]</span>
+<span class="o">}</span>
+
+<span class="k">output</span> <span class="s">"public_subnet_ids"</span> <span class="o">{</span>
+  description <span class="o">=</span> <span class="s">"IDs of all public subnets"</span>
+  value       <span class="o">=</span> <span class="o">[</span><span class="k">for</span> s <span class="k">in</span> <span class="n">aws_subnet</span><span class="o">.</span><span class="n">public</span> <span class="o">:</span> s<span class="o">.</span><span class="n">id</span><span class="o">]</span>
+<span class="o">}</span>
+
+<span class="k">output</span> <span class="s">"vpc_cidr"</span> <span class="o">{</span>
+  value <span class="o">=</span> <span class="n">aws_vpc</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">cidr_block</span>
+<span class="o">}</span></pre>
+  </div>
+
+  <!-- modules/database/main.tf -->
+  <div class="code-wrap mt-24" style="margin-top:16px;">
+    <div class="code-header"><span class="code-filename">modules/database/main.tf</span><span class="code-lang hcl">HCL</span></div>
+    <pre><span class="c"># ─── AURORA POSTGRESQL CLUSTER (MULTI-AZ HA) ─────────────────────────</span>
+
+<span class="k">resource</span> <span class="s">"aws_db_subnet_group"</span> <span class="s">"this"</span> <span class="o">{</span>
+  name       <span class="o">=</span> <span class="s">"${var.name}-db-subnets"</span>
+  subnet_ids <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">private_subnet_ids</span>
+  tags       <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">tags</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"db"</span> <span class="o">{</span>
+  name   <span class="o">=</span> <span class="s">"${var.name}-db-sg"</span>
+  vpc_id <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">vpc_id</span>
+
+  <span class="k">dynamic</span> <span class="s">"ingress"</span> <span class="o">{</span>
+    <span class="k">for_each</span> <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">allowed_security_groups</span>
+    content <span class="o">{</span>
+      from_port       <span class="o">=</span> <span class="v">5432</span>
+      to_port         <span class="o">=</span> <span class="v">5432</span>
+      protocol        <span class="o">=</span> <span class="s">"tcp"</span>
+      security_groups <span class="o">=</span> <span class="o">[</span><span class="n">ingress</span><span class="o">.</span><span class="n">value</span><span class="o">]</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+
+  egress <span class="o">{</span>
+    from_port   <span class="o">=</span> <span class="v">0</span>
+    to_port     <span class="o">=</span> <span class="v">0</span>
+    protocol    <span class="o">=</span> <span class="s">"-1"</span>
+    cidr_blocks <span class="o">=</span> <span class="o">[</span><span class="s">"0.0.0.0/0"</span><span class="o">]</span>
+  <span class="o">}</span>
+  tags <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">tags</span>
+<span class="o">}</span>
+
+<span class="k">resource</span> <span class="s">"aws_rds_cluster"</span> <span class="s">"this"</span> <span class="o">{</span>
+  cluster_identifier      <span class="o">=</span> <span class="s">"${var.name}-aurora"</span>
+  engine                  <span class="o">=</span> <span class="s">"aurora-postgresql"</span>
+  engine_version          <span class="o">=</span> <span class="s">"15.4"</span>
+  database_name           <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">db_name</span>
+  master_username         <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">master_username</span>
+  master_password         <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">master_password</span> <span class="c"># Injected from Vault/SSM</span>
+  db_subnet_group_name    <span class="o">=</span> <span class="n">aws_db_subnet_group</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">name</span>
+  vpc_security_group_ids  <span class="o">=</span> <span class="o">[</span><span class="n">aws_security_group</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">id</span><span class="o">]</span>
+  storage_encrypted       <span class="o">=</span> <span class="v">true</span>
+  kms_key_id              <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">kms_key_arn</span>
+  deletion_protection     <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">deletion_protection</span>
+  skip_final_snapshot     <span class="o">=</span> <span class="v">false</span>
+  final_snapshot_identifier <span class="o">=</span> <span class="s">"${var.name}-final-${formatdate("YYYYMMDD", timestamp())}"</span>
+
+  <span class="k">lifecycle</span> <span class="o">{</span>
+    prevent_destroy <span class="o">=</span> <span class="v">true</span>  <span class="c"># Safety net for production DB</span>
+    ignore_changes  <span class="o">=</span> <span class="o">[</span><span class="n">master_password</span><span class="o">]</span> <span class="c"># Managed externally</span>
+  <span class="o">}</span>
+  tags <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">tags</span>
+<span class="o">}</span>
+
+<span class="c"># ─── CLUSTER INSTANCES (reader + writer) ─────────────────────────────</span>
+<span class="k">resource</span> <span class="s">"aws_rds_cluster_instance"</span> <span class="s">"instances"</span> <span class="o">{</span>
+  count              <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">instance_count</span>
+  identifier         <span class="o">=</span> <span class="s">"${var.name}-instance-${count.index}"</span>
+  cluster_identifier <span class="o">=</span> <span class="n">aws_rds_cluster</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">id</span>
+  instance_class     <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">instance_class</span>
+  engine             <span class="o">=</span> <span class="n">aws_rds_cluster</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">engine</span>
+  engine_version     <span class="o">=</span> <span class="n">aws_rds_cluster</span><span class="o">.</span><span class="n">this</span><span class="o">.</span><span class="n">engine_version</span>
+
+  performance_insights_enabled <span class="o">=</span> <span class="v">true</span>
+  monitoring_interval          <span class="o">=</span> <span class="v">60</span>
+  auto_minor_version_upgrade   <span class="o">=</span> <span class="v">true</span>
+  tags                         <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">tags</span>
+<span class="o">}</span></pre>
+  </div>
+
+  <!-- Root main.tf -->
+  <div class="code-wrap mt-24" style="margin-top:16px;">
+    <div class="code-header"><span class="code-filename">environments/prod/main.tf  (Root module)</span><span class="code-lang hcl">HCL</span></div>
+    <pre><span class="k">terraform</span> <span class="o">{</span>
+  required_version <span class="o">=</span> <span class="s">">= 1.9"</span>
+  required_providers <span class="o">{</span>
+    aws <span class="o">=</span> <span class="o">{</span>
+      source  <span class="o">=</span> <span class="s">"hashicorp/aws"</span>
+      version <span class="o">=</span> <span class="s">"~> 5.0"</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+  backend <span class="s">"s3"</span> <span class="o">{</span>
+    bucket         <span class="o">=</span> <span class="s">"myorg-tfstate-prod"</span>
+    key            <span class="o">=</span> <span class="s">"prod/terraform.tfstate"</span>
+    region         <span class="o">=</span> <span class="s">"us-east-1"</span>
+    encrypt        <span class="o">=</span> <span class="v">true</span>
+    dynamodb_table <span class="o">=</span> <span class="s">"terraform-locks"</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="k">provider</span> <span class="s">"aws"</span> <span class="o">{</span>
+  region <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">aws_region</span>
+  default_tags <span class="o">{</span>
+    tags <span class="o">=</span> <span class="o">{</span>
+      Environment <span class="o">=</span> <span class="s">"prod"</span>
+      ManagedBy   <span class="o">=</span> <span class="s">"terraform"</span>
+      Team        <span class="o">=</span> <span class="s">"platform"</span>
+    <span class="o">}</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="c"># ─── COMPOSE MODULES ─────────────────────────────────────────────────</span>
+<span class="k">module</span> <span class="s">"vpc"</span> <span class="o">{</span>
+  source     <span class="o">=</span> <span class="s">"../../modules/vpc"</span>
+  name       <span class="o">=</span> <span class="s">"prod"</span>
+  cidr_block <span class="o">=</span> <span class="s">"10.0.0.0/16"</span>
+  az_count   <span class="o">=</span> <span class="v">3</span>
+  tags       <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">common_tags</span>
+<span class="o">}</span>
+
+<span class="k">module</span> <span class="s">"database"</span> <span class="o">{</span>
+  source                   <span class="o">=</span> <span class="s">"../../modules/database"</span>
+  name                     <span class="o">=</span> <span class="s">"prod"</span>
+  vpc_id                   <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">vpc</span><span class="o">.</span><span class="n">vpc_id</span>
+  private_subnet_ids       <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">vpc</span><span class="o">.</span><span class="n">private_subnet_ids</span>
+  db_name                  <span class="o">=</span> <span class="s">"appdb"</span>
+  master_username          <span class="o">=</span> <span class="s">"dbadmin"</span>
+  master_password          <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">db_password</span>  <span class="c"># from TF_VAR_db_password</span>
+  instance_class           <span class="o">=</span> <span class="s">"db.r6g.2xlarge"</span>
+  instance_count           <span class="o">=</span> <span class="v">3</span>
+  kms_key_arn              <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">kms_key_arn</span>
+  deletion_protection      <span class="o">=</span> <span class="v">true</span>
+  allowed_security_groups  <span class="o">=</span> <span class="o">[]</span>
+  tags                     <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">common_tags</span>
+<span class="o">}</span>
+
+<span class="k">output</span> <span class="s">"db_endpoint"</span> <span class="o">{</span>
+  value     <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">database</span><span class="o">.</span><span class="n">cluster_endpoint</span>
+  sensitive <span class="o">=</span> <span class="v">true</span>
+<span class="o">}</span></pre>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────────────────────────
+     PART 5 · TROUBLESHOOTING
+────────────────────────────────────────── -->
+<section class="section" id="part5">
+<div class="container">
+  <div class="section-header">
+    <span class="part-badge red">Part 5 · Troubleshooting</span>
+    <h2>Terraform Traps: Common Failures & How to Debug</h2>
+    <p>Every Terraform practitioner eventually hits these failure modes. Understanding them deeply — and knowing the exact commands to diagnose them — separates production engineers from weekend experimenters.</p>
+  </div>
+
+  <!-- Traps -->
+  <div class="grid-2 mb-24">
+
+    <div class="card" style="border-top: 3px solid var(--red);">
+      <h3><span class="icon-badge red">🔄</span> Trap 1: Cycle Errors</h3>
+      <p><strong>Symptom:</strong> <code>Error: Cycle: aws_security_group.a, aws_security_group.b</code></p>
+      <p style="margin-top:10px;">Occurs when resource A references resource B which references resource A — creating a circular dependency in the DAG. Terraform cannot determine which to create first.</p>
+      <h4>Common Causes</h4>
+      <ul style="font-size:15px;">
+        <li>Two security groups that reference each other's ID in their ingress rules</li>
+        <li>A module that outputs its own input</li>
+        <li>Misuse of <code>depends_on</code> creating an indirect cycle</li>
+      </ul>
+      <h4>The Fix</h4>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">fix_cycle.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre style="font-size:12.5px;"><span class="c"># WRONG: creates a cycle</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"a"</span> <span class="o">{</span>
+  ingress <span class="o">{</span>
+    security_groups <span class="o">=</span> <span class="o">[</span><span class="n">aws_security_group</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">id</span><span class="o">]</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="c"># FIX: use aws_security_group_rule</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"a"</span> <span class="o">{}</span>
+<span class="k">resource</span> <span class="s">"aws_security_group"</span> <span class="s">"b"</span> <span class="o">{}</span>
+<span class="k">resource</span> <span class="s">"aws_security_group_rule"</span> <span class="s">"a_to_b"</span> <span class="o">{</span>
+  type                     <span class="o">=</span> <span class="s">"ingress"</span>
+  source_security_group_id <span class="o">=</span> <span class="n">aws_security_group</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">id</span>
+  security_group_id        <span class="o">=</span> <span class="n">aws_security_group</span><span class="o">.</span><span class="n">b</span><span class="o">.</span><span class="n">id</span>
+<span class="o">}</span></pre>
+      </div>
+    </div>
+
+    <div class="card" style="border-top: 3px solid var(--orange);">
+      <h3><span class="icon-badge orange">📉</span> Trap 2: State Drift</h3>
+      <p><strong>Symptom:</strong> Resources exist in the cloud but not in state, or vice versa. Plan shows unexpected changes.</p>
+      <p style="margin-top:10px;">Occurs when humans manually modify cloud resources (console changes, emergency hotfixes) without updating Terraform configuration. This is the most dangerous operational failure mode.</p>
+      <h4>Diagnosis & Remediation</h4>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-filename">drift_commands.sh</span><span class="code-lang bash">bash</span></div>
+        <pre style="font-size:12.5px;"><span class="c"># 1. Detect drift (refresh from real APIs)</span>
+terraform plan -refresh-only
+
+<span class="c"># 2. If resource exists in cloud but not state:</span>
+terraform import aws_s3_bucket.my_bucket my-bucket-name
+
+<span class="c"># 3. If resource in state but deleted in cloud:</span>
+terraform state rm aws_s3_bucket.my_bucket
+
+<span class="c"># 4. If resource config drifted:</span>
+terraform apply -refresh-only <span class="c"># accept real state</span>
+
+<span class="c"># 5. View raw state for investigation:</span>
+terraform state list
+terraform state show aws_s3_bucket.my_bucket</pre>
+      </div>
+    </div>
+
+    <div class="card" style="border-top: 3px solid var(--purple);">
+      <h3><span class="icon-badge purple">🔒</span> Trap 3: State Lock Stuck</h3>
+      <p><strong>Symptom:</strong> <code>Error acquiring the state lock: ConditionalCheckFailedException</code></p>
+      <p style="margin-top:10px;">Occurs when a previous Terraform process was killed mid-apply (Ctrl+C, CI timeout, network loss) and failed to release the DynamoDB lock. The state is safe but no one can apply.</p>
+      <div class="code-wrap" style="margin-top:12px;">
+        <div class="code-header"><span class="code-filename">unlock.sh</span><span class="code-lang bash">bash</span></div>
+        <pre style="font-size:12.5px;"><span class="c"># Get lock ID from error message, then:</span>
+terraform force-unlock &lt;LOCK_ID&gt;
+
+<span class="c"># Or directly in DynamoDB (emergency):</span>
+aws dynamodb delete-item \
+  --table-name terraform-state-locks \
+  --key '{"LockID": {"S": "path/to/state"}}'
+
+<span class="c"># ⚠️ Verify no other process is running first!</span></pre>
+      </div>
+    </div>
+
+    <div class="card" style="border-top: 3px solid var(--blue);">
+      <h3><span class="icon-badge blue">🔄</span> Trap 4: Resource Replace on Change</h3>
+      <p><strong>Symptom:</strong> Plan shows <code>-/+ destroy and then create replacement</code> for an in-place change you expected.</p>
+      <p style="margin-top:10px;">Some resource attributes are "ForceNew" — changing them requires destroying the old resource and creating a new one (e.g., changing an EC2 instance's AMI ID or an RDS engine version requires replacement). This can cause production downtime.</p>
+      <div class="code-wrap" style="margin-top:12px;">
+        <div class="code-header"><span class="code-filename">lifecycle_trick.tf</span><span class="code-lang hcl">HCL</span></div>
+        <pre style="font-size:12.5px;"><span class="k">resource</span> <span class="s">"aws_instance"</span> <span class="s">"web"</span> <span class="o">{</span>
+  ami           <span class="o">=</span> <span class="k">var</span><span class="o">.</span><span class="n">ami_id</span>
+  instance_type <span class="o">=</span> <span class="s">"t3.medium"</span>
+
+  <span class="c"># Create new instance before destroying old</span>
+  <span class="k">lifecycle</span> <span class="o">{</span>
+    create_before_destroy <span class="o">=</span> <span class="v">true</span>
+  <span class="o">}</span>
+<span class="o">}</span></pre>
+      </div>
+      <p style="font-size:14.5px;">Use <code>create_before_destroy = true</code> for zero-downtime replacements. Combine with a load balancer to drain traffic from the old instance before destruction.</p>
+    </div>
+  </div>
+
+  <!-- TF_LOG -->
+  <div class="card" style="margin-bottom:24px;">
+    <h3><span class="icon-badge blue">🔍</span> Debugging with TF_LOG</h3>
+    <p>Terraform's <code>TF_LOG</code> environment variable enables detailed logging at multiple verbosity levels. This is your most powerful debugging tool for provider errors, API rate limits, and network issues.</p>
+
+    <div class="grid-2 mt-24">
+      <div>
+        <h4>Log Levels (ascending verbosity)</h4>
+        <div style="overflow-x:auto;">
+          <table class="compare-table" style="margin-top:12px;">
+            <thead>
+              <tr><th>Level</th><th>Contents</th><th>Use Case</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>ERROR</code></td><td>Fatal errors only</td><td>Production alerting</td></tr>
+              <tr><td><code>WARN</code></td><td>Warnings + errors</td><td>Deprecation notices</td></tr>
+              <tr><td><code>INFO</code></td><td>High-level flow</td><td>General debugging</td></tr>
+              <tr><td><code>DEBUG</code></td><td>All operations</td><td>Provider API calls</td></tr>
+              <tr><td><code>TRACE</code></td><td>Everything (gRPC)</td><td>Provider internals</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h4>Debug Commands</h4>
+        <div class="code-wrap" style="margin-top:12px;">
+          <div class="code-header"><span class="code-filename">debug.sh</span><span class="code-lang bash">bash</span></div>
+          <pre style="font-size:12.5px;"><span class="c"># Full debug to file (TRACE = everything)</span>
+<span class="k">export</span> <span class="n">TF_LOG</span><span class="o">=</span>TRACE
+<span class="k">export</span> <span class="n">TF_LOG_PATH</span><span class="o">=</span><span class="s">./terraform.log</span>
+terraform apply
+
+<span class="c"># Debug only the provider (not core)</span>
+<span class="k">export</span> <span class="n">TF_LOG_PROVIDER</span><span class="o">=</span>DEBUG
+
+<span class="c"># See exact AWS API calls made:</span>
+<span class="k">export</span> <span class="n">TF_LOG</span><span class="o">=</span>TRACE <span class="o">|</span> grep <span class="s">"RequestURL"</span>
+
+<span class="c"># Validate config without cloud calls:</span>
+terraform validate
+
+<span class="c"># Plan with detailed resource reason:</span>
+terraform plan -out=p.tfplan
+terraform show -json p.tfplan <span class="o">|</span> jq \
+  <span class="s">'.resource_changes[]
+   | select(.change.actions[]
+     == "delete")'</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trap Summary -->
+  <div class="card">
+    <h3><span class="icon-badge orange">📋</span> Terraform Traps Quick Reference</h3>
+    <div style="overflow-x:auto;margin-top:16px;">
+      <table class="compare-table">
+        <thead>
+          <tr><th>Trap</th><th>Root Cause</th><th>Immediate Command</th><th>Prevention</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cycle Error</strong></td>
+            <td>Circular resource references in DAG</td>
+            <td><code>terraform graph | dot -Tsvg</code> to visualize</td>
+            <td>Use <code>_rule</code> resources to break cycles</td>
+          </tr>
+          <tr>
+            <td><strong>State Drift</strong></td>
+            <td>Manual cloud console changes</td>
+            <td><code>terraform plan -refresh-only</code></td>
+            <td>Nightly drift detection CI job</td>
+          </tr>
+          <tr>
+            <td><strong>Stuck Lock</strong></td>
+            <td>Killed mid-apply process</td>
+            <td><code>terraform force-unlock &lt;ID&gt;</code></td>
+            <td>Use CI with proper timeout handling</td>
+          </tr>
+          <tr>
+            <td><strong>Force Replace</strong></td>
+            <td>Immutable attribute changed</td>
+            <td><code>terraform plan</code> to preview</td>
+            <td><code>lifecycle { create_before_destroy }</code></td>
+          </tr>
+          <tr>
+            <td><strong>Provider Timeout</strong></td>
+            <td>Cloud API slow / rate limited</td>
+            <td><code>TF_LOG=DEBUG terraform apply</code></td>
+            <td>Set <code>timeouts</code> block in resource</td>
+          </tr>
+          <tr>
+            <td><strong>State Corruption</strong></td>
+            <td>Concurrent applies or manual edits</td>
+            <td>Restore from S3 versioned backup</td>
+            <td>Always use remote state + locking</td>
+          </tr>
+          <tr>
+            <td><strong>Variable Leakage</strong></td>
+            <td>Sensitive values printed in logs</td>
+            <td>Check <code>sensitive = true</code> flags</td>
+            <td>Mark all secrets as <code>sensitive</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ──────────────────────────────────────────
+     REFERENCES
+────────────────────────────────────────── -->
+<section class="section" id="refs" style="background: var(--bg-alt);">
+<div class="container">
+  <div class="section-header">
+    <span class="part-badge blue">References</span>
+    <h2>Sources & Further Reading</h2>
+    <p>All information in this guide is grounded in official documentation, academic research, and industry publications. The following references are cited throughout.</p>
+  </div>
+
+  <div class="ref-list">
+    <div class="ref-item">
+      <div class="ref-num">1</div>
+      <div>
+        <a href="https://developer.hashicorp.com/terraform/docs" target="_blank">HashiCorp Terraform Official Documentation</a>
+        <span>— Comprehensive reference for all Terraform commands, configuration, backends, and providers. Primary source for lifecycle mechanics, state management, and plugin architecture.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">2</div>
+      <div>
+        <a href="https://developer.hashicorp.com/terraform/internals/graph" target="_blank">Terraform Internals: Resource Graph</a>
+        <span>— Official deep-dive into the DAG engine, topological sort implementation, and parallel walk algorithm.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">3</div>
+      <div>
+        <a href="https://www.terraform.io/language/state" target="_blank">Terraform State: Purpose of Terraform State</a>
+        <span>— HashiCorp's official explanation of why state is required, what it contains, and how it maps resources to real infrastructure.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">4</div>
+      <div>
+        <a href="https://github.com/hashicorp/terraform/blob/main/CHANGELOG.md" target="_blank">Terraform GitHub — Historical Changelog since v0.1 (July 2014)</a>
+        <span>— Primary source for the historical evolution of Terraform from its initial release through the plugin protocol changes.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">5</div>
+      <div>
+        <a href="https://github.com/gruntwork-io/terragrunt" target="_blank">Terragrunt by Gruntwork</a>
+        <span>— Official Terragrunt documentation covering DRY backends, run-all operations, and cross-module dependencies.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">6</div>
+      <div>
+        <a href="https://www.runatlantis.io/docs/" target="_blank">Atlantis: Terraform Pull Request Automation</a>
+        <span>— Documentation for the GitOps workflow tool that automates plan/apply on pull requests.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">7</div>
+      <div>
+        <a href="https://developer.hashicorp.com/terraform/plugin/framework" target="_blank">Terraform Plugin Framework (gRPC Protocol)</a>
+        <span>— Technical specification for how providers implement the gRPC server interface and communicate with Terraform Core.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">8</div>
+      <div>
+        <a href="https://registry.terraform.io/providers/hashicorp/aws/latest/docs" target="_blank">AWS Provider Documentation (registry.terraform.io)</a>
+        <span>— Complete reference for all AWS resources, data sources, and provider configuration used in the code examples.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">9</div>
+      <div>
+        <a href="https://docs.bridgecrew.io/docs/checkov-overview" target="_blank">Checkov — Infrastructure as Code Security Scanning</a>
+        <span>— Tool for static analysis of Terraform code to detect security misconfigurations before apply.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">10</div>
+      <div>
+        <a href="https://developer.hashicorp.com/vault/docs/secrets" target="_blank">HashiCorp Vault: Secrets Engines</a>
+        <span>— Official documentation for integrating Vault dynamic secrets with Terraform for database credential injection.</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">11</div>
+      <div>
+        <a href="https://opentofu.org/docs/" target="_blank">OpenTofu Documentation (Terraform Fork)</a>
+        <span>— Community-maintained fork of Terraform under the Linux Foundation, providing insight into the open-source Terraform codebase and community direction post-BSL license change (2023).</span>
+      </div>
+    </div>
+    <div class="ref-item">
+      <div class="ref-num">12</div>
+      <div>
+        <a href="https://docs.github.com/en/actions/security-guides/using-openid-connect-with-reusable-workflows" target="_blank">GitHub Actions OIDC for AWS Authentication</a>
+        <span>— Recommended approach for authenticating GitHub Actions to AWS without long-lived access keys using OIDC federation.</span>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>
+      <strong>Terraform Deep Dive</strong> · Principal DevOps Architect's Technical Reference<br/>
+      Built with accuracy and rigor. All code examples follow Terraform 1.9+ HCL syntax.<br/>
+      <span style="font-size:12px;margin-top:8px;display:block;">For learning and reference purposes. Always review code for your specific security and compliance requirements.</span>
+    </p>
+  </div>
+</footer>
+
+<!-- Back to top -->
+<button id="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
+
+<script>
+  // Progress bar
+  const bar = document.getElementById('progress-bar');
+  const backTop = document.getElementById('back-top');
+  window.addEventListener('scroll', () => {
+    const scrolled = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+    bar.style.width = scrolled + '%';
+    if (window.scrollY > 400) {
+      backTop.classList.add('visible');
+    } else {
+      backTop.classList.remove('visible');
+    }
+  });
+
+  // Active nav link highlighting
+  const sections = document.querySelectorAll('section[id]');
+  const navItems = document.querySelectorAll('.nav-item');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const active = document.querySelector(`.nav-item[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // Fade-in on scroll
+  const fadeEls = document.querySelectorAll('.fade-in');
+  const fadeObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.style.opacity = 1; }
+    });
+  }, { threshold: 0.1 });
+  fadeEls.forEach(el => fadeObserver.observe(el));
+</script>
+</body>
+</html>

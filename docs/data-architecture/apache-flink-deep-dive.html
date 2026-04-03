@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apache Flink — Deep-Dive Technical Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Fraunces:ital,wght@0,300;0,600;0,700;1,300;1,600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f0f4fa;
+    --surface:   #ffffff;
+    --border:    #e2e8f3;
+    --blue:      #3b82f6;
+    --blue-light:#eff6ff;
+    --blue-mid:  #bfdbfe;
+    --orange:    #f97316;
+    --orange-light:#fff7ed;
+    --orange-mid:#fed7aa;
+    --purple:    #8b5cf6;
+    --purple-light:#f5f3ff;
+    --purple-mid:#ddd6fe;
+    --green:     #10b981;
+    --green-light:#ecfdf5;
+    --green-mid: #a7f3d0;
+    --red:       #ef4444;
+    --red-light: #fef2f2;
+    --text:      #1e293b;
+    --text-2:    #475569;
+    --text-3:    #94a3b8;
+    --code-bg:   #1e293b;
+    --radius:    14px;
+    --radius-sm: 8px;
+    --shadow:    0 2px 16px rgba(59,130,246,.09), 0 1px 4px rgba(0,0,0,.05);
+    --shadow-lg: 0 8px 40px rgba(59,130,246,.13), 0 2px 8px rgba(0,0,0,.07);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.75;
+    min-height: 100vh;
+  }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    grid-template-areas: "nav main";
+    min-height: 100vh;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  /* ── NAV ── */
+  nav {
+    grid-area: nav;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1.5px solid var(--border);
+    padding: 32px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 100;
+  }
+  nav::-webkit-scrollbar { width: 4px; }
+  nav::-webkit-scrollbar-thumb { background: var(--blue-mid); border-radius: 4px; }
+
+  .nav-logo {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Fraunces', serif;
+    font-weight: 700; font-size: 18px; color: var(--blue);
+    text-decoration: none;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1.5px solid var(--border);
+  }
+  .nav-logo svg { flex-shrink: 0; }
+
+  .nav-section-title {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--text-3);
+    margin: 14px 0 4px 8px;
+  }
+
+  nav a {
+    display: block; font-size: 13.5px; font-weight: 500;
+    color: var(--text-2); text-decoration: none;
+    padding: 7px 12px; border-radius: var(--radius-sm);
+    transition: all .18s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  nav a:hover { background: var(--blue-light); color: var(--blue); }
+  nav a.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+
+  /* ── MAIN ── */
+  main {
+    grid-area: main;
+    padding: 56px 52px;
+    max-width: 1060px;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 50%, #1d4ed8 100%);
+    border-radius: 20px;
+    padding: 52px 48px;
+    margin-bottom: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+  .hero-tag {
+    display: inline-block; background: rgba(255,255,255,.18);
+    color: #fff; font-size: 12px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; border-radius: 50px; padding: 5px 14px;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'Fraunces', serif; font-size: 44px; font-weight: 700;
+    color: #fff; line-height: 1.15; margin-bottom: 18px;
+  }
+  .hero h1 span { font-style: italic; color: #93c5fd; }
+  .hero p { font-size: 17px; color: rgba(255,255,255,.82); max-width: 600px; margin-bottom: 32px; }
+  .hero-meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  .hero-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,.12); border-radius: 8px;
+    padding: 8px 14px; color: rgba(255,255,255,.9); font-size: 13.5px;
+  }
+  .hero-badge svg { width: 16px; height: 16px; }
+
+  /* ── SECTION ── */
+  .section {
+    margin-bottom: 72px;
+    scroll-margin-top: 32px;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+  }
+  .section-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-icon.blue  { background: var(--blue-light); color: var(--blue); }
+  .section-icon.orange{ background: var(--orange-light); color: var(--orange); }
+  .section-icon.purple{ background: var(--purple-light); color: var(--purple); }
+  .section-icon.green { background: var(--green-light); color: var(--green); }
+  .section-icon.red   { background: var(--red-light); color: var(--red); }
+
+  .section-title {
+    font-family: 'Fraunces', serif; font-size: 28px; font-weight: 600;
+    color: var(--text); line-height: 1.2;
+  }
+  .section-num { font-size: 13px; font-weight: 600; color: var(--text-3); letter-spacing: .06em; }
+
+  h3 {
+    font-family: 'Fraunces', serif; font-size: 21px; font-weight: 600;
+    color: var(--text); margin: 36px 0 14px;
+  }
+
+  p { color: var(--text-2); margin-bottom: 14px; font-size: 16px; line-height: 1.78; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    transition: box-shadow .22s, transform .22s;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+
+  .card-title {
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .card-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 50px; padding: 3px 11px; font-size: 12.5px; font-weight: 600;
+    margin-right: 6px; margin-bottom: 6px;
+  }
+  .pill.blue { background: var(--blue-light); color: var(--blue); }
+  .pill.orange { background: var(--orange-light); color: var(--orange); }
+  .pill.green { background: var(--green-light); color: var(--green); }
+  .pill.purple { background: var(--purple-light); color: var(--purple); }
+  .pill.red { background: var(--red-light); color: var(--red); }
+
+  /* ── CODE ── */
+  pre {
+    background: var(--code-bg);
+    border-radius: var(--radius-sm);
+    padding: 20px 22px;
+    overflow-x: auto;
+    margin: 18px 0 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    box-shadow: 0 4px 20px rgba(0,0,0,.2);
+    position: relative;
+  }
+  pre::before {
+    content: attr(data-lang);
+    position: absolute; top: 10px; right: 16px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    color: #475569; text-transform: uppercase; font-family: 'DM Sans', sans-serif;
+  }
+  code { font-family: 'JetBrains Mono', monospace; font-size: .88em; }
+  pre code { color: #e2e8f0; }
+  .kw { color: #93c5fd; }
+  .str { color: #86efac; }
+  .cm { color: #64748b; font-style: italic; }
+  .fn { color: #fde68a; }
+  .ty { color: #c4b5fd; }
+  .num { color: #fb923c; }
+
+  /* inline code */
+  p code, li code {
+    background: var(--blue-light); color: var(--blue);
+    padding: 2px 7px; border-radius: 4px; font-size: .84em;
+  }
+
+  /* ── DIAGRAMS ── */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    box-shadow: var(--shadow);
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .diagram-title {
+    font-size: 13px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-3);
+    margin-bottom: 20px; text-align: center;
+  }
+
+  /* ── TABLE ── */
+  .tbl-wrap {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1.5px solid var(--border); overflow: hidden;
+    box-shadow: var(--shadow); margin: 20px 0 28px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: var(--blue); }
+  thead th {
+    color: #fff; font-size: 13px; font-weight: 600; letter-spacing: .04em;
+    padding: 14px 18px; text-align: left;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--blue-light); }
+  tbody td { padding: 13px 18px; font-size: 14.5px; color: var(--text-2); vertical-align: top; }
+  tbody td:first-child { font-weight: 600; color: var(--text); }
+  td .pill { margin: 0; }
+
+  /* ── CALLOUT ── */
+  .callout {
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin: 16px 0 24px;
+    display: flex; gap: 14px; align-items: flex-start;
+    border-left: 4px solid;
+  }
+  .callout.blue { background: var(--blue-light); border-color: var(--blue); }
+  .callout.orange { background: var(--orange-light); border-color: var(--orange); }
+  .callout.green { background: var(--green-light); border-color: var(--green); }
+  .callout.purple { background: var(--purple-light); border-color: var(--purple); }
+  .callout-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .callout p { margin: 0; font-size: 14.5px; line-height: 1.7; }
+  .callout strong { color: var(--text); }
+
+  /* ── STEPS ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    transition: all .2s;
+  }
+  .step:hover { box-shadow: var(--shadow); transform: translateX(4px); }
+  .step-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .step-content h4 { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; }
+  .step-content p { font-size: 14.5px; margin: 0; }
+
+  /* ── FLOW ARROWS ── */
+  .flow-arrow {
+    text-align: center; color: var(--text-3); font-size: 22px;
+    margin: 4px 0; line-height: 1;
+  }
+
+  /* ── COMPARISON SIDE BY SIDE ── */
+  .compare-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; margin: 20px 0 28px;
+  }
+  .compare-card {
+    border-radius: var(--radius); padding: 20px 22px;
+    border: 2px solid;
+  }
+  .compare-card.flink { border-color: var(--blue); background: var(--blue-light); }
+  .compare-card.spark { border-color: var(--orange); background: var(--orange-light); }
+  .compare-card h4 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+  .compare-card.flink h4 { color: var(--blue); }
+  .compare-card.spark h4 { color: var(--orange); }
+  .compare-card ul { padding-left: 18px; }
+  .compare-card li { font-size: 14px; color: var(--text-2); margin-bottom: 6px; line-height: 1.6; }
+
+  /* ── REFERENCES ── */
+  .refs { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .ref {
+    display: flex; gap: 14px; padding: 14px 18px;
+    background: var(--surface); border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    font-size: 13.5px; align-items: flex-start;
+  }
+  .ref-num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--blue-light);
+    color: var(--blue); font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ref a { color: var(--blue); text-decoration: none; word-break: break-all; }
+  .ref a:hover { text-decoration: underline; }
+  .ref-meta { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
+
+  ul.list { padding-left: 20px; margin-bottom: 14px; }
+  ul.list li { font-size: 16px; color: var(--text-2); margin-bottom: 6px; line-height: 1.7; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 1024px) {
+    .layout { grid-template-columns: 1fr; grid-template-areas: "main"; }
+    nav { display: none; }
+    main { padding: 32px 22px; max-width: 100%; }
+    .card-grid, .card-grid-3, .compare-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 32px; }
+    .hero { padding: 36px 28px; }
+  }
+  @media (max-width: 600px) {
+    main { padding: 20px 16px; }
+  }
+
+  /* highlight */
+  mark { background: var(--blue-mid); color: var(--text); border-radius: 3px; padding: 0 4px; }
+
+  hr { border: none; border-top: 1.5px solid var(--border); margin: 40px 0; }
+
+  .metric-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 12px; margin: 16px 0 24px; }
+  .metric {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px 18px; text-align: center;
+    transition: all .2s;
+  }
+  .metric:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+  .metric-val { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .metric-lbl { font-size: 12px; font-weight: 600; color: var(--text-3); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ───────────────── SIDEBAR ───────────────── -->
+<nav>
+  <a href="#top" class="nav-logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="8" fill="#3b82f6"/><path d="M8 14l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Apache Flink
+  </a>
+  <span class="nav-section-title">Architecture</span>
+  <a href="#runtime">Runtime Stack</a>
+  <a href="#dataflow">Dataflow Graph</a>
+  <a href="#state">State Backends</a>
+
+  <span class="nav-section-title">Consistency</span>
+  <a href="#time">Event &amp; Processing Time</a>
+  <a href="#watermarks">Watermarks</a>
+  <a href="#exactly-once">Exactly-Once &amp; 2PC</a>
+
+  <span class="nav-section-title">Comparison</span>
+  <a href="#flink-vs-spark">Flink vs Spark Streaming</a>
+  <a href="#tradeoffs">Latency vs Throughput</a>
+
+  <span class="nav-section-title">Patterns</span>
+  <a href="#usecases">Best Use Cases</a>
+  <a href="#kappa">Kappa Architecture</a>
+
+  <span class="nav-section-title">Performance</span>
+  <a href="#backpressure">Backpressure &amp; Flow Control</a>
+  <a href="#skew">Data Skew Strategies</a>
+
+  <span class="nav-section-title">Meta</span>
+  <a href="#references">References</a>
+</nav>
+
+<!-- ───────────────── MAIN ───────────────── -->
+<main id="top">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-tag">Production Engineering Deep-Dive</div>
+    <h1>Apache <span>Flink</span> Architecture<br>Technical Analysis</h1>
+    <p>A comprehensive reference covering runtime internals, consistency models, performance tuning, and architectural trade-offs for production streaming stacks.</p>
+    <div class="hero-meta">
+      <div class="hero-badge">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM8 4a.75.75 0 01.75.75v3.5h2a.75.75 0 010 1.5h-2.75A.75.75 0 017.25 9V4.75A.75.75 0 018 4z"/></svg>
+        Flink 1.19 / 2.0 — 2025
+      </div>
+      <div class="hero-badge">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+        5 Technical Sections
+      </div>
+      <div class="hero-badge">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M1.5 1.75a.75.75 0 000 1.5h1.25V11a2 2 0 002 2h8.25a.75.75 0 000-1.5H4.75A.5.5 0 014.25 11V3.25h9.5a.75.75 0 000-1.5h-12zm2 4.5a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5a.75.75 0 01-.75-.75zm0 3a.75.75 0 01.75-.75h5a.75.75 0 010 1.5h-5a.75.75 0 01-.75-.75z"/></svg>
+        Production-Level Focus
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SECTION 1: CORE ARCHITECTURE                  -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="runtime">
+    <div class="section-header">
+      <div class="section-icon blue">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div>
+        <div class="section-num">Section 01</div>
+        <div class="section-title">Core Architecture &amp; Internals</div>
+      </div>
+    </div>
+
+    <!-- Runtime Stack -->
+    <h3 id="runtime">1.1 — Runtime Stack: JobManager, TaskManager &amp; Slot Allocation</h3>
+    <p>The Flink runtime is a two-tier distributed system: a single (HA-enabled) <strong>JobManager</strong> acts as the cluster master, while one or more <strong>TaskManagers</strong> execute the actual stream processing workloads. A lightweight <strong>Client</strong> translates the user program into a serialized <code>JobGraph</code> and submits it — it is not part of the runtime execution path.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Flink Runtime Architecture — Process Interaction Model</div>
+      <svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:380px">
+        <defs>
+          <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+          </marker>
+          <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+          </marker>
+        </defs>
+        <!-- Client -->
+        <rect x="20" y="140" width="130" height="70" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="85" y="172" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#1e40af">Client</text>
+        <text x="85" y="190" text-anchor="middle" font-family="DM Sans" font-size="11" fill="#64748b">JobGraph build</text>
+
+        <!-- Arrow Client → JM -->
+        <line x1="150" y1="175" x2="195" y2="175" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+        <text x="172" y="168" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#94a3b8">submit</text>
+
+        <!-- JobManager -->
+        <rect x="196" y="60" width="210" height="230" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="301" y="85" text-anchor="middle" font-family="DM Sans" font-size="14" font-weight="700" fill="#1e293b">JobManager</text>
+
+        <!-- Sub-components -->
+        <rect x="214" y="96" width="174" height="44" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+        <text x="301" y="115" text-anchor="middle" font-family="DM Sans" font-size="12" font-weight="600" fill="#1d4ed8">ResourceManager</text>
+        <text x="301" y="131" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">slot de/allocation</text>
+
+        <rect x="214" y="148" width="174" height="44" rx="7" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="301" y="167" text-anchor="middle" font-family="DM Sans" font-size="12" font-weight="600" fill="#047857">Dispatcher</text>
+        <text x="301" y="183" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">REST interface + WebUI</text>
+
+        <rect x="214" y="200" width="174" height="44" rx="7" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+        <text x="301" y="219" text-anchor="middle" font-family="DM Sans" font-size="12" font-weight="600" fill="#c2410c">JobMaster</text>
+        <text x="301" y="235" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">per-job scheduling + CP coord.</text>
+
+        <!-- Arrow JM → TM1 -->
+        <line x1="406" y1="175" x2="460" y2="140" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-blue)"/>
+        <text x="435" y="150" font-family="DM Sans" font-size="10" fill="#3b82f6">schedule tasks</text>
+
+        <!-- Arrow JM → TM2 -->
+        <line x1="406" y1="185" x2="460" y2="270" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-blue)"/>
+
+        <!-- TaskManager 1 -->
+        <rect x="462" y="50" width="330" height="170" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="627" y="76" text-anchor="middle" font-family="DM Sans" font-size="14" font-weight="700" fill="#1e293b">TaskManager 1 (JVM Process)</text>
+
+        <!-- Slots TM1 -->
+        <rect x="478" y="88" width="90" height="58" rx="6" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+        <text x="523" y="107" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#1d4ed8">Slot 0</text>
+        <text x="523" y="124" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Op chain A→B</text>
+        <text x="523" y="138" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Heap: 1/3 TM</text>
+
+        <rect x="580" y="88" width="90" height="58" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="625" y="107" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#047857">Slot 1</text>
+        <text x="625" y="124" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Op chain C</text>
+        <text x="625" y="138" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Heap: 1/3 TM</text>
+
+        <rect x="682" y="88" width="90" height="58" rx="6" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+        <text x="727" y="107" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#c2410c">Slot 2</text>
+        <text x="727" y="124" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">FREE</text>
+        <text x="727" y="138" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Heap: 1/3 TM</text>
+
+        <rect x="478" y="156" width="296" height="50" rx="6" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
+        <text x="626" y="178" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#6d28d9">Network buffers (Netty) + Off-Heap Managed Memory</text>
+        <text x="626" y="196" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Credit-based flow control between slots</text>
+
+        <!-- TaskManager 2 -->
+        <rect x="462" y="240" width="330" height="120" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="627" y="264" text-anchor="middle" font-family="DM Sans" font-size="14" font-weight="700" fill="#1e293b">TaskManager 2 (JVM Process)</text>
+        <rect x="478" y="276" width="90" height="52" rx="6" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+        <text x="523" y="298" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#1d4ed8">Slot 0</text>
+        <text x="523" y="315" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Op chain D→Sink</text>
+
+        <rect x="580" y="276" width="90" height="52" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="625" y="298" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#047857">Slot 1</text>
+        <text x="625" y="315" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#64748b">Op chain D→Sink</text>
+
+        <!-- Cross-TM Netty arrow -->
+        <line x1="568" y1="146" x2="568" y2="276" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+        <text x="552" y="215" font-family="DM Sans" font-size="9.5" fill="#8b5cf6" transform="rotate(-90,552,215)">Netty TCP</text>
+      </svg>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title" style="color:var(--blue)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          JobManager Internals
+        </div>
+        <p style="font-size:14.5px;margin:0">The JM contains three components: <strong>ResourceManager</strong> (slot lifecycle), <strong>Dispatcher</strong> (REST API + WebUI, one-to-many JobMasters), and <strong>JobMaster</strong> (one per job: schedules ExecutionGraph, coordinates checkpoints, handles failures). In HA mode, multiple JMs run with leader election via ZooKeeper or Kubernetes.</p>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--green)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6H4V4h16v2zm-2 2H6v2h12V8zm2 4H4v2h16v-2zm-2 4H6v2h12v-2z"/></svg>
+          TaskManager &amp; Slot Model
+        </div>
+        <p style="font-size:14.5px;margin:0">Each TM is a JVM process executing one or more <strong>task slots</strong>. A slot is the <em>minimum unit of resource scheduling</em>. Slots share the TM's managed memory equally but <strong>do not provide CPU isolation</strong>. By default, slots within the same TM share a <code>SlotSharingGroup</code>, allowing different operator subtasks to co-locate — maximising utilisation without over-provisioning.</p>
+      </div>
+    </div>
+
+    <div class="callout blue">
+      <span class="callout-icon">💡</span>
+      <p><strong>Production Insight:</strong> Set <code>taskmanager.numberOfTaskSlots</code> to match physical CPU cores. With fine-grained resource management (Flink 1.14+), you can request fractional slot profiles (e.g., 0.25 Core, 1 GB) per operator, eliminating wasteful uniform slot sizing for heterogeneous pipelines.</p>
+    </div>
+
+    <!-- Dataflow Graph -->
+    <h3 id="dataflow">1.2 — Dataflow Graph Transformation Pipeline</h3>
+    <p>Flink implements a four-stage compilation from user code to physical execution. Each stage applies progressively more physical reality — from logical semantics to actual parallelised tasks running on TaskManagers.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">StreamGraph → JobGraph → ExecutionGraph → Physical Tasks</div>
+      <svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:200px">
+        <defs>
+          <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+          </marker>
+        </defs>
+        <!-- Stage 1 -->
+        <rect x="10" y="40" width="158" height="110" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="89" y="66" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#1d4ed8">StreamGraph</text>
+        <text x="89" y="88" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• StreamNodes</text>
+        <text x="89" y="105" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• StreamEdges (DAG)</text>
+        <text x="89" y="122" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• DataStream API ops</text>
+        <text x="89" y="139" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• No chaining yet</text>
+
+        <!-- Arrow 1 -->
+        <line x1="168" y1="95" x2="202" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <text x="185" y="87" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#64748b">chain</text>
+
+        <!-- Stage 2 -->
+        <rect x="204" y="40" width="168" height="110" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+        <text x="288" y="66" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#047857">JobGraph</text>
+        <text x="288" y="88" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• JobVertex (chained ops)</text>
+        <text x="288" y="105" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• JobEdge (partitions)</text>
+        <text x="288" y="122" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• Parallelism set</text>
+        <text x="288" y="139" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• SlotSharingGroups</text>
+
+        <!-- Arrow 2 -->
+        <line x1="372" y1="95" x2="406" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <text x="389" y="87" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#64748b">expand</text>
+
+        <!-- Stage 3 -->
+        <rect x="408" y="40" width="178" height="110" rx="10" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="497" y="66" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#c2410c">ExecutionGraph</text>
+        <text x="497" y="88" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• ExecutionVertex ×p</text>
+        <text x="497" y="105" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• IntermResultPartition</text>
+        <text x="497" y="122" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• CheckpointCoordinator</text>
+        <text x="497" y="139" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• ExecutionAttemptIDs</text>
+
+        <!-- Arrow 3 -->
+        <line x1="586" y1="95" x2="620" y2="95" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr2)"/>
+        <text x="603" y="87" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#64748b">deploy</text>
+
+        <!-- Stage 4 -->
+        <rect x="622" y="40" width="164" height="110" rx="10" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+        <text x="704" y="66" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#6d28d9">Physical Tasks</text>
+        <text x="704" y="88" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• Task (StreamTask)</text>
+        <text x="704" y="105" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• invoke() loop</text>
+        <text x="704" y="122" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• Assigned to Slots</text>
+        <text x="704" y="139" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#475569">• Netty I/O threads</text>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" style="background:var(--blue-light);color:var(--blue)">1</div>
+        <div class="step-content">
+          <h4>StreamGraph (Client-side)</h4>
+          <p>Built from the DataStream API transformation chain. Each <code>DataStream.map()</code>, <code>.keyBy()</code>, etc. creates a <code>StreamNode</code>. Directed edges (<code>StreamEdge</code>) capture data flow. The StreamGraph is a <em>logical plan</em> — no physical resources assigned yet.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--green-light);color:var(--green)">2</div>
+        <div class="step-content">
+          <h4>JobGraph (Operator Chaining — Client-side optimisation)</h4>
+          <p>The <code>StreamingJobGraphGenerator</code> traverses the DAG breadth-first and identifies chainable operators (same parallelism, forwarding partitioner, no shuffle boundary). Chainable operators are merged into a single <code>JobVertex</code>, running in <strong>one thread</strong> with no serialization overhead between them. The result is submitted to the Dispatcher as a serialized blob with attached JARs.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--orange-light);color:var(--orange)">3</div>
+        <div class="step-content">
+          <h4>ExecutionGraph (JobManager — parallel expansion)</h4>
+          <p>The JobMaster inflates the JobGraph into a <em>physical</em> DAG. Each <code>JobVertex</code> with parallelism <em>p</em> spawns <em>p</em> <code>ExecutionVertex</code> instances. An <code>operator with p=100</code> → 1 JobVertex, 100 ExecutionVertices. The <code>CheckpointCoordinator</code>, <code>KvStateLocationRegistry</code>, and failure recovery scaffolding are also initialised at this stage.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--purple-light);color:var(--purple)">4</div>
+        <div class="step-content">
+          <h4>Physical Tasks (TaskManager — runtime)</h4>
+          <p>The JobMaster maps each <code>ExecutionVertex</code> → <code>Execution</code> → deployed as a <code>Task</code> in a TM slot. The <code>Task.invoke()</code> method starts the operator loop. Each <code>Execution</code> has a unique <code>ExecutionAttemptID</code> to support retries and recovery across failure events.</p>
+        </div>
+      </div>
+    </div>
+
+    <pre data-lang="java"><code><span class="cm">// Client-side — DataStream API → StreamGraph → JobGraph</span>
+<span class="ty">StreamExecutionEnvironment</span> env = <span class="ty">StreamExecutionEnvironment</span>.<span class="fn">getExecutionEnvironment</span>();
+env.<span class="fn">setParallelism</span>(<span class="num">4</span>);
+
+<span class="ty">DataStream</span>&lt;<span class="ty">Order</span>&gt; orders = env
+    .<span class="fn">addSource</span>(<span class="kw">new</span> <span class="ty">FlinkKafkaConsumer</span>&lt;&gt;(<span class="str">"orders"</span>, schema, props))  <span class="cm">// StreamNode 1</span>
+    .<span class="fn">map</span>(<span class="ty">Order</span>::<span class="fn">enrich</span>)                                         <span class="cm">// chained → same JobVertex</span>
+    .<span class="fn">keyBy</span>(<span class="ty">Order</span>::<span class="fn">getCustomerId</span>)                               <span class="cm">// shuffle boundary → new JobVertex</span>
+    .<span class="fn">window</span>(<span class="ty">TumblingEventTimeWindows</span>.<span class="fn">of</span>(<span class="ty">Time</span>.<span class="fn">minutes</span>(<span class="num">5</span>)))
+    .<span class="fn">reduce</span>(<span class="ty">OrderAgg</span>::<span class="fn">merge</span>);                                   <span class="cm">// StreamNode 3</span>
+
+<span class="cm">// Calling execute() triggers: StreamGraph → JobGraph → submit to JobManager</span>
+env.<span class="fn">execute</span>(<span class="str">"Order Aggregation Pipeline"</span>);
+</code></pre>
+
+    <!-- State Backends -->
+    <h3 id="state">1.3 — State Backends: HashMapStateBackend vs. EmbeddedRocksDB</h3>
+    <p>Flink separates two orthogonal concerns: <em>in-flight state storage</em> (the State Backend) and <em>durable checkpoint storage</em> (the Checkpoint Storage). The former determines runtime access latency; the latter determines fault-tolerance durability.</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Property</th>
+          <th>HashMapStateBackend</th>
+          <th>EmbeddedRocksDBStateBackend</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Storage location</td><td>JVM heap (Java HashMap)</td><td>Off-heap RocksDB on local disk</td></tr>
+          <tr><td>Max state size</td><td>Limited by heap (GC pressure)</td><td>Limited by local disk (TBs possible)</td></tr>
+          <tr><td>Read/Write cost</td><td>Nanoseconds (direct object access)</td><td>µs–ms (serialise + RocksDB lookup)</td></tr>
+          <tr><td>Incremental CP</td><td><span class="pill red">No (full snapshots only)*</span></td><td><span class="pill green">Yes (SSTable diffs)</span></td></tr>
+          <tr><td>GC sensitivity</td><td><span class="pill red">High — objects on heap</span></td><td><span class="pill green">Low — off-heap native memory</span></td></tr>
+          <tr><td>Object reuse</td><td>Unsafe (direct refs)</td><td>Safe (serialise/deserialise)</td></tr>
+          <tr><td>Best for</td><td>Small state (&lt;100 MB), low-latency</td><td>Large stateful jobs, long windows, HA</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13px;color:var(--text-3)">* Flink 1.18+ introduces generalised incremental CP via the <em>Changelog State Backend</em> (DSTL), enabling incremental snapshots for HashMapStateBackend.</p>
+
+    <div class="callout green">
+      <span class="callout-icon">🔍</span>
+      <p><strong>RocksDB internals:</strong> State is stored in column families per Flink state descriptor. Keys are composite: <code>keyGroup | key | namespace</code> (serialised bytes). On incremental checkpoint, Flink leverages RocksDB's native checkpoint (hard-links to SSTables) to upload only new/changed SSTable files to durable storage (S3/HDFS), dramatically reducing checkpoint size for slowly-changing state.</p>
+    </div>
+
+    <h3>1.4 — Chandy-Lamport Variant: Asynchronous Barrier Snapshotting (ABS)</h3>
+    <p>Flink uses a variant of the classic Chandy-Lamport distributed snapshot algorithm, adapted for directed acyclic streaming topologies. The core innovation is the <strong>checkpoint barrier</strong> — a special control record injected into all source streams simultaneously by the <code>CheckpointCoordinator</code>.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">ABS Algorithm — Barrier Flow &amp; State Snapshot Phases</div>
+      <svg viewBox="0 0 780 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:240px">
+        <defs>
+          <marker id="arr3" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#64748b"/>
+          </marker>
+          <marker id="arr-g" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#10b981"/>
+          </marker>
+          <marker id="arr-r" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#ef4444"/>
+          </marker>
+        </defs>
+        <!-- CP Coordinator -->
+        <rect x="10" y="90" width="110" height="60" rx="8" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+        <text x="65" y="115" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#6d28d9">Checkpoint</text>
+        <text x="65" y="132" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#6d28d9">Coordinator</text>
+        <text x="65" y="148" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#94a3b8">(JobManager)</text>
+
+        <!-- Trigger arrows to sources -->
+        <line x1="120" y1="110" x2="185" y2="75" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arr3)"/>
+        <line x1="120" y1="130" x2="185" y2="165" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arr3)"/>
+        <text x="152" y="98" font-family="DM Sans" font-size="9" fill="#8b5cf6">trigger CP#N</text>
+
+        <!-- Source 1 -->
+        <rect x="187" y="50" width="80" height="50" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="227" y="71" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#1d4ed8">Source 1</text>
+        <text x="227" y="88" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#64748b">records offset →</text>
+
+        <!-- Source 2 -->
+        <rect x="187" y="140" width="80" height="50" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="227" y="161" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="600" fill="#1d4ed8">Source 2</text>
+        <text x="227" y="178" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#64748b">records offset →</text>
+
+        <!-- Barriers -->
+        <line x1="267" y1="75" x2="340" y2="108" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-g)"/>
+        <line x1="267" y1="165" x2="340" y2="132" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-g)"/>
+        <rect x="285" y="60" width="50" height="22" rx="4" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="310" y="75" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="700" fill="#047857">▶ B#N</text>
+        <rect x="285" y="158" width="50" height="22" rx="4" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="310" y="173" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="700" fill="#047857">▶ B#N</text>
+
+        <!-- Operator (alignment) -->
+        <rect x="342" y="80" width="120" height="80" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="402" y="103" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#c2410c">Operator</text>
+        <text x="402" y="119" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">ALIGN barriers from</text>
+        <text x="402" y="133" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">all inputs → snapshot</text>
+        <text x="402" y="149" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">state async ↗ S3</text>
+
+        <!-- State snapshot arrow -->
+        <line x1="462" y1="120" x2="540" y2="120" stroke="#f97316" stroke-width="1.5" marker-end="url(#arr3)"/>
+        <text x="501" y="113" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#f97316">async upload</text>
+
+        <!-- Storage -->
+        <rect x="542" y="94" width="96" height="52" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+        <text x="590" y="117" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#854d0e">S3 / HDFS</text>
+        <text x="590" y="133" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#64748b">state handles</text>
+
+        <!-- ACK arrow -->
+        <path d="M590 146 Q590 200 65 165" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr-r)"/>
+        <text x="340" y="200" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#ef4444">ACK(state_handle) → Coordinator → COMMIT</text>
+
+        <!-- Legend -->
+        <rect x="650" y="50" width="120" height="130" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="710" y="70" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="700" fill="#475569">LEGEND</text>
+        <line x1="660" y1="83" x2="695" y2="83" stroke="#10b981" stroke-width="2" stroke-dasharray="5,3"/>
+        <text x="700" y="87" font-family="DM Sans" font-size="9.5" fill="#475569">Barrier flow</text>
+        <line x1="660" y1="103" x2="695" y2="103" stroke="#f97316" stroke-width="1.5"/>
+        <text x="700" y="107" font-family="DM Sans" font-size="9.5" fill="#475569">State upload</text>
+        <line x1="660" y1="123" x2="695" y2="123" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="700" y="127" font-family="DM Sans" font-size="9.5" fill="#475569">ACK / Commit</text>
+        <line x1="660" y1="143" x2="695" y2="143" stroke="#8b5cf6" stroke-width="1.5"/>
+        <text x="700" y="147" font-family="DM Sans" font-size="9.5" fill="#475569">Trigger</text>
+        <text x="660" y="167" font-family="DM Sans" font-size="9" fill="#64748b">Sync phase: ms</text>
+        <text x="660" y="180" font-family="DM Sans" font-size="9" fill="#64748b">Async phase: bg thread</text>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" style="background:var(--purple-light);color:var(--purple)">1</div>
+        <div class="step-content">
+          <h4>Trigger</h4>
+          <p>CheckpointCoordinator sends a <code>triggerCheckpoint(cpId)</code> RPC to all source tasks. Sources record their input offsets (e.g., Kafka partition offsets) and inject barrier <code>B#N</code> into their output streams.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--green-light);color:var(--green)">2</div>
+        <div class="step-content">
+          <h4>Barrier Alignment (Aligned mode) / Unaligned Mode</h4>
+          <p>In <strong>aligned</strong> mode, an operator waits for barriers from <em>all</em> input channels before snapshotting. Records arriving after a barrier on channel X but before alignment are buffered. In <strong>unaligned</strong> mode (Flink 1.11+, closer to original Chandy-Lamport), in-flight records are included in the checkpoint state, eliminating alignment stall at the cost of larger checkpoint size.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--orange-light);color:var(--orange)">3</div>
+        <div class="step-content">
+          <h4>Async Snapshot</h4>
+          <p><strong>Synchronous phase:</strong> For HashMap backend — copy-on-write hash table snapshot (ms). For RocksDB — flush MemTable to disk, hard-link to SSTables (ms). Stream processing resumes. <strong>Asynchronous phase:</strong> Background thread uploads state to durable storage. Upload does not block processing.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--red-light);color:var(--red)">4</div>
+        <div class="step-content">
+          <h4>Commit</h4>
+          <p>Each operator sends an ACK with a <code>StateHandle</code> (pointer to durable state) to the Coordinator. Once all ACKs arrive, the Coordinator marks the checkpoint as complete. Transactional sinks then commit their pending writes (2PC commit phase).</p>
+        </div>
+      </div>
+    </div>
+
+    <pre data-lang="yaml"><code><span class="cm"># flink-conf.yaml — production checkpoint config</span>
+state.backend: <span class="str">rocksdb</span>
+state.backend.incremental: <span class="kw">true</span>
+state.checkpoints.dir: <span class="str">s3://prod-bucket/flink-checkpoints</span>
+execution.checkpointing.interval: <span class="num">60000</span>          <span class="cm"># 60s</span>
+execution.checkpointing.mode: <span class="ty">EXACTLY_ONCE</span>
+execution.checkpointing.timeout: <span class="num">300000</span>           <span class="cm"># 5min max</span>
+execution.checkpointing.min-pause: <span class="num">30000</span>
+state.backend.rocksdb.memory.managed: <span class="kw">true</span>
+taskmanager.memory.managed.fraction: <span class="num">0.4</span>          <span class="cm"># 40% for RocksDB</span>
+</code></pre>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SECTION 2: TIME & CONSISTENCY                 -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="time">
+    <div class="section-header">
+      <div class="section-icon orange">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div>
+        <div class="section-num">Section 02</div>
+        <div class="section-title">Time &amp; Consistency Models</div>
+      </div>
+    </div>
+
+    <h3 id="time">2.1 — Event Time vs. Processing Time</h3>
+    <p>Flink distinguishes three notions of time. Only <strong>Event Time</strong> provides deterministic, reproducible results regardless of processing delays, network jitter, or replay scenarios.</p>
+
+    <div class="card-grid">
+      <div class="card" style="border-left:4px solid var(--blue)">
+        <div class="card-title" style="color:var(--blue)">⏱ Processing Time</div>
+        <p style="font-size:14.5px;margin:0 0 10px">Uses the wall-clock of the machine processing the event. <strong>Lowest latency, non-deterministic.</strong> Two identical jobs may produce different results if they process data at different wall-clock times. Suitable for monitoring dashboards tolerant of imprecision.</p>
+        <span class="pill blue">Lowest latency</span><span class="pill red">Non-deterministic</span>
+      </div>
+      <div class="card" style="border-left:4px solid var(--green)">
+        <div class="card-title" style="color:var(--green)">📅 Event Time</div>
+        <p style="font-size:14.5px;margin:0 0 10px">Uses the timestamp embedded in the event payload (e.g., Kafka message timestamp or application-level field). <strong>Deterministic, reproducible, handles out-of-order events.</strong> Requires watermarks. Ideal for financial, IoT, fraud detection pipelines.</p>
+        <span class="pill green">Deterministic</span><span class="pill orange">Requires watermarks</span>
+      </div>
+    </div>
+
+    <!-- Watermarks -->
+    <h3 id="watermarks">2.2 — Watermark Mechanics</h3>
+    <p>A <strong>watermark</strong> <code>W(t)</code> is a monotonically increasing timestamp assertion: <em>"all events with event-time &lt; t have been observed"</em>. Watermarks flow as special records through the operator DAG. Every window operator and time-based join uses the watermark to decide when to close a window and emit results.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Watermark propagation through parallel subtasks — min-watermark rule</div>
+      <svg viewBox="0 0 740 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:220px">
+        <defs>
+          <marker id="arr4" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#64748b"/>
+          </marker>
+        </defs>
+        <!-- Kafka Partitions -->
+        <rect x="10" y="20" width="120" height="42" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="70" y="38" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#1d4ed8">Partition P0</text>
+        <text x="70" y="55" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">W = 10:04:55</text>
+
+        <rect x="10" y="78" width="120" height="42" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="70" y="96" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#1d4ed8">Partition P1</text>
+        <text x="70" y="113" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">W = 10:04:48</text>
+
+        <rect x="10" y="136" width="120" height="42" rx="7" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="70" y="154" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#1d4ed8">Partition P2</text>
+        <text x="70" y="171" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">W = 10:04:52</text>
+
+        <!-- Arrows to Source subtask -->
+        <line x1="130" y1="41" x2="200" y2="95" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+        <line x1="130" y1="99" x2="200" y2="99" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+        <line x1="130" y1="157" x2="200" y2="103" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <!-- Source WatermarkGenerator -->
+        <rect x="202" y="60" width="128" height="80" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+        <text x="266" y="85" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#047857">WatermarkGen</text>
+        <text x="266" y="103" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">BoundedOutOfOrder</text>
+        <text x="266" y="118" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">lag = 10s</text>
+        <text x="266" y="133" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#047857">W = 10:04:38</text>
+
+        <!-- Arrows to KeyBy -->
+        <line x1="330" y1="100" x2="400" y2="80" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+        <line x1="330" y1="100" x2="400" y2="130" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <!-- KeyBy / Window op -->
+        <rect x="402" y="55" width="120" height="52" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="462" y="76" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#c2410c">KeyBy subtask 0</text>
+        <text x="462" y="96" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">W_min = input min</text>
+
+        <rect x="402" y="117" width="120" height="52" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="462" y="138" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#c2410c">KeyBy subtask 1</text>
+        <text x="462" y="158" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">W_min = input min</text>
+
+        <!-- Min watermark label -->
+        <rect x="380" y="10" width="166" height="36" rx="6" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+        <text x="463" y="26" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="700" fill="#854d0e">⚠ Min-Watermark Rule</text>
+        <text x="463" y="40" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#92400e">W_out = min(all input Ws)</text>
+
+        <!-- Arrow to window -->
+        <line x1="522" y1="81" x2="590" y2="100" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+        <line x1="522" y1="143" x2="590" y2="120" stroke="#64748b" stroke-width="1" marker-end="url(#arr4)"/>
+
+        <!-- Window fires -->
+        <rect x="592" y="72" width="136" height="76" rx="8" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+        <text x="660" y="96" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#6d28d9">TumblingWindow</text>
+        <text x="660" y="113" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Fires when W ≥</text>
+        <text x="660" y="128" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">window_end + lateness</text>
+        <text x="660" y="143" text-anchor="middle" font-family="DM Sans" font-size="10.5" fill="#6d28d9">⚡ trigger &amp; emit</text>
+      </svg>
+    </div>
+
+    <div class="callout orange">
+      <span class="callout-icon">⚠️</span>
+      <p><strong>The idle partition problem:</strong> If one Kafka partition is idle, its watermark stays frozen at its last seen event. The global watermark (which is the <em>minimum</em> across all subtask watermarks) is pinned, blocking window triggering. Mitigation: use <code>WatermarkStrategy.withIdleness(Duration.ofSeconds(30))</code> to mark idle sources and exclude them from the min computation.</p>
+    </div>
+
+    <pre data-lang="java"><code><span class="cm">// BoundedOutOfOrderness Watermark Strategy</span>
+<span class="ty">WatermarkStrategy</span>&lt;<span class="ty">Order</span>&gt; strategy = <span class="ty">WatermarkStrategy</span>
+    .&lt;<span class="ty">Order</span>&gt;<span class="fn">forBoundedOutOfOrderness</span>(<span class="ty">Duration</span>.<span class="fn">ofSeconds</span>(<span class="num">10</span>)) <span class="cm">// max expected lateness</span>
+    .<span class="fn">withTimestampAssigner</span>((<span class="ty">order</span>, ts) -&gt; order.<span class="fn">getEventTimestamp</span>())
+    .<span class="fn">withIdleness</span>(<span class="ty">Duration</span>.<span class="fn">ofSeconds</span>(<span class="num">30</span>));            <span class="cm">// unblock idle partitions</span>
+
+<span class="ty">DataStream</span>&lt;<span class="ty">Order</span>&gt; stream = env
+    .<span class="fn">fromSource</span>(kafkaSource, strategy, <span class="str">"Kafka Orders"</span>)
+    .<span class="fn">keyBy</span>(<span class="ty">Order</span>::<span class="fn">getCustomerId</span>)
+    .<span class="fn">window</span>(<span class="ty">TumblingEventTimeWindows</span>.<span class="fn">of</span>(<span class="ty">Time</span>.<span class="fn">minutes</span>(<span class="num">5</span>)))
+    .<span class="fn">allowedLateness</span>(<span class="ty">Time</span>.<span class="fn">minutes</span>(<span class="num">2</span>))       <span class="cm">// re-fire window for late arrivals</span>
+    .<span class="fn">sideOutputLateData</span>(lateTag)              <span class="cm">// route very-late to side output</span>
+    .<span class="fn">reduce</span>(<span class="ty">OrderAgg</span>::<span class="fn">merge</span>);
+</code></pre>
+
+    <!-- Exactly-Once -->
+    <h3 id="exactly-once">2.3 — Exactly-Once Semantics &amp; Two-Phase Commit</h3>
+    <p>Flink's internal checkpoint mechanism guarantees <em>exactly-once state updates</em> within the processing graph. To extend this guarantee to <strong>external sinks</strong> (Kafka, JDBC, filesystem), Flink uses the <strong>Two-Phase Commit (2PC)</strong> protocol, tightly coupled to checkpoint lifecyle events.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">2PC Sink — Checkpoint-Aligned Transaction Lifecycle</div>
+      <svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:200px">
+        <!-- Timeline -->
+        <line x1="40" y1="100" x2="720" y2="100" stroke="#e2e8f0" stroke-width="2"/>
+
+        <!-- CP N-1 -->
+        <rect x="60" y="80" width="4" height="40" fill="#94a3b8" rx="2"/>
+        <text x="62" y="73" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#94a3b8">CP N-1</text>
+        <text x="62" y="130" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#94a3b8">commit</text>
+        <text x="62" y="141" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#94a3b8">CP N-2</text>
+
+        <!-- Phase 1: Pre-commit (write to Kafka tx) -->
+        <rect x="65" y="56" width="230" height="34" rx="5" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+        <text x="180" y="70" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="600" fill="#1d4ed8">invoke(): write records to open transaction</text>
+        <text x="180" y="84" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">beginTransaction() called at CP N-1 start</text>
+
+        <!-- CP N barrier -->
+        <rect x="296" y="80" width="4" height="40" fill="#10b981" rx="2"/>
+        <text x="298" y="73" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#10b981">Barrier #N</text>
+
+        <!-- preCommit -->
+        <rect x="302" y="56" width="150" height="34" rx="5" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="377" y="70" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="600" fill="#047857">preCommit()</text>
+        <text x="377" y="84" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">flush + close Kafka tx (no commit)</text>
+
+        <!-- snapshotState -->
+        <rect x="302" y="110" width="150" height="30" rx="5" fill="#fff7ed" stroke="#fed7aa" stroke-width="1"/>
+        <text x="377" y="122" text-anchor="middle" font-family="DM Sans" font-size="9.5" font-weight="600" fill="#c2410c">snapshotState()</text>
+        <text x="377" y="135" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#475569">tx handle → checkpoint state</text>
+
+        <!-- ACK -->
+        <rect x="454" y="80" width="4" height="40" fill="#3b82f6" rx="2"/>
+        <text x="456" y="73" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#3b82f6">ACK</text>
+        <text x="456" y="152" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#3b82f6">CP complete</text>
+
+        <!-- Commit phase -->
+        <rect x="460" y="56" width="150" height="34" rx="5" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1"/>
+        <text x="535" y="70" text-anchor="middle" font-family="DM Sans" font-size="10" font-weight="600" fill="#6d28d9">commit()</text>
+        <text x="535" y="84" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#475569">Kafka tx committed → records visible</text>
+
+        <!-- New tx -->
+        <rect x="460" y="110" width="150" height="30" rx="5" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+        <text x="535" y="125" text-anchor="middle" font-family="DM Sans" font-size="9.5" font-weight="600" fill="#854d0e">beginTransaction() for CP N+1</text>
+
+        <!-- Failure zone -->
+        <rect x="612" y="80" width="4" height="40" fill="#ef4444" rx="2"/>
+        <text x="614" y="73" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#ef4444">💥 FAIL</text>
+        <rect x="620" y="56" width="100" height="60" rx="5" fill="#fef2f2" stroke="#fecaca" stroke-width="1"/>
+        <text x="670" y="76" text-anchor="middle" font-family="DM Sans" font-size="9.5" font-weight="700" fill="#b91c1c">Recover from</text>
+        <text x="670" y="92" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#b91c1c">last checkpoint</text>
+        <text x="670" y="108" text-anchor="middle" font-family="DM Sans" font-size="9" fill="#b91c1c">→ abort + retry commit</text>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" style="background:var(--blue-light);color:var(--blue)">1</div>
+        <div class="step-content">
+          <h4>beginTransaction()</h4>
+          <p>Called at the start of each checkpoint interval. The sink opens a new Kafka transactional producer (or DB transaction). All downstream <code>invoke()</code> calls write records into this open transaction.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--green-light);color:var(--green)">2</div>
+        <div class="step-content">
+          <h4>preCommit()</h4>
+          <p>Called when the checkpoint barrier reaches the sink. The sink flushes buffered records and transitions the Kafka producer to the <em>prepared</em> state (no commit yet). The transaction handle is serialized into the checkpoint state via <code>snapshotState()</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--purple-light);color:var(--purple)">3</div>
+        <div class="step-content">
+          <h4>commit()</h4>
+          <p>Called only after the CheckpointCoordinator confirms the checkpoint is globally complete (all ACKs received). The Kafka transaction is committed, making records visible to consumers. If the job crashes between preCommit and commit, recovery replays from the last checkpoint and retries the commit (idempotent commit guarantee).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:var(--red-light);color:var(--red)">4</div>
+        <div class="step-content">
+          <h4>abort()</h4>
+          <p>If the checkpoint fails for any reason, <code>abort()</code> rolls back the open Kafka transaction. No partially-processed records become visible.</p>
+        </div>
+      </div>
+    </div>
+
+    <pre data-lang="java"><code><span class="cm">// End-to-end exactly-once Kafka sink</span>
+<span class="ty">KafkaSink</span>&lt;<span class="ty">String</span>&gt; sink = <span class="ty">KafkaSink</span>.&lt;<span class="ty">String</span>&gt;<span class="fn">builder</span>()
+    .<span class="fn">setBootstrapServers</span>(<span class="str">"kafka:9092"</span>)
+    .<span class="fn">setRecordSerializer</span>(<span class="ty">KafkaRecordSerializationSchema</span>.<span class="fn">builder</span>()
+        .<span class="fn">setTopic</span>(<span class="str">"output-enriched"</span>)
+        .<span class="fn">setValueSerializationSchema</span>(<span class="kw">new</span> <span class="ty">SimpleStringSchema</span>())
+        .<span class="fn">build</span>())
+    <span class="cm">// Enables the 2PC protocol internally</span>
+    .<span class="fn">setDeliveryGuarantee</span>(<span class="ty">DeliveryGuarantee</span>.<span class="ty">EXACTLY_ONCE</span>)
+    <span class="cm">// Must be unique per sink to survive restarts; ties tx IDs to checkpoint IDs</span>
+    .<span class="fn">setTransactionalIdPrefix</span>(<span class="str">"fraud-pipeline-sink-v2"</span>)
+    .<span class="fn">setProperty</span>(<span class="ty">ProducerConfig</span>.<span class="ty">TRANSACTION_TIMEOUT_CONFIG</span>,
+        <span class="ty">String</span>.<span class="fn">valueOf</span>(<span class="num">10</span> * <span class="num">60</span> * <span class="num">1000</span>)) <span class="cm">// &lt; broker transaction.max.timeout.ms</span>
+    .<span class="fn">build</span>();
+</code></pre>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SECTION 3: FLINK vs SPARK                     -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="flink-vs-spark">
+    <div class="section-header">
+      <div class="section-icon purple">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </div>
+      <div>
+        <div class="section-num">Section 03</div>
+        <div class="section-title">Flink vs. Spark Streaming</div>
+      </div>
+    </div>
+
+    <h3>3.1 — Native Streaming vs. Micro-batching</h3>
+    <p>The fundamental architectural divergence stems from each framework's <em>origin story</em>: Spark was built for batch processing and retrofitted with streaming; Flink was designed as a streaming-first engine from day one.</p>
+
+    <div class="compare-grid">
+      <div class="compare-card flink">
+        <h4>⚡ Apache Flink — Native Streaming</h4>
+        <ul>
+          <li><strong>One-at-a-time model:</strong> Each record flows through the operator DAG as it arrives — no accumulation delay.</li>
+          <li><strong>Pipelined execution:</strong> Operators run continuously; no re-planning per "batch".</li>
+          <li><strong>Latency:</strong> Sub-millisecond to low-millisecond for simple pipelines.</li>
+          <li><strong>Backpressure:</strong> Propagated natively via credit-based network buffers — no external throttling needed.</li>
+          <li><strong>State:</strong> Per-key state maintained locally in operator; checkpointed asynchronously.</li>
+          <li><strong>Exactly-once:</strong> Operator-level, coordinated via checkpointing + 2PC sinks.</li>
+        </ul>
+      </div>
+      <div class="compare-card spark">
+        <h4>🔥 Apache Spark — Micro-batch (Structured Streaming)</h4>
+        <ul>
+          <li><strong>Micro-batch model:</strong> Data accumulated over a configurable interval (100ms–seconds) then processed as a mini-batch.</li>
+          <li><strong>Planning overhead:</strong> Each batch incurs Spark query planning, task serialization, and scheduling overhead.</li>
+          <li><strong>Latency:</strong> Typically 200ms–seconds, constrained by batch boundary wait.</li>
+          <li><strong>Continuous Processing (experimental):</strong> Epoch-based, approaches native streaming, but limited operator support.</li>
+          <li><strong>State:</strong> Managed via HDFS/RocksDB StateStore; updated at batch boundaries.</li>
+          <li><strong>Exactly-once:</strong> Via idempotent sinks + WAL or transactional writes at batch commit.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 id="tradeoffs">3.2 — Latency vs. Throughput Trade-offs</h3>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Dimension</th>
+          <th>Apache Flink</th>
+          <th>Spark Structured Streaming</th>
+          <th>Winner</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>End-to-end latency</td>
+            <td>Single-digit to low-ms (pipelined)</td>
+            <td>100ms–seconds (batch boundary)</td>
+            <td><span class="pill blue">Flink</span></td>
+          </tr>
+          <tr>
+            <td>Peak throughput</td>
+            <td>Very high (vectorisation limited)</td>
+            <td>Very high (vectorised Tungsten execution)</td>
+            <td><span class="pill orange">Spark (ETL)</span></td>
+          </tr>
+          <tr>
+            <td>Stateful complexity</td>
+            <td>Native keyed state, arbitrary operators</td>
+            <td>Limited stateful ops in batch model</td>
+            <td><span class="pill blue">Flink</span></td>
+          </tr>
+          <tr>
+            <td>Exactly-once</td>
+            <td>Operator-level, comprehensive</td>
+            <td>Sink-level, requires idempotency</td>
+            <td><span class="pill blue">Flink</span></td>
+          </tr>
+          <tr>
+            <td>CEP (pattern matching)</td>
+            <td>Native FlinkCEP library</td>
+            <td>Not natively supported</td>
+            <td><span class="pill blue">Flink</span></td>
+          </tr>
+          <tr>
+            <td>Ecosystem &amp; libraries</td>
+            <td>Growing (Kafka, Iceberg, Paimon)</td>
+            <td>Mature (MLlib, Delta, SparkSQL)</td>
+            <td><span class="pill orange">Spark</span></td>
+          </tr>
+          <tr>
+            <td>Operational maturity</td>
+            <td>Strong on Kubernetes / Ververica</td>
+            <td>Dominant on Databricks / EMR</td>
+            <td><span class="pill orange">Context-dependent</span></td>
+          </tr>
+          <tr>
+            <td>Event time semantics</td>
+            <td>First-class, watermarks native</td>
+            <td>Supported but more complex to configure</td>
+            <td><span class="pill blue">Flink</span></td>
+          </tr>
+          <tr>
+            <td>Batch processing</td>
+            <td>Supported (bounded stream)</td>
+            <td>Excellent (primary use case)</td>
+            <td><span class="pill orange">Spark</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout purple">
+      <span class="callout-icon">🆕</span>
+      <p><strong>Spark RTM (Real-Time Mode, 2024+):</strong> Databricks introduced RTM in Structured Streaming to break the micro-batch barrier via record-at-a-time continuous processing. However, RTM still requires checkpoint coordination at epoch boundaries and doesn't yet match Flink's full operator-level stateful streaming capabilities. For the majority of low-latency, stateful production workloads, Flink retains a clear architectural advantage.</p>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SECTION 4: USE CASES & PATTERNS               -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="usecases">
+    <div class="section-header">
+      <div class="section-icon green">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div>
+        <div class="section-num">Section 04</div>
+        <div class="section-title">Best Use Cases &amp; Patterns</div>
+      </div>
+    </div>
+
+    <h3>4.1 — Where Flink is the Clear Winner</h3>
+
+    <div class="card-grid-3">
+      <div class="card" style="border-top:3px solid var(--blue)">
+        <div class="card-title" style="color:var(--blue)">🔍 Complex Event Processing</div>
+        <p style="font-size:14px;margin:0">The <strong>FlinkCEP</strong> library enables pattern detection across event sequences with gap conditions, quantifiers, and time constraints — in a single stateful operator. Use for fraud rings, network intrusion, anomaly detection.</p>
+        <pre style="font-size:12px;padding:10px 12px;margin:10px 0 0"><code><span class="ty">Pattern</span>&lt;<span class="ty">Transaction</span>, ?&gt; pattern =
+  <span class="ty">Pattern</span>.&lt;<span class="ty">Transaction</span>&gt;<span class="fn">begin</span>(<span class="str">"high"</span>)
+    .<span class="fn">where</span>(t -&gt; t.amount &gt; <span class="num">5000</span>)
+  .<span class="fn">followedBy</span>(<span class="str">"foreign"</span>)
+    .<span class="fn">where</span>(t -&gt; !t.isHomeCountry())
+  .<span class="fn">within</span>(<span class="ty">Time</span>.<span class="fn">minutes</span>(<span class="num">10</span>));</code></pre>
+      </div>
+      <div class="card" style="border-top:3px solid var(--orange)">
+        <div class="card-title" style="color:var(--orange)">🗄 Large-Scale Stateful Lookups</div>
+        <p style="font-size:14px;margin:0">Temporal table joins and async I/O allow Flink to enrich every event against multi-TB RocksDB state or external databases with millisecond latency. Avoids a full shuffle join at each batch boundary.</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--green)">
+        <div class="card-title" style="color:var(--green)">🚨 Low-Latency Alerting</div>
+        <p style="font-size:14px;margin:0">Credit card fraud alerts, infrastructure health signals, and real-time bidding decisions all require sub-100ms end-to-end. Flink's pipelined, event-at-a-time model is the only production-ready choice at this latency tier.</p>
+      </div>
+    </div>
+
+    <div class="metric-row">
+      <div class="metric">
+        <div class="metric-val" style="color:var(--blue)">1ms</div>
+        <div class="metric-lbl">Min E2E latency</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val" style="color:var(--green)">TB</div>
+        <div class="metric-lbl">RocksDB state scale</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val" style="color:var(--orange)">1:1</div>
+        <div class="metric-lbl">Event time determinism</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val" style="color:var(--purple)">2PC</div>
+        <div class="metric-lbl">Sink guarantee</div>
+      </div>
+    </div>
+
+    <h3 id="kappa">4.2 — Kappa Architecture &amp; Table API/SQL</h3>
+    <p>The <strong>Kappa Architecture</strong> (Jay Kreps, 2014) discards the Lambda architecture's separate batch and speed layers. Instead, a single streaming engine handles both real-time <em>and</em> historical reprocessing — by replaying events from the durable log (Kafka).</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Kappa Architecture with Apache Flink</div>
+      <svg viewBox="0 0 760 210" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:210px">
+        <defs>
+          <marker id="arr5" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#64748b"/>
+          </marker>
+        </defs>
+        <!-- Data sources -->
+        <rect x="10" y="75" width="110" height="60" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="65" y="99" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#1d4ed8">Event Sources</text>
+        <text x="65" y="117" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">IoT / CDC / Logs</text>
+
+        <line x1="120" y1="105" x2="170" y2="105" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr5)"/>
+
+        <!-- Kafka -->
+        <rect x="172" y="55" width="110" height="100" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+        <text x="227" y="88" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#fbbf24">Apache Kafka</text>
+        <text x="227" y="106" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#94a3b8">Durable log</text>
+        <text x="227" y="122" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#94a3b8">Infinite retention</text>
+        <text x="227" y="138" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#94a3b8">Replay from t=0</text>
+
+        <!-- Two paths -->
+        <line x1="282" y1="80" x2="330" y2="70" stroke="#10b981" stroke-width="1.5" marker-end="url(#arr5)"/>
+        <text x="306" y="65" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#10b981">live stream</text>
+        <line x1="282" y1="130" x2="330" y2="145" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr5)"/>
+        <text x="306" y="155" text-anchor="middle" font-family="DM Sans" font-size="9.5" fill="#f97316">historical replay</text>
+
+        <!-- Flink block -->
+        <rect x="332" y="42" width="200" height="126" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="2"/>
+        <text x="432" y="68" text-anchor="middle" font-family="DM Sans" font-size="13" font-weight="700" fill="#15803d">Apache Flink</text>
+        <rect x="346" y="76" width="172" height="28" rx="5" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
+        <text x="432" y="94" text-anchor="middle" font-family="DM Sans" font-size="10.5" font-weight="600" fill="#047857">Table API / Flink SQL</text>
+        <rect x="346" y="110" width="80" height="24" rx="5" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1"/>
+        <text x="386" y="126" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#065f46">DataStream</text>
+        <rect x="436" y="110" width="82" height="24" rx="5" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1"/>
+        <text x="477" y="126" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#065f46">CEP / State</text>
+        <text x="432" y="157" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Unified Batch + Stream engine</text>
+
+        <!-- Arrow to serving -->
+        <line x1="532" y1="105" x2="584" y2="105" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr5)"/>
+
+        <!-- Serving layer -->
+        <rect x="586" y="55" width="160" height="100" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1.5"/>
+        <text x="666" y="78" text-anchor="middle" font-family="DM Sans" font-size="11" font-weight="700" fill="#6d28d9">Serving Layer</text>
+        <text x="666" y="98" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Iceberg / Paimon (lakehouse)</text>
+        <text x="666" y="114" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Elasticsearch / Druid</text>
+        <text x="666" y="130" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Key-Value (Redis/Aerospike)</text>
+        <text x="666" y="146" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">Dashboard (Grafana)</text>
+      </svg>
+    </div>
+
+    <p>Flink's <strong>Table API and SQL</strong> are the primary enablers of Kappa in production, providing a <em>unified relational abstraction</em> that executes identically on bounded (batch replay) and unbounded (live stream) data. A single SQL query can backfill historical results and continue processing live events without code changes.</p>
+
+    <pre data-lang="sql"><code><span class="cm">-- Flink SQL: unified stream + batch query (Kappa pattern)</span>
+<span class="cm">-- Works on live Kafka stream AND bounded Iceberg snapshot</span>
+
+<span class="kw">CREATE TABLE</span> orders (
+  order_id    <span class="ty">BIGINT</span>,
+  customer_id <span class="ty">STRING</span>,
+  amount      <span class="ty">DECIMAL</span>(<span class="num">10</span>,<span class="num">2</span>),
+  event_time  <span class="ty">TIMESTAMP</span>(<span class="num">3</span>),
+  <span class="kw">WATERMARK FOR</span> event_time <span class="kw">AS</span> event_time - <span class="ty">INTERVAL</span> <span class="str">'10'</span> <span class="ty">SECOND</span>
+) <span class="kw">WITH</span> (<span class="str">'connector'</span> = <span class="str">'kafka'</span>, <span class="str">'topic'</span> = <span class="str">'orders'</span>, ...);
+
+<span class="kw">SELECT</span>
+  <span class="fn">TUMBLE_START</span>(event_time, <span class="ty">INTERVAL</span> <span class="str">'5'</span> <span class="ty">MINUTE</span>) <span class="kw">AS</span> window_start,
+  customer_id,
+  <span class="fn">SUM</span>(amount) <span class="kw">AS</span> revenue,
+  <span class="fn">COUNT</span>(*) <span class="kw">AS</span> order_count
+<span class="kw">FROM</span> orders
+<span class="kw">GROUP BY</span>
+  <span class="fn">TUMBLE</span>(event_time, <span class="ty">INTERVAL</span> <span class="str">'5'</span> <span class="ty">MINUTE</span>),
+  customer_id;
+<span class="cm">-- Identical query runs on Kafka (streaming) or Iceberg (batch backfill)</span>
+</code></pre>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- SECTION 5: PERFORMANCE TUNING                 -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="backpressure">
+    <div class="section-header">
+      <div class="section-icon red">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div>
+        <div class="section-num">Section 05</div>
+        <div class="section-title">Performance Tuning</div>
+      </div>
+    </div>
+
+    <h3>5.1 — Backpressure &amp; Credit-Based Flow Control</h3>
+    <p>Backpressure in Flink is a <em>first-class, desirable signal</em> — it indicates a downstream operator cannot consume data as fast as the upstream produces it. Rather than dropping data (like Storm) or relying on external throttling (like early Spark Streaming), Flink propagates backpressure naturally through its credit-based network layer.</p>
+
+    <div class="diagram-wrap">
+      <div class="diagram-title">Credit-Based Flow Control — Receiver-Driven Rate Limiting</div>
+      <svg viewBox="0 0 740 180" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:180px">
+        <defs>
+          <marker id="arr6" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#3b82f6"/>
+          </marker>
+          <marker id="arr6r" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#f97316"/>
+          </marker>
+        </defs>
+        <!-- Source -->
+        <rect x="20" y="60" width="120" height="60" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="80" y="85" text-anchor="middle" font-family="DM Sans" font-size="12" font-weight="700" fill="#1d4ed8">Sender (TM-A)</text>
+        <text x="80" y="105" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">outBufferQueue</text>
+        <text x="80" y="118" text-anchor="middle" font-family="DM Sans" font-size="10.5" font-weight="600" fill="#1d4ed8">credits: 3 → send 3 buf</text>
+
+        <!-- Credit announcement (orange, bottom) -->
+        <path d="M 140 115 Q 360 150 580 115" fill="none" stroke="#f97316" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arr6r)"/>
+        <text x="360" y="160" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#f97316">credit announcement: "I have 3 free buffers" (via Netty channel announce)</text>
+
+        <!-- Data buffers (blue, top) -->
+        <path d="M 140 80 Q 360 40 580 80" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arr6)"/>
+        <text x="360" y="32" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#3b82f6">data buffers flow only when credits &gt; 0</text>
+
+        <!-- Buffer boxes on path -->
+        <rect x="230" y="50" width="36" height="20" rx="3" fill="#bfdbfe"/>
+        <text x="248" y="64" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1e40af">buf</text>
+        <rect x="280" y="45" width="36" height="20" rx="3" fill="#bfdbfe"/>
+        <text x="298" y="59" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1e40af">buf</text>
+        <rect x="330" y="42" width="36" height="20" rx="3" fill="#bfdbfe"/>
+        <text x="348" y="56" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#1e40af">buf</text>
+
+        <!-- Receiver -->
+        <rect x="582" y="60" width="140" height="60" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+        <text x="652" y="82" text-anchor="middle" font-family="DM Sans" font-size="12" font-weight="700" fill="#047857">Receiver (TM-B)</text>
+        <text x="652" y="100" text-anchor="middle" font-family="DM Sans" font-size="10" fill="#475569">inBufferPool</text>
+        <text x="652" y="115" text-anchor="middle" font-family="DM Sans" font-size="10.5" font-weight="600" fill="#047857">backpressure → credit=0</text>
+
+        <!-- Backpressure propagation up -->
+        <rect x="20" y="18" width="700" height="28" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-width="1"/>
+        <text x="370" y="36" text-anchor="middle" font-family="DM Sans" font-size="10.5" font-weight="600" fill="#b91c1c">⚠ If credit=0: Sender blocks → backpressure propagates upstream through ALL connected TM channels — source eventually slows Kafka consumer</text>
+      </svg>
+    </div>
+
+    <p>Each network connection between TaskManagers uses Netty for transport. A receiver publishes <strong>credit announcements</strong> after recycling buffers. The sender only transmits data buffers equal to the announced credits, preventing a fast producer from overwhelming a slow consumer. This decouples Flink's application-level flow control from the underlying TCP window, so one slow task doesn't block unrelated tasks sharing the same TCP connection.</p>
+
+    <div class="callout blue">
+      <span class="callout-icon">🔬</span>
+      <p><strong>Diagnosing backpressure:</strong> In the Flink Web UI, identify the operator with <em>high backpressure</em> score closest to the sink — its downstream neighbour is the actual bottleneck (it is processing slowly, unable to recycle buffers fast enough). Key metrics: <code>backPressuredTimeMsPerSecond</code>, <code>outPoolUsage</code>, <code>inPoolUsage</code>. The bottleneck operator shows near-zero backpressure (it's working flat out) while all upstream operators show near-100% backpressure.</p>
+    </div>
+
+    <h3 id="skew">5.2 — Data Skew Strategies</h3>
+    <p>Skew occurs when a <code>keyBy()</code> operation routes disproportionate event volumes to one or a few subtasks. One overloaded subtask becomes the global bottleneck, starving all upstream operators of buffer credits.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title" style="color:var(--orange)">🔑 Key Salting / Partial Aggregation</div>
+        <p style="font-size:14.5px;margin:0 0 10px">Append a random salt <code>[0, N)</code> to hot keys for a two-stage aggregation. Stage 1 aggregates locally per salted key; Stage 2 merges across salts.</p>
+        <pre style="font-size:12px;padding:10px;margin:0"><code><span class="cm">// Stage 1: partition with salt</span>
+stream.<span class="fn">keyBy</span>(e -&gt; e.key + <span class="str">"_"</span>
+  + (<span class="kw">int</span>)(Math.<span class="fn">random</span>() * <span class="num">32</span>))
+  .<span class="fn">reduce</span>(localAgg);
+<span class="cm">// Stage 2: merge partials</span>
+result.<span class="fn">keyBy</span>(e -&gt; e.originalKey)
+  .<span class="fn">reduce</span>(globalMerge);</code></pre>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--purple)">📊 MiniBatch Aggregation (Table API)</div>
+        <p style="font-size:14.5px;margin:0 0 10px">Buffer a configurable number of input records per key before flushing to state. Amortises the serialization cost of RocksDB state access across many events. Dramatically reduces state overhead under skew.</p>
+        <pre style="font-size:12px;padding:10px;margin:0"><code><span class="cm">-- Enable mini-batch in Table API</span>
+<span class="kw">SET</span> <span class="str">'table.exec.mini-batch.enabled'</span>
+  = <span class="str">'true'</span>;
+<span class="kw">SET</span> <span class="str">'table.exec.mini-batch.size'</span>
+  = <span class="str">'5000'</span>;
+<span class="kw">SET</span> <span class="str">'table.exec.mini-batch.allow-latency'</span>
+  = <span class="str">'200 ms'</span>;</code></pre>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title" style="color:var(--blue)">⚙️ Local-Global Aggregation</div>
+        <p style="font-size:14.5px;margin:0">SQL optimiser automatically rewrites <code>COUNT(DISTINCT user_id)</code> to use a two-phase approach with bucket keys, distributing hotspot load. Enable via <code>table.optimizer.distinct-agg.split.enabled=true</code>.</p>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--green)">🔀 Parallelism Increase</div>
+        <p style="font-size:14.5px;margin:0">Increase parallelism of the skewed operator alone via per-operator <code>.setParallelism(N)</code>. Combined with a good hash function, this distributes the key space more evenly. For external skew (one Kafka partition slow), use watermark alignment with <code>withIdleness()</code>.</p>
+      </div>
+    </div>
+
+    <pre data-lang="java"><code><span class="cm">// Async I/O for slow external lookups — prevents blocking the stream</span>
+<span class="ty">DataStream</span>&lt;<span class="ty">EnrichedOrder</span>&gt; enriched = <span class="ty">AsyncDataStream</span>.<span class="fn">unorderedWait</span>(
+    orders,
+    <span class="kw">new</span> <span class="ty">AsyncCustomerLookup</span>(redisClient),
+    <span class="num">500</span>, <span class="ty">TimeUnit</span>.<span class="ty">MILLISECONDS</span>,  <span class="cm">// timeout per async request</span>
+    <span class="num">100</span>                           <span class="cm">// max concurrent in-flight requests</span>
+);
+
+<span class="cm">// RocksDB tuning for write-heavy workloads</span>
+<span class="ty">EmbeddedRocksDBStateBackend</span> backend = <span class="kw">new</span> <span class="ty">EmbeddedRocksDBStateBackend</span>(<span class="kw">true</span>);
+backend.<span class="fn">setRocksDBOptions</span>(opts -&gt; opts
+    .<span class="fn">setWriteBufferSize</span>(<span class="num">64</span> * <span class="num">1024</span> * <span class="num">1024</span>)       <span class="cm">// 64 MB memtable</span>
+    .<span class="fn">setMaxWriteBufferNumber</span>(<span class="num">3</span>)
+    .<span class="fn">setTargetFileSizeBase</span>(<span class="num">64</span> * <span class="num">1024</span> * <span class="num">1024</span>));   <span class="cm">// SSTable size</span>
+env.<span class="fn">setStateBackend</span>(backend);
+</code></pre>
+
+    <h3>5.3 — Memory Configuration Quick Reference</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Memory Pool</th><th>Config Key</th><th>Role</th><th>Recommended</th></tr></thead>
+        <tbody>
+          <tr><td>JVM Heap (user code)</td><td><code>taskmanager.memory.task.heap.size</code></td><td>User-defined functions, Java objects</td><td>256 MB – 4 GB</td></tr>
+          <tr><td>Managed Memory</td><td><code>taskmanager.memory.managed.fraction</code></td><td>RocksDB block cache + write buffers</td><td>0.4 (40% total)</td></tr>
+          <tr><td>Network Buffers</td><td><code>taskmanager.memory.network.fraction</code></td><td>Netty I/O buffers, credit pool</td><td>0.1 (10% total)</td></tr>
+          <tr><td>Off-Heap Direct</td><td><code>taskmanager.memory.task.off-heap.size</code></td><td>Flink framework internal</td><td>128 MB</td></tr>
+          <tr><td>JVM Overhead</td><td><code>taskmanager.memory.jvm-overhead.fraction</code></td><td>JVM metaspace, stacks, native</td><td>0.1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- REFERENCES                                    -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="section" id="references">
+    <div class="section-header">
+      <div class="section-icon blue">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <div>
+        <div class="section-num">References</div>
+        <div class="section-title">Sources &amp; Further Reading</div>
+      </div>
+    </div>
+    <div class="refs">
+      <div class="ref">
+        <div class="ref-num">1</div>
+        <div>
+          <div>Apache Flink — Official Architecture Documentation</div>
+          <a href="https://nightlies.apache.org/flink/flink-docs-master/docs/concepts/flink-architecture/" target="_blank">nightlies.apache.org/flink/flink-docs-master/docs/concepts/flink-architecture/</a>
+          <div class="ref-meta">Apache Software Foundation, 2024–2025</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">2</div>
+        <div>
+          <div>Jobs and Scheduling — ExecutionGraph internals</div>
+          <a href="https://nightlies.apache.org/flink/flink-docs-master/docs/internals/job_scheduling/" target="_blank">nightlies.apache.org/flink/flink-docs-master/docs/internals/job_scheduling/</a>
+          <div class="ref-meta">Apache Software Foundation</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">3</div>
+        <div>
+          <div>State Backends — HashMapStateBackend &amp; EmbeddedRocksDB</div>
+          <a href="https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/" target="_blank">nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/</a>
+          <div class="ref-meta">Apache Software Foundation</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">4</div>
+        <div>
+          <div>Stateful Stream Processing — Chandy-Lamport ABS</div>
+          <a href="https://nightlies.apache.org/flink/flink-docs-master/docs/concepts/stateful-stream-processing/" target="_blank">nightlies.apache.org/flink/flink-docs-master/docs/concepts/stateful-stream-processing/</a>
+          <div class="ref-meta">Apache Software Foundation</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">5</div>
+        <div>
+          <div>Lightweight Asynchronous Snapshots for Distributed Dataflows (original ABS paper)</div>
+          <a href="https://arxiv.org/abs/1506.08603" target="_blank">arxiv.org/abs/1506.08603</a>
+          <div class="ref-meta">Ewen, Tzoumas, Hueske, Metzger — VLDB 2015</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">6</div>
+        <div>
+          <div>Using RocksDB State Backend in Apache Flink: When and How</div>
+          <a href="https://flink.apache.org/2021/01/18/using-rocksdb-state-backend-in-apache-flink-when-and-how/" target="_blank">flink.apache.org/2021/01/18/using-rocksdb-state-backend...</a>
+          <div class="ref-meta">Apache Flink Blog, 2021</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">7</div>
+        <div>
+          <div>Generating Watermarks — WatermarkStrategy API</div>
+          <a href="https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/event-time/generating_watermarks/" target="_blank">nightlies.apache.org/flink/.../generating_watermarks/</a>
+          <div class="ref-meta">Apache Software Foundation</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">8</div>
+        <div>
+          <div>Flink State Management and Checkpointing — Production Guide</div>
+          <a href="https://www.conduktor.io/glossary/flink-state-management-and-checkpointing" target="_blank">conduktor.io/glossary/flink-state-management-and-checkpointing</a>
+          <div class="ref-meta">Conduktor, 2025</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">9</div>
+        <div>
+          <div>Apache Spark vs Apache Flink — Streaming Framework Comparison</div>
+          <a href="https://estuary.dev/blog/apache-spark-vs-flink" target="_blank">estuary.dev/blog/apache-spark-vs-flink</a>
+          <div class="ref-meta">Estuary, January 2026</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">10</div>
+        <div>
+          <div>Breaking the Microbatch Barrier: Spark RTM Architecture</div>
+          <a href="https://www.databricks.com/blog/breaking-microbatch-barrier-architecture-apache-spark-real-time-mode" target="_blank">databricks.com/blog/breaking-microbatch-barrier...</a>
+          <div class="ref-meta">Databricks Engineering Blog, 2024</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">11</div>
+        <div>
+          <div>Identifying Backpressure — Credit-Based Flow Control</div>
+          <a href="https://apxml.com/courses/real-time-data-pipelines-kafka-flink/chapter-7-performance-tuning-monitoring/identifying-backpressure" target="_blank">apxml.com/courses/...identifying-backpressure</a>
+          <div class="ref-meta">APXML Flink Course, 2024</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">12</div>
+        <div>
+          <div>Disaggregated State Management in Apache Flink® 2.0</div>
+          <a href="https://www.vldb.org/pvldb/vol18/p4846-mei.pdf" target="_blank">vldb.org/pvldb/vol18/p4846-mei.pdf</a>
+          <div class="ref-meta">Mei, Xia — VLDB 2025</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">13</div>
+        <div>
+          <div>In-depth Analysis of Flink Job Execution — StreamGraph → ExecutionGraph</div>
+          <a href="https://www.alibabacloud.com/blog/in-depth-analysis-of-flink-job-execution-flink-advanced-tutorials_596633" target="_blank">alibabacloud.com/blog/...flink-job-execution...</a>
+          <div class="ref-meta">Alibaba Cloud Community</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">14</div>
+        <div>
+          <div>Chandy-Lamport Algorithm — Distributed Snapshots</div>
+          <a href="https://doi.org/10.1145/214451.214456" target="_blank">doi.org/10.1145/214451.214456</a>
+          <div class="ref-meta">Chandy, Lamport — ACM TOCS, 1985</div>
+        </div>
+      </div>
+      <div class="ref">
+        <div class="ref-num">15</div>
+        <div>
+          <div>Stream Processing with Apache Flink (Book)</div>
+          <div class="ref-meta">Fabian Hueske, Vasia Kalavri — O'Reilly Media, 2019</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <div style="margin-top:64px;padding-top:24px;border-top:1.5px solid var(--border);text-align:center;color:var(--text-3);font-size:13px;padding-bottom:40px">
+    Apache Flink Technical Reference — Compiled March 2025 — Big Data Engineering Series<br>
+    All diagrams and analyses based on Apache Flink 1.19/2.0 documentation and primary research sources.
+  </div>
+
+</main>
+</div>
+
+<script>
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        navLinks.forEach(link => {
+          link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { threshold: 0.2, rootMargin: '-10% 0px -80% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

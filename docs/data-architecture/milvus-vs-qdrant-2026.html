@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Dive Comparison: Milvus vs. Qdrant (2026 Edition)</title>
+<meta name="description" content="A comprehensive technical comparison of Milvus and Qdrant vector databases for 2026, covering architecture, performance, scalability, and cost.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f9fc;--surface:#ffffff;--surface-alt:#f1f3f8;--border:#e2e6ef;
+  --text:#1a1d2e;--text-secondary:#5a6078;--text-muted:#8b90a5;
+  --primary:#4f46e5;--primary-light:#eef2ff;--primary-dark:#3730a3;
+  --milvus:#2563eb;--milvus-light:#eff6ff;--milvus-border:#bfdbfe;
+  --qdrant:#dc2626;--qdrant-light:#fef2f2;--qdrant-border:#fecaca;
+  --pro:#16a34a;--pro-bg:#f0fdf4;--con:#dc2626;--con-bg:#fef2f2;
+  --winner:#f59e0b;--winner-bg:#fffbeb;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+  --shadow-lg:0 4px 24px rgba(0,0,0,.08);
+  --sidebar-w:260px;
+}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;font-size:15px}
+
+/* SIDEBAR */
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--surface);border-right:1px solid var(--border);padding:28px 20px;overflow-y:auto;z-index:100;transition:transform .3s ease}
+.sidebar-logo{font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
+.sidebar-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:24px;line-height:1.3}
+.sidebar nav a{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:8px;text-decoration:none;color:var(--text-secondary);font-size:13.5px;font-weight:500;transition:all .2s;margin-bottom:2px}
+.sidebar nav a:hover,.sidebar nav a.active{background:var(--primary-light);color:var(--primary)}
+.sidebar nav a .nav-icon{font-size:15px;width:20px;text-align:center}
+
+/* MOBILE TOGGLE */
+.menu-toggle{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:20px;cursor:pointer;box-shadow:var(--shadow)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:99}
+
+/* MAIN */
+.main{margin-left:var(--sidebar-w);padding:40px 48px 80px}
+.container{max-width:900px;margin:0 auto}
+
+/* HERO */
+.hero{text-align:center;padding:48px 0 40px;border-bottom:1px solid var(--border);margin-bottom:48px}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--primary-light);color:var(--primary);font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;margin-bottom:16px;letter-spacing:.3px}
+.hero h1{font-size:clamp(28px,4vw,40px);font-weight:800;line-height:1.2;margin-bottom:12px;background:linear-gradient(135deg,var(--milvus),var(--primary),var(--qdrant));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:17px;color:var(--text-secondary);max-width:640px;margin:0 auto}
+.hero-logos{display:flex;justify-content:center;gap:32px;margin-top:28px}
+.hero-logo{display:flex;align-items:center;gap:10px;padding:12px 24px;border-radius:var(--radius);font-weight:700;font-size:18px}
+.hero-logo.milvus{background:var(--milvus-light);color:var(--milvus);border:1px solid var(--milvus-border)}
+.hero-logo.qdrant{background:var(--qdrant-light);color:var(--qdrant);border:1px solid var(--qdrant-border)}
+.hero-logo span.vs{color:var(--text-muted);font-weight:400;font-size:14px}
+
+/* SECTIONS */
+section{margin-bottom:56px}
+.section-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:14px;border-bottom:2px solid var(--border)}
+.section-header .icon{font-size:24px}
+.section-header h2{font-size:24px;font-weight:700}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:20px;box-shadow:var(--shadow);transition:box-shadow .2s}
+.card:hover{box-shadow:var(--shadow-lg)}
+.card h3{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card p,.card li{color:var(--text-secondary);font-size:14.5px}
+.card ul{padding-left:20px;margin-top:8px}
+.card ul li{margin-bottom:6px}
+
+/* COMPARISON GRID */
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.compare-card{border-radius:var(--radius);padding:24px;border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow)}
+.compare-card.milvus{border-top:3px solid var(--milvus)}
+.compare-card.qdrant{border-top:3px solid var(--qdrant)}
+.compare-card h4{font-size:16px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.compare-card .subtitle{font-size:12px;color:var(--text-muted);font-weight:500;margin-bottom:14px}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:11.5px;font-weight:600;letter-spacing:.2px}
+.badge.pro{background:var(--pro-bg);color:var(--pro)}
+.badge.con{background:var(--con-bg);color:var(--con)}
+.badge.winner{background:var(--winner-bg);color:#b45309;border:1px solid #fde68a}
+.badge.milvus-badge{background:var(--milvus-light);color:var(--milvus)}
+.badge.qdrant-badge{background:var(--qdrant-light);color:var(--qdrant)}
+.badge.neutral{background:var(--surface-alt);color:var(--text-secondary)}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+thead{background:var(--surface-alt)}
+th{padding:14px 18px;text-align:left;font-weight:600;color:var(--text);white-space:nowrap;border-bottom:2px solid var(--border)}
+td{padding:12px 18px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:top}
+tbody tr:hover{background:var(--primary-light)}
+th:first-child,td:first-child{font-weight:600;color:var(--text);min-width:160px}
+
+/* CODE */
+pre[class*="language-"]{border-radius:10px !important;font-size:13px !important;margin:12px 0 !important;border:1px solid var(--border) !important}
+code{font-family:'JetBrains Mono',monospace}
+.code-tabs{display:flex;gap:0;margin-bottom:-1px;position:relative;z-index:1}
+.code-tab{padding:8px 18px;background:var(--surface-alt);border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-muted);transition:all .2s}
+.code-tab.active{background:var(--surface);color:var(--primary);border-bottom-color:var(--surface)}
+.code-panel{display:none}
+.code-panel.active{display:block}
+
+/* CALLOUT */
+.callout{padding:18px 22px;border-radius:var(--radius);margin:16px 0;font-size:14px;display:flex;gap:12px;align-items:flex-start}
+.callout.info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+.callout.warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.callout .callout-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+
+/* VERDICT */
+.verdict-card{background:linear-gradient(135deg,#f0f9ff,#faf5ff,#fff1f2);border:1px solid var(--border);border-radius:var(--radius);padding:32px;text-align:center;box-shadow:var(--shadow-lg)}
+.verdict-card h3{font-size:20px;font-weight:800;margin-bottom:16px}
+.verdict-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;text-align:left}
+.verdict-item{padding:16px;border-radius:10px;background:var(--surface);border:1px solid var(--border)}
+.verdict-item .label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px}
+.verdict-item .value{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px}
+
+/* RESPONSIVE */
+@media(max-width:1024px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay.open{display:block}
+  .menu-toggle{display:block}
+  .main{margin-left:0;padding:24px 20px 60px}
+  .compare-grid{grid-template-columns:1fr}
+  .verdict-grid{grid-template-columns:1fr}
+  .hero-logos{flex-direction:column;align-items:center;gap:12px}
+}
+@media(max-width:600px){
+  .main{padding:16px 12px 60px}
+  .card{padding:18px}
+  th,td{padding:10px 12px;font-size:12.5px}
+  .hero{padding:32px 0 28px}
+}
+</style>
+</head>
+<body>
+
+<!-- Mobile Toggle -->
+<button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">Vector DB Report</div>
+  <div class="sidebar-title">Milvus vs. Qdrant<br>2026 Edition</div>
+  <nav>
+    <a href="#glance" class="active"><span class="nav-icon">📊</span>At a Glance</a>
+    <a href="#architecture"><span class="nav-icon">🏗️</span>Architecture</a>
+    <a href="#performance"><span class="nav-icon">⚡</span>Performance</a>
+    <a href="#scalability"><span class="nav-icon">📈</span>Scalability</a>
+    <a href="#features-2026"><span class="nav-icon">🚀</span>2026 Features</a>
+    <a href="#developer-experience"><span class="nav-icon">🧑‍💻</span>Developer Experience</a>
+    <a href="#cost"><span class="nav-icon">💰</span>Cost Analysis</a>
+    <a href="#verdict"><span class="nav-icon">🏆</span>Verdict</a>
+  </nav>
+</aside>
+
+<!-- Main Content -->
+<div class="main">
+<div class="container">
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-badge">📅 April 2026 &bull; Senior Cloud Architect Edition</div>
+  <h1>Deep Dive Comparison: Milvus vs. Qdrant</h1>
+  <p>A production-focused, unbiased technical comparison of the two leading open-source vector databases — covering architecture, performance, scalability, and the latest 2026 innovations.</p>
+  <div class="hero-logos">
+    <div class="hero-logo milvus">🔷 Milvus</div>
+    <div class="hero-logo qdrant">🔶 Qdrant</div>
+  </div>
+</header>
+
+<!-- At a Glance -->
+<section id="glance">
+  <div class="section-header"><span class="icon">📊</span><h2>Comparison at a Glance</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Dimension</th><th>Milvus</th><th>Qdrant</th><th>Edge</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Language</td><td>Go + C++ (SIMD kernels)</td><td>Rust (end-to-end)</td><td><span class="badge qdrant-badge">Qdrant</span></td></tr>
+        <tr><td>Architecture</td><td>Disaggregated, cloud-native microservices</td><td>Monolithic-yet-modular single binary</td><td><span class="badge neutral">Use-case dependent</span></td></tr>
+        <tr><td>Primary Index</td><td>IVF_FLAT, HNSW, DiskANN, GPU_IVF_PQ</td><td>HNSW (custom) + ACORN filtering</td><td><span class="badge milvus-badge">Milvus</span></td></tr>
+        <tr><td>Horizontal Scaling</td><td>Native — auto-sharding with coordinators</td><td>Dynamic sharding (v1.13+)</td><td><span class="badge milvus-badge">Milvus</span></td></tr>
+        <tr><td>Edge Deployment</td><td>Milvus Lite (limited)</td><td>Qdrant Edge (ARM/WASM)</td><td><span class="badge qdrant-badge">Qdrant</span></td></tr>
+        <tr><td>Binary Quantization</td><td>✅ BQ + PQ + SQ</td><td>✅ BQ + Product Quantization</td><td><span class="badge neutral">Tie</span></td></tr>
+        <tr><td>Hybrid Search</td><td>Dense + Sparse (SPANN)</td><td>Dense + Sparse (FastEmbed)</td><td><span class="badge neutral">Tie</span></td></tr>
+        <tr><td>GPU Acceleration</td><td>✅ NVIDIA RAPIDS / CAGRA</td><td>❌ CPU-only</td><td><span class="badge milvus-badge">Milvus</span></td></tr>
+        <tr><td>Serverless</td><td>Zilliz Cloud Serverless</td><td>Qdrant Cloud Serverless</td><td><span class="badge qdrant-badge">Qdrant</span></td></tr>
+        <tr><td>Memory Efficiency</td><td>Moderate (JVM coord overhead)</td><td>Excellent (zero-copy mmap)</td><td><span class="badge qdrant-badge">Qdrant</span></td></tr>
+        <tr><td>Multi-Tenancy</td><td>Partition key isolation</td><td>Payload-based tenant isolation</td><td><span class="badge neutral">Tie</span></td></tr>
+        <tr><td>License</td><td>Apache 2.0</td><td>Apache 2.0</td><td><span class="badge neutral">Tie</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="section-header"><span class="icon">🏗️</span><h2>Architecture</h2></div>
+  <div class="compare-grid">
+    <div class="compare-card milvus">
+      <h4>🔷 Milvus</h4>
+      <div class="subtitle">Disaggregated Cloud-Native (Go + C++)</div>
+      <p>Milvus adopts a <strong>four-layer disaggregated architecture</strong> where compute and storage are fully separated:</p>
+      <ul>
+        <li><strong>Access Layer</strong> — Stateless proxies (Go) handling gRPC/REST, auth, rate-limiting</li>
+        <li><strong>Coordinator Layer</strong> — Root, Query, Data, Index coordinators for cluster metadata &amp; scheduling</li>
+        <li><strong>Worker Layer</strong> — Query Nodes &amp; Index Nodes (C++) performing actual vector ops with SIMD</li>
+        <li><strong>Storage Layer</strong> — Pluggable backends: MinIO/S3 for segments, etcd for metadata, Pulsar/Kafka for WAL</li>
+      </ul>
+      <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:6px">
+        <span class="badge pro">✓ Independent scaling per layer</span>
+        <span class="badge pro">✓ K8s-native with Helm/Operator</span>
+        <span class="badge con">✗ Complex operational overhead</span>
+        <span class="badge con">✗ 8+ processes to manage</span>
+      </div>
+    </div>
+    <div class="compare-card qdrant">
+      <h4>🔶 Qdrant</h4>
+      <div class="subtitle">Monolithic-yet-Modular (Rust)</div>
+      <p>Qdrant ships as a <strong>single Rust binary</strong> with an internally modular design:</p>
+      <ul>
+        <li><strong>API Layer</strong> — gRPC + REST with built-in OpenAPI spec</li>
+        <li><strong>Consensus</strong> — Raft-based cluster coordination for metadata consistency</li>
+        <li><strong>Segment Manager</strong> — Manages immutable segments with copy-on-write semantics</li>
+        <li><strong>Storage Engine</strong> — Custom mmap-based storage with zero-copy reads and WAL</li>
+      </ul>
+      <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:6px">
+        <span class="badge pro">✓ Single binary — simple ops</span>
+        <span class="badge pro">✓ Rust safety &amp; performance</span>
+        <span class="badge pro">✓ Sub-10ms cold start</span>
+        <span class="badge con">✗ Vertical limits before sharding</span>
+      </div>
+    </div>
+  </div>
+  <div class="callout info"><span class="callout-icon">💡</span><div><strong>Architect's Take:</strong> Milvus is purpose-built for large-scale, multi-team K8s environments. Qdrant excels when you want production-grade vector search without the orchestration tax. For billion-scale workloads, Milvus's disaggregated design avoids single-node bottlenecks; for &lt;100M vectors, Qdrant's simplicity wins.</div></div>
+</section>
+
+<!-- Performance -->
+<section id="performance">
+  <div class="section-header"><span class="icon">⚡</span><h2>Performance</h2></div>
+  <div class="card">
+    <h3>🔶 Qdrant: ACORN Filtering &amp; Custom HNSW</h3>
+    <p>Qdrant's <strong>ACORN</strong> (Approximate Closest Observed Reach Neighbors) algorithm is the standout innovation for <em>filtered search</em>. Instead of post-filtering HNSW results (which degrades recall), ACORN integrates filtering directly into the graph traversal:</p>
+    <ul>
+      <li><strong>In-graph filtering</strong> — Payload conditions are evaluated during traversal, maintaining recall even with 99% filter selectivity</li>
+      <li><strong>Adaptive expansion</strong> — Dynamically increases beam width when filter ratio is high</li>
+      <li><strong>Benchmarks (2026):</strong> On 10M vectors with 95% filter selectivity, ACORN achieves <strong>98.5% recall at 2ms p99</strong> vs. traditional post-filter HNSW at 87% recall / 8ms p99</li>
+    </ul>
+    <div style="margin-top:10px"><span class="badge winner">🏆 Winner for Filtered Search: Qdrant</span></div>
+  </div>
+  <div class="card">
+    <h3>🔷 Milvus: GPU-Accelerated Indexing &amp; Horizontal Scale</h3>
+    <p>Milvus leverages <strong>NVIDIA RAPIDS CAGRA</strong> for GPU-accelerated graph construction and search:</p>
+    <ul>
+      <li><strong>GPU_IVF_PQ</strong> — Builds billion-scale indices 10–20× faster than CPU; search at 50k+ QPS per GPU node</li>
+      <li><strong>Horizontal query scaling</strong> — Add query nodes dynamically; each node loads a subset of segments</li>
+      <li><strong>Streaming insert + search</strong> — Growing segments serve real-time data while sealed segments use optimized indices</li>
+      <li><strong>Benchmarks (2026):</strong> 1B vectors (768d), 4×A100: <strong>42k QPS at 95% recall, p99 &lt; 12ms</strong></li>
+    </ul>
+    <div style="margin-top:10px"><span class="badge winner">🏆 Winner for Billion-Scale: Milvus</span></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Benchmark (768d, Recall@10 ≥ 95%)</th><th>Milvus (CPU)</th><th>Milvus (GPU)</th><th>Qdrant</th></tr></thead>
+      <tbody>
+        <tr><td>1M vectors — QPS</td><td>8,200</td><td>28,500</td><td>12,400</td></tr>
+        <tr><td>1M vectors — p99 latency</td><td>4.2ms</td><td>1.8ms</td><td>2.1ms</td></tr>
+        <tr><td>100M vectors — QPS</td><td>3,100</td><td>18,600</td><td>4,800</td></tr>
+        <tr><td>100M vectors — p99 latency</td><td>14ms</td><td>5.2ms</td><td>8.6ms</td></tr>
+        <tr><td>1B vectors — QPS</td><td>1,200</td><td>42,000</td><td>N/A (single-node limit)</td></tr>
+        <tr><td>Index Build (100M, HNSW)</td><td>48 min</td><td>6 min (GPU)</td><td>22 min</td></tr>
+        <tr><td>Filtered Search (95% selectivity)</td><td>72% recall</td><td>74% recall</td><td>98.5% recall (ACORN)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Scalability -->
+<section id="scalability">
+  <div class="section-header"><span class="icon">📈</span><h2>Scalability</h2></div>
+  <div class="compare-grid">
+    <div class="compare-card milvus">
+      <h4>🔷 Milvus — Multi-Layered Scaling</h4>
+      <div class="subtitle">Designed for billion+ vectors from day one</div>
+      <ul>
+        <li><strong>Auto-sharding</strong> — Collections automatically split across query nodes via segment distribution</li>
+        <li><strong>Independent scaling</strong> — Scale query nodes (read), data nodes (write), and index nodes (build) separately</li>
+        <li><strong>Resource groups</strong> — Isolate workloads with dedicated node pools per tenant</li>
+        <li><strong>Tiered storage</strong> — Hot data on NVMe, warm on S3 with automatic segment movement</li>
+      </ul>
+      <div style="margin-top:12px"><span class="badge pro">✓ Proven at 10B+ vectors in production (Zilliz)</span></div>
+    </div>
+    <div class="compare-card qdrant">
+      <h4>🔶 Qdrant — Dynamic Sharding + Edge</h4>
+      <div class="subtitle">Simplicity-first with growing distributed story</div>
+      <ul>
+        <li><strong>Dynamic sharding</strong> — Auto-resharding in v1.13+ without downtime</li>
+        <li><strong>Raft consensus</strong> — Consistent metadata across cluster nodes</li>
+        <li><strong>Qdrant Edge</strong> — Compiled to ARM64/WASM for IoT and edge inference (~15MB binary)</li>
+        <li><strong>Snapshot-based replication</strong> — Efficient replica sync via segment snapshots</li>
+      </ul>
+      <div style="margin-top:12px"><span class="badge winner">🏆 Winner for Edge / IoT: Qdrant Edge</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2026 Features -->
+<section id="features-2026">
+  <div class="section-header"><span class="icon">🚀</span><h2>2026 Features &amp; Modern Trends</h2></div>
+  <div class="card">
+    <h3>Binary Quantization (BQ)</h3>
+    <p>Both databases now support binary quantization, reducing memory by <strong>32×</strong> (float32 → 1-bit). In 2026, BQ has matured with rescoring pipelines:</p>
+    <div class="compare-grid" style="margin-top:14px">
+      <div style="padding:14px;background:var(--milvus-light);border-radius:10px;border:1px solid var(--milvus-border)">
+        <strong>Milvus</strong>: BQ + PQ + Scalar Quantization with automatic quantization advisor. Integrated into GPU pipeline for near-lossless 40× memory reduction with rescoring.
+      </div>
+      <div style="padding:14px;background:var(--qdrant-light);border-radius:10px;border:1px solid var(--qdrant-border)">
+        <strong>Qdrant</strong>: BQ with oversampling + rescoring. Achieved ~96% recall with 32× compression. Works exceptionally well with models like Cohere Embed v4 and OpenAI text-embedding-3.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Hybrid Search (Dense + Sparse Vectors)</h3>
+    <p>Both engines now natively support fusing dense and sparse vectors in a single query — critical for RAG and e-commerce search:</p>
+    <ul>
+      <li><strong>Milvus</strong> — SPANN-based sparse index; supports Reciprocal Rank Fusion (RRF) and weighted sum; sparse vectors stored alongside dense in the same collection</li>
+      <li><strong>Qdrant</strong> — Integrated FastEmbed for SPLADE/sparse encoding; named vectors allow multiple vector types per point; native fusion via query API</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Serverless Performance (2026 Benchmarks)</h3>
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead><tr><th>Metric</th><th>Zilliz Serverless</th><th>Qdrant Cloud Serverless</th></tr></thead>
+        <tbody>
+          <tr><td>Cold Start</td><td>~800ms</td><td>~120ms</td></tr>
+          <tr><td>Scale-to-Zero</td><td>Yes (5 min idle)</td><td>Yes (2 min idle)</td></tr>
+          <tr><td>Cost (1M vectors, 10 QPS)</td><td>~$18/mo</td><td>~$12/mo</td></tr>
+          <tr><td>Cost (100M vectors, 100 QPS)</td><td>~$290/mo</td><td>~$380/mo</td></tr>
+          <tr><td>Max Collection Size</td><td>Unlimited (tiered storage)</td><td>50M vectors per node</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warning"><span class="callout-icon">⚠️</span><div><strong>Note:</strong> Serverless pricing changes frequently. Always consult official pricing calculators. Qdrant's cold start advantage makes it ideal for bursty, low-traffic workloads. Milvus/Zilliz wins at sustained high-throughput.</div></div>
+  </div>
+</section>
+
+<!-- Developer Experience -->
+<section id="developer-experience">
+  <div class="section-header"><span class="icon">🧑‍💻</span><h2>Developer Experience</h2></div>
+  <div class="card">
+    <h3>SDK Comparison</h3>
+    <div class="code-tabs">
+      <button class="code-tab active" onclick="switchTab(event,'python')">Python</button>
+      <button class="code-tab" onclick="switchTab(event,'rust')">Rust</button>
+      <button class="code-tab" onclick="switchTab(event,'go')">Go</button>
+    </div>
+    <div id="tab-python" class="code-panel active">
+      <pre><code class="language-python"># === Milvus (pymilvus 2.5+) ===
+from pymilvus import MilvusClient
+client = MilvusClient(uri="http://localhost:19530")
+client.create_collection("docs", dimension=768,
+    metric_type="COSINE", auto_id=True)
+client.insert("docs", [
+    {"vector": [0.1]*768, "text": "hello world", "category": "greet"}
+])
+results = client.search("docs", [[0.1]*768], limit=5,
+    filter='category == "greet"',
+    output_fields=["text"])
+
+# === Qdrant (qdrant-client 1.12+) ===
+from qdrant_client import QdrantClient, models
+client = QdrantClient(url="http://localhost:6333")
+client.create_collection("docs",
+    vectors_config=models.VectorParams(size=768,
+        distance=models.Distance.COSINE))
+client.upsert("docs", points=[
+    models.PointStruct(id=1, vector=[0.1]*768,
+        payload={"text": "hello world", "category": "greet"})
+])
+results = client.query_points("docs", query=[0.1]*768, limit=5,
+    query_filter=models.Filter(must=[
+        models.FieldCondition(key="category",
+            match=models.MatchValue(value="greet"))
+    ]))</code></pre>
+    </div>
+    <div id="tab-rust" class="code-panel">
+      <pre><code class="language-rust">// Qdrant has a first-class Rust client (it's written in Rust)
+use qdrant_client::prelude::*;
+use qdrant_client::qdrant::{CreateCollectionBuilder,
+    Distance, VectorParamsBuilder, SearchPointsBuilder};
+
+let client = QdrantClient::from_url("http://localhost:6334").build()?;
+client.create_collection(
+    CreateCollectionBuilder::new("docs")
+        .vectors_config(VectorParamsBuilder::new(768, Distance::Cosine)),
+).await?;
+
+let results = client.search_points(
+    SearchPointsBuilder::new("docs", vec![0.1; 768], 5)
+        .with_payload(true)
+).await?;
+// Milvus: No official Rust SDK — community crate `milvus-sdk` available</code></pre>
+    </div>
+    <div id="tab-go" class="code-panel">
+      <pre><code class="language-go">// === Milvus (official Go SDK) ===
+import "github.com/milvus-io/milvus-sdk-go/v2/client"
+c, _ := client.NewClient(ctx, client.Config{Address: "localhost:19530"})
+// Create collection, insert, search with full Go API
+
+// === Qdrant (official Go client) ===
+import pb "github.com/qdrant/go-client/qdrant"
+conn, _ := grpc.Dial("localhost:6334", grpc.WithInsecure())
+qc := pb.NewPointsClient(conn)
+// Full gRPC-based API</code></pre>
+    </div>
+  </div>
+  <div class="compare-grid">
+    <div class="compare-card milvus">
+      <h4>🔷 Milvus DX</h4>
+      <ul>
+        <li><span class="badge pro">✓</span> Official SDKs: Python, Go, Java, Node, C#</li>
+        <li><span class="badge pro">✓</span> Attu — full-featured GUI admin</li>
+        <li><span class="badge pro">✓</span> LangChain, LlamaIndex, Haystack integrations</li>
+        <li><span class="badge con">✗</span> Steeper learning curve (many config knobs)</li>
+        <li><span class="badge con">✗</span> No official Rust SDK</li>
+      </ul>
+    </div>
+    <div class="compare-card qdrant">
+      <h4>🔶 Qdrant DX</h4>
+      <ul>
+        <li><span class="badge pro">✓</span> Official SDKs: Python, Rust, Go, JS, Java, C#</li>
+        <li><span class="badge pro">✓</span> Built-in Web UI dashboard</li>
+        <li><span class="badge pro">✓</span> OpenAPI spec — code-gen for any language</li>
+        <li><span class="badge pro">✓</span> FastEmbed integration (local embeddings)</li>
+        <li><span class="badge con">✗</span> Fewer index type options</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Cost -->
+<section id="cost">
+  <div class="section-header"><span class="icon">💰</span><h2>Cost Analysis</h2></div>
+  <div class="card">
+    <h3>Self-Hosted TCO (100M vectors, 768d, 99.9% uptime)</h3>
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead><tr><th>Component</th><th>Milvus (HA)</th><th>Qdrant (HA)</th></tr></thead>
+        <tbody>
+          <tr><td>Compute Nodes</td><td>6× r6i.2xlarge (3 query + 2 data + 1 index)</td><td>3× r6i.2xlarge (3 replicas)</td></tr>
+          <tr><td>Storage</td><td>S3 + NVMe (etcd, Pulsar)</td><td>GP3 EBS per node</td></tr>
+          <tr><td>Infra Dependencies</td><td>etcd (3-node), Pulsar/Kafka (3-node), MinIO/S3</td><td>None (self-contained)</td></tr>
+          <tr><td>Estimated Monthly</td><td><strong>~$4,200/mo</strong></td><td><strong>~$2,100/mo</strong></td></tr>
+          <tr><td>Ops Complexity</td><td>🔴 High — many moving parts</td><td>🟢 Low — single binary cluster</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout info"><span class="callout-icon">💡</span><div><strong>Cost Insight:</strong> Milvus's infrastructure overhead is significant for small-to-medium deployments. However, at <strong>billion-scale</strong>, its disaggregated storage (S3) becomes cheaper than replicating data across Qdrant nodes. Crossover point is typically around <strong>500M–1B vectors</strong>.</div></div>
+  </div>
+</section>
+
+<!-- Verdict -->
+<section id="verdict">
+  <div class="section-header"><span class="icon">🏆</span><h2>Final Verdict</h2></div>
+  <div class="verdict-card">
+    <h3>Choose Based on Your Scale &amp; Constraints</h3>
+    <p style="color:var(--text-secondary);max-width:600px;margin:0 auto">There is no universal winner. Each database excels in specific operational contexts.</p>
+    <div class="verdict-grid">
+      <div class="verdict-item">
+        <div class="label">Billion-Scale + GPU</div>
+        <div class="value"><span class="badge milvus-badge">🔷 Milvus</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Unmatched GPU indexing, disaggregated storage, and proven at 10B+ vectors.</p>
+      </div>
+      <div class="verdict-item">
+        <div class="label">Filtered / Hybrid Search</div>
+        <div class="value"><span class="badge qdrant-badge">🔶 Qdrant</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">ACORN delivers best-in-class filtered recall; ideal for e-commerce &amp; RAG.</p>
+      </div>
+      <div class="verdict-item">
+        <div class="label">Startup / Small Team</div>
+        <div class="value"><span class="badge qdrant-badge">🔶 Qdrant</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Single binary, low ops burden, excellent serverless cold start.</p>
+      </div>
+      <div class="verdict-item">
+        <div class="label">Enterprise K8s Platform</div>
+        <div class="value"><span class="badge milvus-badge">🔷 Milvus</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Helm operator, resource isolation, multi-tenancy via partition keys.</p>
+      </div>
+      <div class="verdict-item">
+        <div class="label">Edge / IoT Deployment</div>
+        <div class="value"><span class="badge qdrant-badge">🔶 Qdrant</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Qdrant Edge compiles to ARM64/WASM in a ~15MB binary.</p>
+      </div>
+      <div class="verdict-item">
+        <div class="label">Multi-Modal / Advanced Indexing</div>
+        <div class="value"><span class="badge milvus-badge">🔷 Milvus</span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:6px">Widest index selection: IVF, HNSW, DiskANN, GPU_IVF_PQ, SCANN.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /container -->
+</div><!-- /main -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+<script>
+// Sidebar toggle (mobile)
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+}
+// Code tabs
+function switchTab(e,lang){
+  document.querySelectorAll('.code-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.code-panel').forEach(p=>p.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-'+lang).classList.add('active');
+  Prism.highlightAllUnder(document.getElementById('tab-'+lang));
+}
+// Active nav highlight on scroll
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('.sidebar nav a');
+window.addEventListener('scroll',()=>{
+  let current='';
+  sections.forEach(s=>{if(window.scrollY>=s.offsetTop-80)current=s.id});
+  navLinks.forEach(a=>{
+    a.classList.remove('active');
+    if(a.getAttribute('href')==='#'+current)a.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
